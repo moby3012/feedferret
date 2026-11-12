@@ -767,7 +767,7 @@
       "partial": "The search was stopped early (time or request limit) before it found a feed. Try again later or enter the feed address directly.",
       "blockedButFound": "The page blocks automated access – feed found anyway: {via}",
       "blockedButFoundPlain": "The page blocks automated access – feed found anyway.",
-      "needsTwitch": "Enable Twitch or check the saved credentials: Admin → Server settings → Twitch. Create an app at dev.twitch.tv/console (redirect http://localhost, category Website Integration), then save Client ID and Client Secret. Alternatively configure RSSHub."
+      "needsApiCredentials": "Enable {platform} or check its saved credentials: Admin → Server settings → {platform}. Follow the setup guide there and save the app credentials. Alternatively configure RSSHub."
     },
     "kinds": {
       "videos": "Videos",

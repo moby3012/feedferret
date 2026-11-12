@@ -32,7 +32,7 @@ export type DiscoveredFeed = {
 
 export type FeedVia = { family: AdapterFamily | "rsshub"; name: string };
 
-export type DiscoveryHint = "needs-twitch" | "public-preview-unavailable" | "needs-rsshub" | "rate-limited" | "blocked" | "tls-error";
+export type DiscoveryHint = "needs-api-credentials" | "public-preview-unavailable" | "needs-rsshub" | "rate-limited" | "blocked" | "tls-error";
 
 export type DiscoveryResult = {
   /** Actionable error for a recognized public platform whose preview is unavailable. */
@@ -1119,14 +1119,14 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
         const { verifyApiPlatformAccount } = await import("./api-platform-source");
         const state = await verifyApiPlatformAccount(api.source.id, api.account, AbortSignal.any([budget.signal, AbortSignal.timeout(10_000)]));
         if (state === "ready") {
-          const labels = api.source.labels[options.locale?.startsWith("de") ? "de" : "en"];
-          return { mode: "url", pageUrl, feeds: api.source.variants.map((variant, i) => ({ url: `feedferret://${api.source.id}/${api.account}/${variant}`, title: `${api.source.name} · ${api.account} · ${labels[i]}`, type: "json", source: "resolver", kind: variant, platform: api.source.id })) };
+          const locale = options.locale?.startsWith("de") ? "de" : "en";
+          return { mode: "url", pageUrl, feeds: api.source.variants.map((variant) => ({ url: `feedferret://${api.source.id}/${api.account}/${variant.id}`, title: `${api.source.name} · ${api.account} · ${variant.label[locale]}`, type: "json", source: "resolver", kind: variant.id, platform: api.source.id })) };
         }
         if (state === "missing") return { mode: "url", pageUrl, feeds: [] };
         const fallbackUrl = new URL(pageUrl);
         fallbackUrl.pathname = `/${api.account}`;
         const radar = await resolveWithRadarRules(fallbackUrl.href, budget);
-        return { mode: "url", pageUrl, feeds: radar.feeds, ...(radar.feeds.length ? {} : { hint: api.source.setupHint }) };
+        return { mode: "url", pageUrl, feeds: radar.feeds, ...(radar.feeds.length ? {} : { hint: "needs-api-credentials" as const, hintPlatform: api.source.name }) };
       } catch {
         const { hostRateLimitRemainingMs } = await import("./host-backoff");
         return { mode: "url", pageUrl, feeds: [], hint: hostRateLimitRemainingMs(api.source.apiOrigin) ? "rate-limited" : "blocked" };

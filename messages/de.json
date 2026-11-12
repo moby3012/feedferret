@@ -767,7 +767,7 @@
       "partial": "Die Suche wurde vorzeitig beendet (Zeit- oder Anfragelimit), bevor ein Feed gefunden wurde. Versuche es später erneut oder gib die Feed-Adresse direkt ein.",
       "blockedButFound": "Die Seite blockiert den automatischen Abruf – Feed trotzdem gefunden: {via}",
       "blockedButFoundPlain": "Die Seite blockiert den automatischen Abruf – Feed trotzdem gefunden.",
-      "needsTwitch": "Twitch aktivieren bzw. gespeicherte Zugangsdaten prüfen: Admin → Server-Einstellungen → Twitch. Unter dev.twitch.tv/console eine App erstellen (Redirect http://localhost, Kategorie Website Integration), Client ID und Client Secret speichern. Alternativ RSSHub konfigurieren."
+      "needsApiCredentials": "{platform} aktivieren oder gespeicherte Zugangsdaten prüfen: Admin → Server-Einstellungen → {platform}. Der Anleitung dort folgen und die App-Zugangsdaten speichern. Alternativ RSSHub konfigurieren."
     },
     "kinds": {
       "videos": "Videos",

@@ -201,8 +201,8 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
       setDiscoveredFeeds(feeds);
       if (feeds.length === 0) {
         let message = t("sidebar.resolverNoResult");
-        if (data.hint === "needs-twitch") {
-          message = t("sidebar.hints.needsTwitch");
+        if (data.hint === "needs-api-credentials") {
+          message = t("sidebar.hints.needsApiCredentials", { platform: data.hintPlatform || "API" });
         } else if (data.hint === "public-preview-unavailable") {
           message = t("sidebar.hints.publicPreviewUnavailable");
         } else if (data.hint === "needs-rsshub") {
