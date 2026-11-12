@@ -365,7 +365,13 @@ export async function safeFetch(rawUrl: string, init: RequestInit = {}, options:
       const location = response.headers.get("location");
       await response.body?.cancel();
       if (!location) throw new FetchRedirectError(response.status);
-      current = (await assertSafeFetchUrl(new URL(location, current).href, options)).href;
+      let next = (await assertSafeFetchUrl(new URL(location, current).href, options)).href;
+      if (options.redirectGuard) {
+        const allowed = options.redirectGuard(next, current);
+        if (!allowed) throw new Error("Redirect refused");
+        next = (await assertSafeFetchUrl(allowed, options)).href;
+      }
+      current = next;
       // This mode is intentionally limited to anonymous GETs.
       init = { method: "GET", signal: init.signal, headers: {
         "User-Agent": "FeedFerret-Media/1.0", Accept: "image/*",

@@ -111,3 +111,43 @@ it("charges prefix bytes, returns 429 before headers and aborts budget overruns 
     await expect(response.arrayBuffer()).rejects.toThrow("Media byte budget");
   } finally { spy.mockRestore(); }
 });
+it.each(["request", "deadline"])("errors truncated streams on %s abort instead of closing them successfully", async source => {
+  vi.useFakeTimers();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(ms => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new Error("expected deadline abort")), ms);
+    return controller.signal;
+  });
+  try {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    vi.mocked(safeFetch).mockResolvedValue(new Response(new ReadableStream({ start(c) { c.enqueue(png); }, cancel }), { headers: { "content-type": "image/png" } }));
+    const response = await GET(new Request(request(), { signal: controller.signal }));
+    expect(response.status).toBe(200);
+    const failedBody = expect(response.arrayBuffer()).rejects.toThrow(source === "request" ? "expected request abort" : "expected deadline abort");
+    if (source === "request") controller.abort(new Error("expected request abort"));
+    else await vi.advanceTimersByTimeAsync(20_000);
+    await failedBody;
+    expect(cancel).toHaveBeenCalledOnce();
+  } finally { timeout.mockRestore(); vi.useRealTimers(); }
+});
+it.each(["headers", "body"])("applies the first-byte deadline while waiting for %s", async stage => {
+  vi.useFakeTimers();
+  try {
+    if (stage === "headers") {
+      vi.mocked(safeFetch).mockImplementation((_url, init) => new Promise((_resolve, reject) => {
+        init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason), { once: true });
+      }));
+    } else {
+      vi.mocked(safeFetch).mockResolvedValue(new Response(new ReadableStream({ start() {} }), { headers: { "content-type": "image/png" } }));
+    }
+    let settled = false;
+    const pending = GET(request()).then(response => { settled = true; return response; });
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const response = await pending;
+    expect(response.status).toBe(502);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  } finally { vi.useRealTimers(); }
+});

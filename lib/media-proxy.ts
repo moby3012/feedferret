@@ -1,3 +1,4 @@
+import { decodeHTML } from "entities";
 import { timingSafeEqual } from "node:crypto";
 import { getKeyring } from "./secret-box";
 import { deriveMacKey } from "./secret-box-core.mjs";
@@ -36,7 +37,7 @@ export async function presentMedia<T extends { imageUrl: string | null; link: st
       } catch {
         // Parser saturation / timeout must never restore third-party requests.
         // A parse-free plain-text fallback removes every fetching element.
-        html = "<p>" + stripTags(html).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + "</p>";
+        html = "<p>" + decodeHTML(stripTags(html)).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + "</p>";
       }
     }
     return {

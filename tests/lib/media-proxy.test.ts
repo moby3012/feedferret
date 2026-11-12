@@ -85,8 +85,9 @@ it("caches settings, coalesces requests, expires and invalidates writes", async 
 it("returns safe text and a signed thumbnail if the rewrite worker fails", async () => {
   vi.mocked(db.globalSettings.findUnique).mockResolvedValue({ mediaProxyMode: "on" } as never);
   vi.mocked(runHtmlTask).mockRejectedValue(new Error("worker timeout"));
-  const [result] = await presentMedia([{ link: "https://example.org", imageUrl: "https://example.org/cover.png", html: '<p>Hello &lt;world&gt;</p><img src="https://example.org/tracker"><input type="image" src="https://example.org/input"><video autoplay src="https://example.org/video"></video>' }], "u");
-  expect(result.html).toContain("Hello");
+  const [result] = await presentMedia([{ link: "https://example.org", imageUrl: "https://example.org/cover.png", html: '<p>Hello &lt;world&gt; &amp; &#169;</p><img src="https://example.org/tracker"><input type="image" src="https://example.org/input"><video autoplay src="https://example.org/video"></video>' }], "u");
+  expect(result.html).toContain("Hello &lt;world&gt; &amp; ©");
+  expect(result.html).not.toContain("&amp;amp;");
   expect(result.html).not.toContain("https://example.org");
   expect(result.html).not.toContain("<img");
   expect(result.html).not.toContain("<video");

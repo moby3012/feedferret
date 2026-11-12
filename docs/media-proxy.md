@@ -31,7 +31,10 @@ User-Agent and image Accept header are sent.
 
 safeFetch pins DNS/socket resolution and checks every redirect (at most five),
 refusing private/loopback addresses regardless of internal-feed settings.
-The full transfer has a 20-second deadline. Only PNG, JPEG, GIF, WEBP, AVIF, BMP
+The full transfer has a 20-second deadline and must receive its first body byte
+within five seconds (including DNS, headers and redirects). Aborting a partial
+transfer errors the response body so neither HTTP nor service-worker caching
+can commit a clean, truncated success. Only PNG, JPEG, GIF, WEBP, AVIF, BMP
 and ICO MIME types are accepted. Ambiguous or duplicate MIME values and unknown
 parameters are refused (one charset parameter is allowed and discarded). A bounded
 32-byte prefix is checked against the declared format before returning success;
@@ -43,7 +46,8 @@ cookies and arbitrary headers are discarded; ETag and Last-Modified pass through
 Range is unsupported. Per-process limits: 300 requests/user/minute and 600/IP/minute;
 a further 500 MiB/user/hour byte budget includes prefix reads and rejected chunks.
 Set FEEDFERRET_MEDIA_USER_BYTES_PER_HOUR to a positive integer to change the budget.
-At most 32 transfers per process and six per user run concurrently (503 for global
+At most 32 transfers per process, six per user and four per upstream hostname
+run concurrently. Host limits also apply after redirects (503 for global/host
 saturation, 429 for a user limit). Slots are released on completion, cancellation,
 error or deadline, including unconsumed responses. Budget exhaustion while
 streaming terminates the response; before headers it returns 429. Accounting is

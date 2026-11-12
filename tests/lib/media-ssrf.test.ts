@@ -16,3 +16,10 @@ it("follows public redirects with anonymous headers", async () => {
   await safeFetch("https://8.8.8.8/image", { headers: { Cookie: "do-not-forward" } }, { followRedirects: true });
   expect(vi.mocked(transport).mock.calls[1][1]?.headers).toEqual({ "User-Agent": "FeedFerret-Media/1.0", Accept: "image/*" });
 });
+it("checks the streaming redirect guard before contacting the next upstream", async () => {
+  vi.mocked(transport).mockResolvedValue(new Response(null, { status: 302, headers: { location: "https://1.1.1.1/image" } }) as never);
+  const guard = vi.fn(() => null);
+  await expect(safeFetch("https://8.8.8.8/image", {}, { followRedirects: true, redirectGuard: guard })).rejects.toThrow("Redirect refused");
+  expect(guard).toHaveBeenCalledWith("https://1.1.1.1/image", "https://8.8.8.8/image");
+  expect(transport).toHaveBeenCalledTimes(1);
+});

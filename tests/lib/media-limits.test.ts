@@ -27,3 +27,18 @@ it("accounts streamed bytes across requests and resets the hourly budget", () =>
   expect(limits.acquire("a")).not.toHaveProperty("status");
   clock.mockRestore();
 });
+it("caps one upstream across users and ports, and tracks redirects without leaking slots", () => {
+  const limits = new MediaTransferLimiter(() => 1000, 32, 6, 4);
+  const transfers = Array.from({ length: 4 }, (_, i) => limits.acquire(`viewer-${i}`, "SLOW.example."));
+  expect(limits.acquire("fifth-viewer", "slow.example")).toEqual({ status: 503 });
+  const redirect = limits.acquire("redirect-viewer", "other.example");
+  if ("status" in redirect) throw new Error("unexpected refusal");
+  expect(redirect.moveHost("slow.example")).toBe(false);
+  const first = transfers[0];
+  if ("status" in first) throw new Error("unexpected refusal");
+  first.release();
+  expect(redirect.moveHost("slow.example")).toBe(true);
+  expect(limits.acquire("sixth-viewer", "slow.example")).toEqual({ status: 503 });
+  redirect.release();
+  expect(limits.acquire("sixth-viewer", "slow.example")).not.toHaveProperty("status");
+});
