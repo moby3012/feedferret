@@ -192,15 +192,16 @@ describe("trust matrix", () => {
       expect(key("172.18.0.4")).toBe("ip:172.18.0.4");
       expect(key("203.0.113.200")).toBe("ip:203.0.113.9");
     });
-    it("no peer information fails CLOSED: forwarded headers are not believed, one shared key, warned once", () => {
+    it("no peer information (pnpm start without preload): headers are still believed, with a warning once, so one client cannot lock out everybody", () => {
       const warn = setup(undefined);
-      expect(key(null)).toBe("ip:unknown");
-      expect(key(null, { "x-forwarded-for": "5.5.5.5", "x-real-ip": "6.6.6.6" })).toBe("ip:unknown");
+      expect(key(null)).toBe("ip:203.0.113.9");
+      expect(key(null, { "x-forwarded-for": "5.5.5.5", "x-real-ip": "6.6.6.6" })).toBe("ip:5.5.5.5");
+      expect(key(null, {})).toBe("ip:unknown");
       expect(warn.mock.calls.filter(([m]) => String(m).includes("No TCP peer information"))).toHaveLength(1);
     });
     it("a forged peer header does not make a client a proxy", () => {
       setup(undefined);
-      expect(getClientIdentifier(req({ "x-feedferret-peer": "guess|172.18.0.4", "x-forwarded-for": "7.7.7.7" }))).toBe("ip:unknown");
+      expect(getClientIdentifier(req({ "x-feedferret-peer": "guess|172.18.0.4", "x-forwarded-for": "7.7.7.7" }))).toBe("ip:7.7.7.7"); // no valid peer = no peer
     });
   });
 

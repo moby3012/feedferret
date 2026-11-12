@@ -40,6 +40,17 @@ it("enables 2FA for a pending setup with a valid code, and rejects a wrong one",
   expect(await row()).toMatchObject({ twoFactorEnabled: true, sessionVersion: 1, apiTokenVersion: 1 });
 });
 
+it("records the accepted step, so the code used for setup cannot be replayed at the first sign-in", async () => {
+  const setup = await beginTwoFactorSetup();
+  const code = generateTotpToken(setup.secret);
+  await confirmTwoFactorSetup(code);
+  const { twoFactorLastAcceptedStep: step, twoFactorSecret } = await state.db.user.findUniqueOrThrow({ where: { id: state.uid }, select: { twoFactorLastAcceptedStep: true, twoFactorSecret: true } });
+  expect(step).not.toBeNull();
+  const { consumeTotpToken } = await import("@/lib/totp-consume");
+  expect(await consumeTotpToken(state.uid, twoFactorSecret!, code)).toBe(false);
+  expect(await consumeTotpToken(state.uid, twoFactorSecret!, generateTotpToken(setup.secret, Date.now() + 30_000))).toBe(true);
+});
+
 it("refuses an account that already has 2FA, even with the right code, without touching it (no OTP oracle)", async () => {
   await state.db.user.update({ where: { id: state.uid }, data: { twoFactorEnabled: true, twoFactorSecret: LIVE_SECRET } });
   await expect(confirmTwoFactorSetup(generateTotpToken(LIVE_SECRET))).rejects.toThrow("already enabled");

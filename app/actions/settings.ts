@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
+import { hashPassword } from "@/lib/password-hash";
 import { sendDigestEmail, getDigestArticles, markArticlesAsDigested } from "@/lib/digest-email";
 import { buildOtpAuthUri, generateTotpSecret, matchingTotpStep } from "@/lib/totp";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
@@ -178,7 +179,7 @@ export async function changePassword(data: {
   const currentMatches = await bcrypt.compare(parsed.data.currentPassword, user.password);
   if (!currentMatches) return { success: false, error: t("currentPasswordIncorrect") };
 
-  const hashedPassword = await bcrypt.hash(parsed.data.newPassword, 10);
+  const hashedPassword = await hashPassword(parsed.data.newPassword);
   await db.$transaction([db.user.update({
     where: { id: session.user.id },
     // Keep the independent API password; revoke issued GReader Auth/T tokens.
@@ -354,18 +355,22 @@ export async function confirmTwoFactorSetup(code: string) {
     throw new Error(t("twoFactorRateLimited"));
   }
 
-  if (matchingTotpStep(secret, code) === null) {
+  const step = matchingTotpStep(secret, code);
+  if (step === null) {
     throw new Error("Invalid one-time code");
   }
 
   // Compare-and-set on the pending secret we verified against: a concurrent restart of the setup
-  // (new secret) or a concurrent confirmation makes this match nothing.
-  const enabled = await db.user.updateMany({
-    where: { id: session.user.id, twoFactorEnabled: false, twoFactorSecret: storedSecret },
-    data: { twoFactorEnabled: true, sessionVersion: { increment: 1 }, apiTokenVersion: { increment: 1 } },
+  // (new secret) or a concurrent confirmation makes this match nothing and rolls everything back.
+  // The accepted step is recorded so the code just used cannot be replayed at the first sign-in.
+  await db.$transaction(async (tx) => {
+    const enabled = await tx.user.updateMany({
+      where: { id: session.user.id, twoFactorEnabled: false, twoFactorSecret: storedSecret },
+      data: { twoFactorEnabled: true, twoFactorLastAcceptedStep: step, sessionVersion: { increment: 1 }, apiTokenVersion: { increment: 1 } },
+    });
+    if (enabled.count !== 1) throw new Error("Two-factor setup changed; start again");
+    await tx.emailChangeRequest.deleteMany({ where: { userId: session.user.id } });
   });
-  if (enabled.count !== 1) throw new Error("Two-factor setup changed; start again");
-  await db.emailChangeRequest.deleteMany({ where: { userId: session.user.id } });
 
   revalidatePath("/settings");
   return { enabled: true };

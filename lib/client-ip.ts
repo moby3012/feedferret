@@ -19,10 +19,10 @@
  *    the right is the client. Without peer information (no preload: `next dev`, `next start`) the
  *    operator's explicit count is taken at its word.
  *  - unset / empty / invalid (LEGACY, warned loudly): behaves like `1` for compatibility with installs
- *    that never set it, but only while the peer is known. This still trusts any private peer, so a
- *    directly exposed instance (LAN client, Docker userland proxy presenting as 172.17.0.1) lets
- *    clients pick their key: set the variable. Without peer information it fails closed: every client
- *    is keyed "unknown" and `X-Forwarded-For` is not believed.
+ *    that never set it. This still trusts any private peer (and, without peer information, every
+ *    header), so a directly exposed instance (LAN client, Docker userland proxy presenting as
+ *    172.17.0.1) lets clients pick their key: set the variable. Failing closed instead would key all
+ *    clients "unknown" and let one user lock everybody out of sign-in.
  *
  * IPv6 clients are keyed by their /64 (every VPS gets one for free; per-address keys would let one
  * host mint unlimited limiter keys) and IPv4-mapped IPv6 addresses by their IPv4 address.
@@ -216,9 +216,10 @@ export function getClientIp(request: Request): string {
       return peer;
     }
   } else if (!explicit) {
-    // Fail closed: headers cannot be attributed to a proxy and the operator never said there is one.
-    warnOnce("no-peer-unset", "[rate-limit] No TCP peer information (scripts/peer-address-preload.cjs is not loaded) and TRUSTED_PROXY_COUNT is not set: forwarded headers are NOT believed and all clients share one rate-limit key. Set TRUSTED_PROXY_COUNT (1 behind one reverse proxy) or start the server with the preload.");
-    return "unknown";
+    // Legacy mode without peer information (`pnpm start`/`next start` without the preload, tests):
+    // failing closed would key every client "unknown", i.e. one user could lock everybody out of
+    // sign-in. Keep believing the headers (as before this hardening) and say so.
+    warnOnce("no-peer-unset", "[rate-limit] No TCP peer information (scripts/peer-address-preload.cjs is not loaded) and TRUSTED_PROXY_COUNT is not set: forwarded headers are believed without being able to check who sent them. Set TRUSTED_PROXY_COUNT (1 behind one reverse proxy, 0 when exposed directly) and start the server with the preload.");
   }
   if (forwarded) {
     const hops = forwarded.split(",").map((hop) => hop.trim());

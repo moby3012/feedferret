@@ -45,9 +45,9 @@ describe("proxy chain", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(getClientIdentifier(behindProxy)).toBe("ip:proxy");
   });
-  it("an unset count without peer information does not believe the header (fails closed)", () => {
+  it("an unset count without peer information keeps believing the header (legacy), so clients stay apart", () => {
     vi.stubEnv("TRUSTED_PROXY_COUNT", "");
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(getClientIdentifier(request)).toBe("ip:unknown");
+    expect(getClientIdentifier(request)).toBe("ip:proxy");
   });
 });

@@ -9,7 +9,7 @@
     "build:html-worker": "node scripts/build-html-worker.mjs",
     "dev": "node scripts/build-html-worker.mjs && next dev",
     "lint": "eslint .",
-    "start": "(mkdir -p /app/data 2>/dev/null || true) && NEXT_TELEMETRY_DISABLED=1 DATABASE_URL=${DATABASE_URL:-file:/app/data/dev.db} DATABASE_PROVIDER=${DATABASE_PROVIDER:-sqlite} pnpm run prisma:migrate && if [ -f server.js ]; then node server.js; else next start; fi",
+    "start": "(mkdir -p /app/data 2>/dev/null || true) && NEXT_TELEMETRY_DISABLED=1 DATABASE_URL=${DATABASE_URL:-file:/app/data/dev.db} DATABASE_PROVIDER=${DATABASE_PROVIDER:-sqlite} pnpm run prisma:migrate && if [ -f server.js ]; then node --require ./scripts/peer-address-preload.cjs server.js; else NODE_OPTIONS=\"--require ./scripts/peer-address-preload.cjs\" next start; fi",
     "cli": "node scripts/feedferret-cli.mjs",
     "webpush:keys": "node scripts/generate-web-push-keys.mjs",
     "pwa:check": "node scripts/check-pwa.mjs",

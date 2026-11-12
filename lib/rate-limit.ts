@@ -183,7 +183,7 @@ export function peekRateLimit(identifier: string, config: RateLimitConfig): Rate
   const ns = namespaces.get(config.prefix);
   const entry = ns?.entries.get(identifier);
   const live = entry && entry.resetAt >= now ? entry : undefined;
-  if (!entry && ns?.critical && !makeRoom(ns, now)) {
+  if (!entry && ns?.critical && ns.overflow === "refuse" && !makeRoom(ns, now)) {
     const resetAt = Math.max(ns.saturatedUntil, now + 1000);
     return { success: false, remaining: 0, resetAt, retryAfterSecs: Math.ceil((resetAt - now) / 1000) };
   }

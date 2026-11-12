@@ -170,6 +170,9 @@ describe("peekRateLimit honours the capacity of a fail-safe store", () => {
     const evicting: RateLimitConfig = { prefix: "iso-peek-evict", limit: 3, windowSecs: 60, critical: true, overflow: "evict-oldest" };
     for (let i = 0; i < MAX_STORE_ENTRIES; i++) lock(`e-${i}`, evicting);
     expect(peekRateLimit("stranger", evicting).success).toBe(true);
+    // ...and peeking does not evict anybody's active lockout (it only reads)
+    expect(rateLimitStoreSize(evicting.prefix)).toBe(MAX_STORE_ENTRIES);
+    expect(peekRateLimit("e-0", evicting).success).toBe(false);
     const ordinary: RateLimitConfig = { prefix: "iso-peek-ordinary", limit: 3, windowSecs: 60 };
     for (let i = 0; i < MAX_STORE_ENTRIES; i++) lock(`o-${i}`, ordinary);
     expect(peekRateLimit("stranger", ordinary).success).toBe(true);

@@ -21,6 +21,7 @@ vi.mock("next-auth/providers/nodemailer", () => ({ default: (options: unknown) =
 vi.mock("@auth/prisma-adapter", () => ({ PrismaAdapter: () => ({}) }));
 vi.mock("@/lib/mail", () => ({ sendSignInEmail: vi.fn() }));
 
+import { BCRYPT_COST, DUMMY_PASSWORD_HASH } from "../../lib/password-hash";
 import { ACCOUNT_LOCKOUT, CLEAR_LOGIN_LOCKOUT, releaseLoginAttempt, reserveLoginAttempt } from "../../lib/account-lockout";
 
 const dir = mkdtempSync(join(tmpdir(), "feedferret-account-lockout-"));
@@ -229,7 +230,7 @@ describe("Credentials provider", () => {
     expect(compare).toHaveBeenCalledTimes(1);
     // refused attempts of invented addresses write no audit row, like a locked account
     expect(await h.db.loginAttempt.count({ where: { email: "ghost-a@example.org" } })).toBe(LIMIT);
-  });
+  }, 60_000); // 10+ cost-12 dummy verifications
 
   it("2FA: a correct password without a code asks for it (and is not charged); a wrong password stays an anonymous failure", async () => {
     const u = await makeUser({ twoFactorEnabled: true, twoFactorSecret: "JBSWY3DPEHPK3PXP" });
@@ -245,4 +246,23 @@ describe("Credentials provider", () => {
     for (let i = 0; i < LIMIT; i++) await reserveLoginAttempt(u.id);
     expect(await signIn(u.email!, "correct horse", "203.0.113.203")).toBeNull();
   });
+
+  it("the dummy hash costs exactly what real hashes cost", () => {
+    expect(bcrypt.getRounds(DUMMY_PASSWORD_HASH)).toBe(BCRYPT_COST);
+    expect(bcrypt.compareSync("not the password", DUMMY_PASSWORD_HASH)).toBe(false);
+  });
+
+  it("a successful sign-in moves an older-cost hash to the current cost; a failed one leaves it alone", async () => {
+    const old = await bcrypt.hash("correct horse", 4); // another cost than BCRYPT_COST
+    const u = await makeUser({ password: old });
+    const signIn = authorize();
+    expect(await signIn(u.email!, "wrong", "203.0.113.150")).toBeNull();
+    expect((await h.db.user.findUniqueOrThrow({ where: { id: u.id } })).password).toBe(old);
+    expect(await signIn(u.email!, "correct horse", "203.0.113.151")).toMatchObject({ id: u.id });
+    const after = (await h.db.user.findUniqueOrThrow({ where: { id: u.id } })).password!;
+    expect(bcrypt.getRounds(after)).toBe(BCRYPT_COST);
+    expect(await bcrypt.compare("correct horse", after)).toBe(true);
+    expect(await signIn(u.email!, "correct horse", "203.0.113.152")).toMatchObject({ id: u.id }); // still works, no further rehash
+    expect((await h.db.user.findUniqueOrThrow({ where: { id: u.id } })).password).toBe(after);
+  }, 30_000);
 });

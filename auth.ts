@@ -6,6 +6,7 @@ import Credentials from "next-auth/providers/credentials";
 import Nodemailer from "next-auth/providers/nodemailer";
 import bcrypt from "bcryptjs";
 import { createHash } from "node:crypto";
+import { DUMMY_PASSWORD_HASH, hashPassword, needsRehash } from "@/lib/password-hash";
 import { consumeTotpToken } from "@/lib/totp-consume";
 import { sendSignInEmail } from "@/lib/mail";
 
@@ -21,10 +22,6 @@ import { ACCOUNT_LOCKOUT, reserveLoginAttempt, releaseLoginAttempt } from "@/lib
 class OtpRequiredError extends CredentialsSignin {
   code = "otp_required";
 }
-
-// bcrypt cost 10 (the cost passwords are stored with). Compared against when the address has no usable
-// password so that unknown, passwordless and real accounts all pay for one bcrypt verification.
-const DUMMY_PASSWORD_HASH = "$2b$10$Dmqlm9TPbrYCteuNDvDYPeeNEYbadATy4JMRE63VgxWS076h2o7Z.";
 
 /**
  * Stand-in for the per-account database lockout for addresses that have none (unknown or passwordless):
@@ -129,6 +126,14 @@ const config = {
         }
 
         if (!isBuild) await releaseLoginAttempt(user.id, "web", reservation);
+        // Accounts hashed at an older cost move to the current one, so real accounts and the dummy
+        // verification for unknown addresses keep costing the same. Compare-and-set on the old hash;
+        // a failure here must never fail a correct sign-in.
+        if (!isBuild && needsRehash(user.password)) {
+          try {
+            await db.user.updateMany({ where: { id: user.id, password: user.password }, data: { password: await hashPassword(credentials.password as string) } });
+          } catch { /* retried on the next sign-in */ }
+        }
         await logAttempt(true, user.id);
         return user as any;
       },
