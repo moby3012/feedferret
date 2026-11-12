@@ -25,6 +25,7 @@ async function mockDiscovery(page: Page, hint: string) {
 }
 
 for (const { hint, url, message } of [
+  { hint: "public-preview-unavailable", url: "https://t.me/example_channel", message: "This channel has no accessible public web preview. It may be private or no longer exist." },
   { hint: "needs-rsshub", url: "https://social.invalid/NASA", message: "Requires RSSHub – configure under Settings › Server" },
   { hint: "rate-limited", url: "https://busy.invalid/", message: "Try again later" },
   { hint: "blocked", url: "https://walled.invalid/", message: "This site blocked automated access – try a native feed from the publisher" },

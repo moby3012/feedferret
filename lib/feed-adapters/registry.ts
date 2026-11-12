@@ -414,6 +414,5 @@ export const RSSHUB_ONLY_PLATFORMS: Array<{ name: string; hosts: string[] }> = [
   { name: "Instagram", hosts: ["instagram.com"] },
   { name: "TikTok", hosts: ["tiktok.com"] },
   { name: "Threads", hosts: ["threads.net", "threads.com"] },
-  { name: "Telegram", hosts: ["t.me"] },
   { name: "Blizzard News", hosts: ["news.blizzard.com"] },
 ];

@@ -203,6 +203,8 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
         let message = t("sidebar.resolverNoResult");
         if (data.hint === "needs-twitch") {
           message = t("sidebar.hints.needsTwitch");
+        } else if (data.hint === "public-preview-unavailable") {
+          message = t("sidebar.hints.publicPreviewUnavailable");
         } else if (data.hint === "needs-rsshub") {
           message = typeof data.hintPlatform === "string" && data.hintPlatform
             ? t("sidebar.hints.needsRsshubFor", { platform: data.hintPlatform })

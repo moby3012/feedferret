@@ -1,3 +1,5 @@
+import { blueskyRssActor, enrichBlueskyFeed } from "./feed-adapters/bluesky";
+import { telegramChannel, fetchTelegram } from "./feed-adapters/telegram";
 import Parser from "rss-parser";
 import { parseApiSourceUrl } from "./feed-adapters/api-source-url";
 import {
@@ -17,7 +19,7 @@ import { isTrustedGoogleNewsOverrideUrl } from "./google-news";
 import { parseDurationSecs } from "./article-kind";
 import { resolveItemTitle } from "./title-synthesis";
 import { firstImgSrc } from "@/lib/linear-text";
-import { categoriesFrom, dateFrom, htmlText, type FetchedFeed, type FetchedFeedArticle } from "./feed-item-fields";
+import { categoriesFrom, dateFrom, dedupeEnclosures, htmlText, type FetchedFeed, type FetchedFeedArticle } from "./feed-item-fields";
 import { runInHtmlWorker } from "./html-worker";
 
 // The XPath engine parses untrusted pages with jsdom: it lives in
@@ -81,6 +83,56 @@ export type FeedFetchConfig = {
 // `media:content` is collected under a private key so the existing
 // `item["media:content"]` image fallback below keeps its current behaviour.
 const parser = new Parser({ customFields: { item: [["media:content", "ffMediaContent", { keepArray: true }], ["source", "ffSource"]] } });
+
+type MediaNodeAttrs = { url?: string; type?: string; medium?: string; width?: string; height?: string };
+
+const escapeAttr = (value: string) => value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
+/**
+ * Fediverse profile feeds (`/@name.rss`, `/users/name.rss`): the URL shape shared
+ * by Mastodon-compatible servers. Their items are statuses, not articles.
+ */
+export function isFediverseProfileFeed(feedUrl: string): boolean {
+  try {
+    return /^\/(?:@[^/]+|users\/[^/]+)\.rss$/.test(new URL(feedUrl).pathname);
+  } catch { return false; }
+}
+
+/**
+ * Extra image attachments (`media:content`) of a status in a Fediverse profile
+ * feed whose text has no inline image. Every other feed or item - news,
+ * podcasts, video, Reddit - returns nothing, so its stored content/enclosures
+ * stay byte-identical (no updatedAt wave on deploy). Only image/* entries are
+ * added (audio/video stay with `mediaFromItem`). Duplicate hrefs collapse; of
+ * several size variants of one image (same aspect ratio, declared dimensions)
+ * only the largest is kept.
+ */
+export function statusMediaContent(
+  value: unknown,
+  item: { content: string; fediverse: boolean; hasEnclosure: boolean },
+): Array<{ href: string; type: string }> {
+  if (!item.fediverse || !Array.isArray(value) || value.length === 0 || item.hasEnclosure || /<img\b/i.test(item.content)) return [];
+  const entries = value.flatMap((node: { $?: MediaNodeAttrs }) => {
+    const attrs = node?.$;
+    if (typeof attrs?.url !== "string") return [];
+    try {
+      const url = new URL(attrs.url);
+      if (!["http:", "https:"].includes(url.protocol)) return [];
+      const medium = (attrs.medium ?? "").toLowerCase();
+      const type = (attrs.type ?? "").toLowerCase() || (medium === "image" ? "image/jpeg" : "");
+      if (!type.startsWith("image/")) return [];
+      const area = (Number(attrs.width) || 0) * (Number(attrs.height) || 0);
+      const ratio = area ? Math.round((Number(attrs.width) / Number(attrs.height)) * 50) : 0;
+      return [{ href: url.href, type, area, ratio }];
+    } catch { return []; }
+  });
+  const largest = new Map<number, number>();
+  for (const entry of entries) if (entry.area) largest.set(entry.ratio, Math.max(largest.get(entry.ratio) ?? 0, entry.area));
+  return dedupeEnclosures(entries
+    .filter((entry) => !entry.area || largest.get(entry.ratio) === entry.area)
+    .map(({ href, type }) => ({ href, type })))
+    .slice(0, 20);
+}
 
 type MediaContentNode = { $?: { url?: string; type?: string; medium?: string; duration?: string } };
 
@@ -329,7 +381,9 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
       // routing them through `htmlText` avoids the "Cannot convert object to
       // primitive value" crash that raw coercion (String()/`+`/`new Date()`
       // on such a node) throws.
-      const content = htmlText(item.content) || htmlText(item["content:encoded"]) || htmlText(item.summary) || htmlText(item.contentSnippet);
+      let content = htmlText(item.content) || htmlText(item["content:encoded"]) || htmlText(item.summary) || htmlText(item.contentSnippet);
+      const mediaEnclosures = statusMediaContent(item.ffMediaContent, { content, fediverse: isFediverseProfileFeed(feed.url), hasEnclosure: !!item.enclosure?.url });
+      for (const image of mediaEnclosures.filter((e) => e.type.startsWith("image/"))) content += `<img src="${escapeAttr(image.href)}" alt="">`;
       const pubDate = htmlText(item.pubDate) || htmlText(item.isoDate);
       return {
         ...resolveItemTitle(htmlText(item.title), content, htmlText(item.summary), htmlText(item.contentSnippet)),
@@ -341,7 +395,7 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
         imageUrl: extractImageFromHtml(content) || item.enclosure?.url || item["media:content"]?.$?.url || null,
         externalId: htmlText(item.guid) || htmlText(item.id) || htmlText(item.link) || null,
         guid: htmlText(item.guid) || htmlText(item.id) || null,
-        enclosures: item.enclosure?.url ? [{ href: item.enclosure.url, type: item.enclosure.type || "", ...(Number(item.enclosure.length) > 0 ? { length: Number(item.enclosure.length) } : {}) }] : [],
+        enclosures: dedupeEnclosures([...(item.enclosure?.url ? [{ href: item.enclosure.url, type: item.enclosure.type || "", ...(Number(item.enclosure.length) > 0 ? { length: Number(item.enclosure.length) } : {}) }] : []), ...mediaEnclosures]),
         ...mediaFromItem(item),
         categories: categoriesFrom(item.categories),
         sourceName: htmlText(item.ffSource) || null,
@@ -356,6 +410,10 @@ export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedF
     return fetchApiPlatformSource(feed.url, feed.signal);
   }
   const sourceType = normalizeSourceType(feed.sourceType);
+  // Native preview only for default-typed feeds: an existing HTML/XPath/JSON feed
+  // on a t.me page keeps its parser (and its guids).
+  const channel = sourceType === "rss" ? telegramChannel(feed.url) : null;
+  if (channel) return fetchTelegram(channel, { signal: feed.signal });
   const scraperConfig = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
 
   if (sourceType === "JSONFeed" || sourceType === "JSON+DotNotation") {
@@ -399,5 +457,10 @@ export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedF
     };
   }
 
-  return fetchRssOrAtom(feed);
+  const fetched = await fetchRssOrAtom(feed);
+  const actor = blueskyRssActor(feed.url);
+  if (actor && !fetched.notModified && process.env.FEEDFERRET_BLUESKY_ENRICHMENT !== "false" && parseJsonObject<{ blueskyEnrichment?: boolean }>(feed.scraperConfig).blueskyEnrichment !== false) {
+    return enrichBlueskyFeed(fetched, actor, feed.signal);
+  }
+  return fetched;
 }
