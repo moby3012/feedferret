@@ -40,23 +40,58 @@ function lineEnd(s: string, i: number): number {
   return i;
 }
 
-/** First index from `from` that is `stops` (or EOL / end): the end of an unquoted value. */
+/** End of an unquoted plain value: the first whitespace, `&`, `#` (or EOL). A quote inside it is part of the value. */
 function valueEnd(s: string, from: number, stops: string): number {
   let i = from;
   while (i < s.length && !isEol(s[i]) && !stops.includes(s[i])) i++;
   return i;
 }
 
-/** Index of the closing `quote` (backslash escapes skipped), or -1 when the quote is not closed on this line. */
-function closingQuote(s: string, from: number, quote: string): number {
-  for (let j = from; j < s.length; j++) {
-    const c = s[j];
+/**
+ * End of an unquoted value whose key was a JSON string (`"password":123,`): ends at `,` `}` `]`, whitespace,
+ * EOL, or a backslash that starts an escaped quote (`\"`), so the JSON structure around it survives.
+ */
+function jsonValueEnd(s: string, from: number): number {
+  let i = from;
+  while (i < s.length) {
+    const c = s[i];
+    if (isEol(c) || isBlank(c) || c === "," || c === "}" || c === "]") break;
     if (c === "\\") {
-      j++;
+      let j = i;
+      while (s[j] === "\\") j++;
+      if (s[j] === '"' || s[j] === "'") break;
+      i = j;
       continue;
     }
-    if (c === quote) return j;
+    i++;
+  }
+  return i;
+}
+
+/**
+ * Index of the closing `quote` of a quoted value that was opened after `backslashes` escape characters
+ * (`"…"` → 0, `\"…\"` inside one level of serialized JSON → 1, `\\\"…\\\"` → 3). The closer is the same
+ * number of backslashes followed by `quote`; a run of another length is an escape inside the value. Returns
+ * the index of the closer's first backslash, or -1 when the quote is not closed on this line. Linear.
+ */
+function closingQuote(s: string, from: number, quote: string, backslashes: number): number {
+  let j = from;
+  while (j < s.length) {
+    const c = s[j];
     if (isEol(c)) return -1;
+    if (c === "\\") {
+      let e = j;
+      while (s[e] === "\\") e++;
+      if (s[e] === quote) {
+        if (e - j === backslashes) return j;
+        j = e + 1; // an escaped quote inside the value
+        continue;
+      }
+      j = e;
+      continue;
+    }
+    if (c === quote && backslashes === 0) return j;
+    j++;
   }
   return -1;
 }
@@ -72,10 +107,18 @@ function schemeAt(s: string, i: number): { start: number; digest: boolean } | nu
 }
 
 /**
- * Masks the value of every secret-named pair. The credential is masked, the key and separator stay,
- * and an auth scheme stays visible (`authorization=Bearer ***`). Quoted values are masked inside their
- * quotes; unquoted values end at whitespace, `&`, `#` or a quote (a comma belongs to the secret). A `:`
- * header value (`Authorization: …`, `Cookie: …`) and a Digest credential run to the end of the line.
+ * Masks the value of every secret-named pair. The credential is masked, the key and separator stay, and an
+ * auth scheme stays visible (`authorization=Bearer ***`).
+ *
+ * - A quote opens a quoted value only as the first character after the separator (after blanks and any
+ *   escape backslashes). Inside it the value runs to the matching quote, escapes respected, and that quote
+ *   is kept; structure around the value survives. `password="x"` → `password="***"`.
+ * - Otherwise the value is unquoted and a quote in it is part of the secret: `password=ab"S"` → `password=***`.
+ *   An unquoted value ends at whitespace, `&`, `#`; a comma belongs to the secret (`password=ab,cd` → `password=***`).
+ * - A key written as a JSON string (`"password":`, `\"password\":`, nested `\\\"password\\\":`) switches the
+ *   unquoted value to JSON rules: it ends at `,` `}` `]`, whitespace or an escaped quote, so
+ *   `{"password":123,"user":"bob"}` → `{"password":***,"user":"bob"}`.
+ * - A `:` header (`Authorization: …`, `Cookie: …`) and a Digest credential run to the end of the line.
  */
 export function redactSecretPairs(text: string): string {
   let out = "";
@@ -87,10 +130,15 @@ export function redactSecretPairs(text: string): string {
       i++;
       continue;
     }
-    // Blanks and a closing quote before the separator (`"password":`, `"password" :`, `password = `) are not part of the key.
+    // The key ends before blanks and before a closing quote, which may be escaped (`\"password\" :`).
     let keyEnd = i;
     while (keyEnd > 0 && isBlank(text[keyEnd - 1])) keyEnd--;
-    if (keyEnd > 0 && (text[keyEnd - 1] === '"' || text[keyEnd - 1] === "'")) keyEnd--;
+    let jsonKey = false;
+    if (keyEnd > 0 && (text[keyEnd - 1] === '"' || text[keyEnd - 1] === "'")) {
+      jsonKey = true;
+      keyEnd--;
+      while (keyEnd > 0 && text[keyEnd - 1] === "\\") keyEnd--;
+    }
     let k = keyEnd;
     while (k > 0 && isKeyCode(text.charCodeAt(k - 1))) k--;
     const name = text.slice(k, keyEnd);
@@ -98,24 +146,29 @@ export function redactSecretPairs(text: string): string {
       i++;
       continue;
     }
+    // Value: blanks, then optional escape backslashes, then a quote that opens a quoted value.
     const v = skipBlanks(text, i + 1);
-    const quote = text[v];
+    let b = 0;
+    while (text[v + b] === "\\") b++;
+    const quote = text[v + b];
     if (quote === '"' || quote === "'") {
-      const close = closingQuote(text, v + 1, quote);
-      const end = close === -1 ? lineEnd(text, v + 1) : close;
-      const scheme = schemeAt(text, v + 1);
-      const valueStart = scheme === null || scheme.start > end ? v + 1 : scheme.start;
+      const contentStart = v + b + 1;
+      const close = closingQuote(text, contentStart, quote, b);
+      const end = close === -1 ? lineEnd(text, contentStart) : close;
+      const scheme = schemeAt(text, contentStart);
+      const valueStart = scheme === null || scheme.start > end ? contentStart : scheme.start;
       out += text.slice(last, valueStart) + "***";
       last = end;
       i = end;
       continue;
     }
-    const scheme = schemeAt(text, v);
+    const scheme = jsonKey ? null : schemeAt(text, v);
     const valueStart = scheme === null ? v : scheme.start;
     let end: number;
-    if (sep === ":" && (isLineValueName(name) || scheme !== null)) end = lineEnd(text, valueStart); // header: the whole line is the credential
-    else if (scheme?.digest) end = valueEnd(text, valueStart, "&#"); // Digest: quoted parameters, up to the end of the URL / line
-    else end = valueEnd(text, valueStart, " \t&#\"'");
+    if (jsonKey) end = jsonValueEnd(text, v);
+    else if (sep === ":" && (isLineValueName(name) || scheme !== null)) end = lineEnd(text, valueStart); // header: the whole line
+    else if (scheme?.digest) end = valueEnd(text, valueStart, "&#"); // Digest: quoted parameters, to end of URL / line
+    else end = valueEnd(text, valueStart, " \t&#");
     out += text.slice(last, valueStart) + "***";
     last = end;
     i = end;

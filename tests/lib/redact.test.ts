@@ -52,18 +52,52 @@ describe("secret pairs outside query strings (authorization=…, Authorization: 
     expect(redact("https://h.test/feed?password=p%20w#frag")).toBe("https://h.test/feed?password=***#frag");
   });
 
-  it("ends an unquoted value at whitespace, &, # or a quote; a comma belongs to the secret", () => {
+  it("ends an unquoted plain value at whitespace, & or #; a comma and a quote inside it belong to the secret", () => {
     expect(redact("password=ab,cd")).toBe("password=***");
     expect(redact("token=abc def")).toBe("token=*** def");
-    expect(redact("'token=abc'")).toBe("'token=***'");
-    expect(redact("\"secret=abc\"")).toBe("\"secret=***\"");
+    expect(redact("'token=abc'")).toBe("'token=***");
+    expect(redact("\"secret=abc\"")).toBe("\"secret=***");
     expect(redact("x=1&password=ab,cd&y=2")).toBe("x=1&password=***&y=2");
+    expect(redact('password=ab"SECRET"')).toBe("password=***");
+    expect(redact("password=ab\\\"SECRET\\\" tail")).not.toContain("SECRET");
+  });
+
+  it("a quote opens a quoted value only as the first character after the separator", () => {
+    expect(redact('password=ab"SECRET" rest')).toBe("password=*** rest");
+    expect(redact('password = "hunter2" rest')).toBe('password = "***" rest');
+    expect(redact('password=x"y"')).not.toMatch(/"y"/);
+  });
+
+  it("masks escaped-JSON keys one and two levels deep, and keeps the structure parseable", () => {
+    const creds = { password: "SECRET-PW-1", Authorization: "Bearer CREDENTIAL-2" };
+    const one = JSON.stringify({ message: JSON.stringify(creds) });
+    const oneOut = redact(one);
+    expect(oneOut).not.toMatch(/SECRET-PW-1|CREDENTIAL-2/);
+    expect(JSON.parse(JSON.parse(oneOut).message)).toEqual({ password: "***", Authorization: "Bearer ***" });
+
+    const two = JSON.stringify({ message: JSON.stringify({ message: JSON.stringify(creds) }) });
+    const twoOut = redact(two);
+    expect(twoOut).not.toMatch(/SECRET-PW-1|CREDENTIAL-2/);
+    expect(JSON.parse(JSON.parse(JSON.parse(twoOut).message).message)).toEqual({ password: "***", Authorization: "Bearer ***" });
+  });
+
+  it("escape-aware: an escaped quote inside an escaped value does not end the secret early", () => {
+    const inner = JSON.stringify({ password: 'pa"ss-SECRET-3' });
+    const out = redact(JSON.stringify({ message: inner }));
+    expect(out).not.toContain("SECRET-3");
+    expect(JSON.parse(JSON.parse(out).message)).toEqual({ password: "***" });
+  });
+
+  it("JSON-keyed unquoted values end at , } ] and keep the delimiter", () => {
+    expect(redact('{"password":123,"user":"bob"}')).toBe('{"password":***,"user":"bob"}');
+    expect(redact('{"token":42}')).toBe('{"token":***}');
+    expect(redact('["x",{"secret":7}]')).toBe('["x",{"secret":***}]');
   });
 
   it("masks quoted values whole, keeping the quotes", () => {
     expect(redact('login password="hunter2" ok')).toBe('login password="***" ok');
     expect(redact("token='s3 cr3t,x' next")).toBe("token='***' next");
-    expect(redact('password="a\\"hunter2" tail')).not.toContain("hunter2");
+    expect(redact('password="a\\"hunter2" tail')).toBe('password="***" tail');
   });
 
   it("masks JSON properties with quoted keys and values", () => {
