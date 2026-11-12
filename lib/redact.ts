@@ -1,20 +1,135 @@
 import { redactEncodedParamValues, redactUrlUserinfo } from "@/lib/linear-text";
 
-// Secret-looking `name=value` pairs anywhere in text (query strings, log lines, `key=value` fragments).
-// The key is the whole `[\w.-]` run before "=", so `x-api-key`, `access_token`, `apikey` match by suffix;
-// the lookbehind pins each match to the run start, which keeps the scan linear (no re-scan per character).
-// An auth scheme after the separator (`authorization=Bearer xyz`) stays visible, the credential does not.
-const SECRET_PAIR_RE = /((?<![\w.-])[\w.-]*(?:key|token|secret|passw(?:or)?d|pwd|auth|authorization|sig(?:nature)?)=(?:(?:bearer|basic|digest|negotiate|token)[ \t]+)?)[^&#\s"',]*/gi;
-// `Authorization: Basic xyz` / `Proxy-Authorization:Bearer xyz` as written in headers and log text.
-const AUTH_HEADER_RE = /((?<![\w.-])[\w.-]*auth(?:orization)?:[ \t]*(?:(?:bearer|basic|digest|negotiate|token)[ \t]+)?)[^&#\s"',]*/gi;
+// ------------------------------------------------------------ secret pairs
+//
+// `key=value`, `key: value`, `"key":"value"` and `"key"="value"` pairs in free text (query strings, log
+// lines, JSON, headers). Hand-written scan, not a regex: quoted values need escape-aware matching and
+// header values need "to end of line", and both are easier to keep linear this way.
+
+/** Key names that mark a secret: the whole key, or the last `-` / `_` / `.` segment of it (`x-api-key`, `access_token`). */
+const SECRET_KEY_NAMES = ["key", "apikey", "token", "secret", "password", "passwd", "pwd", "auth", "authorization", "sig", "signature", "cookie"];
+/** Names that also count glued to a longer word (`myapikey`, `newpassword`). `key` / `token` are not here: `monkey` stays. */
+const SECRET_KEY_SUFFIXES = ["apikey", "authorization", "password", "passwd"];
+const AUTH_SCHEMES = ["bearer", "basic", "digest", "negotiate", "ntlm", "token"];
+
+/** Is this key (a `[A-Za-z0-9_.-]` run) a secret name? Case-insensitive, anchored: `monkey`, `oauth`, `keyboard` are not. */
+export function isSensitiveKeyName(name: string): boolean {
+  const lower = name.toLowerCase();
+  if (lower.length === 0) return false;
+  if (SECRET_KEY_NAMES.some((n) => lower === n || lower.endsWith(`-${n}`) || lower.endsWith(`_${n}`) || lower.endsWith(`.${n}`))) return true;
+  return SECRET_KEY_SUFFIXES.some((n) => lower.endsWith(n));
+}
+
+/** Header-style keys whose `:` value runs to the end of the line (`Authorization: Digest a="b", c="d"`, `Cookie: a=1; b=2`). */
+function isLineValueName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.endsWith("authorization") || lower.endsWith("cookie");
+}
+
+const isKeyCode = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 45 || c === 46;
+const isBlank = (c: string | undefined) => c === " " || c === "\t";
+const isEol = (c: string | undefined) => c === "\n" || c === "\r";
+
+function skipBlanks(s: string, i: number): number {
+  while (i < s.length && isBlank(s[i])) i++;
+  return i;
+}
+
+function lineEnd(s: string, i: number): number {
+  while (i < s.length && !isEol(s[i])) i++;
+  return i;
+}
+
+/** First index from `from` that is `stops` (or EOL / end): the end of an unquoted value. */
+function valueEnd(s: string, from: number, stops: string): number {
+  let i = from;
+  while (i < s.length && !isEol(s[i]) && !stops.includes(s[i])) i++;
+  return i;
+}
+
+/** Index of the closing `quote` (backslash escapes skipped), or -1 when the quote is not closed on this line. */
+function closingQuote(s: string, from: number, quote: string): number {
+  for (let j = from; j < s.length; j++) {
+    const c = s[j];
+    if (c === "\\") {
+      j++;
+      continue;
+    }
+    if (c === quote) return j;
+    if (isEol(c)) return -1;
+  }
+  return -1;
+}
+
+/** An auth scheme word at `i` (`Bearer `, `Digest `): where its credential starts, and whether it is a multi-parameter scheme. */
+function schemeAt(s: string, i: number): { start: number; digest: boolean } | null {
+  for (const scheme of AUTH_SCHEMES) {
+    if (s.slice(i, i + scheme.length).toLowerCase() === scheme && isBlank(s[i + scheme.length])) {
+      return { start: skipBlanks(s, i + scheme.length), digest: scheme === "digest" };
+    }
+  }
+  return null;
+}
+
+/**
+ * Masks the value of every secret-named pair. The credential is masked, the key and separator stay,
+ * and an auth scheme stays visible (`authorization=Bearer ***`). Quoted values are masked inside their
+ * quotes; unquoted values end at whitespace, `&`, `#` or a quote (a comma belongs to the secret). A `:`
+ * header value (`Authorization: …`, `Cookie: …`) and a Digest credential run to the end of the line.
+ */
+export function redactSecretPairs(text: string): string {
+  let out = "";
+  let last = 0;
+  let i = 0;
+  while (i < text.length) {
+    const sep = text[i];
+    if (sep !== "=" && sep !== ":") {
+      i++;
+      continue;
+    }
+    // Blanks and a closing quote before the separator (`"password":`, `"password" :`, `password = `) are not part of the key.
+    let keyEnd = i;
+    while (keyEnd > 0 && isBlank(text[keyEnd - 1])) keyEnd--;
+    if (keyEnd > 0 && (text[keyEnd - 1] === '"' || text[keyEnd - 1] === "'")) keyEnd--;
+    let k = keyEnd;
+    while (k > 0 && isKeyCode(text.charCodeAt(k - 1))) k--;
+    const name = text.slice(k, keyEnd);
+    if (name.length === 0 || !isSensitiveKeyName(name)) {
+      i++;
+      continue;
+    }
+    const v = skipBlanks(text, i + 1);
+    const quote = text[v];
+    if (quote === '"' || quote === "'") {
+      const close = closingQuote(text, v + 1, quote);
+      const end = close === -1 ? lineEnd(text, v + 1) : close;
+      const scheme = schemeAt(text, v + 1);
+      const valueStart = scheme === null || scheme.start > end ? v + 1 : scheme.start;
+      out += text.slice(last, valueStart) + "***";
+      last = end;
+      i = end;
+      continue;
+    }
+    const scheme = schemeAt(text, v);
+    const valueStart = scheme === null ? v : scheme.start;
+    let end: number;
+    if (sep === ":" && (isLineValueName(name) || scheme !== null)) end = lineEnd(text, valueStart); // header: the whole line is the credential
+    else if (scheme?.digest) end = valueEnd(text, valueStart, "&#"); // Digest: quoted parameters, up to the end of the URL / line
+    else end = valueEnd(text, valueStart, " \t&#\"'");
+    out += text.slice(last, valueStart) + "***";
+    last = end;
+    i = end;
+  }
+  return out + text.slice(last);
+}
 
 /** Scrub credentials from arbitrary diagnostic text, including encoded URLs. */
 export function redact(text: string): string {
-  const stage1 = text
-    .replace(/\/account\/confirm-email\?[^\s"'<>#]*/gi, url => url.replace(/((?:\?|&amp;|&)(?:t|c)=)[^&#\s"']*/gi, "$1***"))
-    .replace(/(?:%2f|\/)account(?:%2f|\/)confirm-email%3f(?:(?!%23)[^\s"'<>#])*/gi, url => url.replace(/((?:%3f|%26)(?:t|c)%3d)(?:(?!%26|%23)[^&#\s"'])*/gi, "$1***"))
-    .replace(SECRET_PAIR_RE, "$1***")
-    .replace(AUTH_HEADER_RE, "$1***");
+  const stage1 = redactSecretPairs(
+    text
+      .replace(/\/account\/confirm-email\?[^\s"'<>#]*/gi, url => url.replace(/((?:\?|&amp;|&)(?:t|c)=)[^&#\s"']*/gi, "$1***"))
+      .replace(/(?:%2f|\/)account(?:%2f|\/)confirm-email%3f(?:(?!%23)[^\s"'<>#])*/gi, url => url.replace(/((?:%3f|%26)(?:t|c)%3d)(?:(?!%26|%23)[^&#\s"'])*/gi, "$1***")),
+  );
   // The last two steps are hand-written linear scans (lib/linear-text.ts): their regex forms were
   // O(n²) on "%23%23%23…" / "aaaa…" in the arbitrary text this function is fed.
   return redactUrlUserinfo(redactEncodedParamValues(stage1));
@@ -39,7 +154,9 @@ export function redactValue(value: unknown): unknown {
         if (remaining <= 0) { Object.defineProperty(out, "_truncated", { value: true, enumerable: true }); break; }
         const descriptor = Object.getOwnPropertyDescriptor(v, key)!;
         if (!("value" in descriptor)) continue;
-        Object.defineProperty(out, key, { ...descriptor, value: visit(descriptor.value, depth + 1) });
+        // A property named like a secret is masked whole, whatever its value looks like (`{ password: "…" }`).
+        const masked = isSensitiveKeyName(key) && descriptor.value !== null && descriptor.value !== undefined;
+        Object.defineProperty(out, key, { ...descriptor, value: masked ? "***" : visit(descriptor.value, depth + 1) });
       }
       return out;
     } finally { seen.delete(v); }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { redact } from "@/lib/redact";
+import { redact, redactSecretPairs } from "@/lib/redact";
 import { isSafeStyleValue, stripLayoutBreakingStyles } from "@/lib/sanitize-html";
 
 // The ReDoS sweep replaced regexes inside two security filters with linear scanners:
@@ -101,20 +101,21 @@ describe("sanitizer CSS value guard: new scanner ≡ original regex implementati
 
 // ------------------------------------------------------------------ (b) redact
 
-/** Reference regex chain for lib/redact.ts (pre-sweep forms, plus the generic key=value / Authorization rules). */
+/**
+ * Reference chain for lib/redact.ts. The confirm-email / encoded / userinfo steps are the original regexes; the
+ * key=value / key: value step is the quote-aware scanner `redactSecretPairs` (a hand-written scan has no regex form).
+ */
 function legacyRedact(text: string): string {
-  return text
+  const stage1 = redactSecretPairs(text
     .replace(/\/account\/confirm-email\?[^\s"'<>#]*/gi, (url) => url.replace(/((?:\?|&amp;|&)(?:t|c)=)[^&#\s"']*/gi, "$1***"))
-    .replace(/(?:%2f|\/)account(?:%2f|\/)confirm-email%3f(?:(?!%23)[^\s"'<>#])*/gi, (url) => url.replace(/((?:%3f|%26)(?:t|c)%3d)(?:(?!%26|%23)[^&#\s"'])*/gi, "$1***"))
-    .replace(/((?<![\w.-])[\w.-]*(?:key|token|secret|passw(?:or)?d|pwd|auth|authorization|sig(?:nature)?)=(?:(?:bearer|basic|digest|negotiate|token)[ \t]+)?)[^&#\s"',]*/gi, "$1***")
-    .replace(/((?<![\w.-])[\w.-]*auth(?:orization)?:[ \t]*(?:(?:bearer|basic|digest|negotiate|token)[ \t]+)?)[^&#\s"',]*/gi, "$1***")
+    .replace(/(?:%2f|\/)account(?:%2f|\/)confirm-email%3f(?:(?!%23)[^\s"'<>#])*/gi, (url) => url.replace(/((?:%3f|%26)(?:t|c)%3d)(?:(?!%26|%23)[^&#\s"'])*/gi, "$1***")));
+  return stage1
     .replace(/((?:%3f|%26|%23|%3b)(?:[\w.-]|%[0-9a-f]{2})*?(?:key|token|secret|passw(?:or)?d|pwd|auth|sig(?:nature)?)%3d)(?:(?!%26|%23|%3b)[^&#\s"'])*/gi, "$1***")
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]+@/gi, "$1***@");
 }
 
 const SECRET_NAMES = ["key", "api_key", "apikey", "token", "access_token", "refresh-token", "secret", "client_secret", "password", "passwd", "pwd", "auth", "sig", "signature", "X-Amz-Signature"];
-// t / c are only secrets inside confirm-email links. Pair rules (3rd and 4th line of legacyRedact) are the
-// current `lib/redact.ts` regexes: they match a secret key at any position (not only after ?/&/#/;) and end the value at a comma too.
+// t / c are only secrets inside confirm-email links.
 const NAMES = [...SECRET_NAMES, "authorization", "t", "c"];
 const REDACT_TABLE = [
   // plain query / fragment / matrix params

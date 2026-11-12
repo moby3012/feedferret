@@ -35,6 +35,6 @@ describe("SystemLog masks credentials in free text and metadata", () => {
     const { data } = create.mock.calls[0][0];
     expect(data.message).toBe("fetch failed: authorization=Bearer *** https://h.test/f?access_token=***&x=1");
     expect(data.metadata).not.toMatch(/s3cr3t/);
-    expect(JSON.parse(data.metadata!)).toEqual({ header: "Authorization: Basic ***", nested: [{ apikey: "k", note: "api_key=***" }] });
+    expect(JSON.parse(data.metadata!)).toEqual({ header: "Authorization: Basic ***", nested: [{ apikey: "***", note: "api_key=***" }] });
   });
 });
