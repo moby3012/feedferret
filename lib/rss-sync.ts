@@ -4,6 +4,7 @@ import { applyAutoReadRules } from "./auto-read-rules";
 import { applyKeywordAlerts } from "./keyword-alerts";
 import { queueNewArticleNotifications } from "./notifications";
 import { applyFeedReadFilter } from "./feed-content-filter";
+import { isApiSourceDeferredError } from "./api-source-errors";
 import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
@@ -814,6 +815,12 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         // streak / auto-mute, no lastFetchedAt bump — the next sync retries it.
         if (isHtmlWorkerError(error) && (error.reason === "busy" || error.reason === "unavailable")) {
             logger.warn(`[rss-sync] feed ${feed.id} (${urlForLog(feed.url)}) deferred: HTML worker ${error.reason}`);
+            return { success: true, skipped: true, deferred: true, count: 0, createdArticleIds: [] };
+        }
+        // API platform sources: missing/rejected credentials or an exhausted shared
+        // quota are not this feed's fault — same treatment as a saturated worker.
+        if (isApiSourceDeferredError(error)) {
+            logger.warn(`[rss-sync] feed ${feed.id} (${urlForLog(feed.url)}) deferred: API source ${error.reason}${error.status ? ` (HTTP ${error.status})` : ""}`);
             return { success: true, skipped: true, deferred: true, count: 0, createdArticleIds: [] };
         }
         // Log origin only: feed URLs can carry private tokens / userinfo (N15).

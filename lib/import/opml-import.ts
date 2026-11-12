@@ -27,6 +27,7 @@ import {
   type OpmlOutline,
 } from "@/lib/opml";
 import { BLOCKED_REQUEST_HEADERS, EXTRACTION_SOURCE_TYPES, JSON_ATTRS, MAX_FEED_REDIRECTS, XPATH_ATTRS, normalizeSourceType, stringifyNonEmpty, type FeedExtractionConfig } from "@/lib/feed-extraction";
+import { canonicalApiSourceUrl } from "@/lib/feed-adapters/api-source-url";
 import { MAX_SEARCH_QUERY, validateFeedUrl, validateOpml } from "@/lib/validation";
 import { translateFreshRssReadFilters } from "./frss-filters";
 import { assertSafeHttpOptionsProxy, proxyFromHttpOptions } from "@/lib/ssrf";
@@ -178,7 +179,7 @@ export function mapOutlineToFeed(
     issues.push({ kind: "unsupported", code: "feed-url-invalid", subject, attribute: "xmlUrl", detail: urlError ?? "missing" });
     return null;
   }
-  const feedUrl = outline.xmlUrl;
+  const feedUrl = canonicalApiSourceUrl(outline.xmlUrl) ?? outline.xmlUrl;
 
   const issue = (kind: ImportIssue["kind"], code: string, attribute?: string, detail?: string) =>
     issues.push({ kind, code, subject, attribute, detail });

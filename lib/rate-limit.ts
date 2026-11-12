@@ -164,6 +164,14 @@ export const RATE_LIMITS = {
     prefix: "ai-feed-config",
   } satisfies RateLimitConfig,
 
+  // Admin "Test connection" buttons (Twitch, RSSHub): each call makes a real
+  // outbound request with admin-supplied credentials — 10 req/min per admin.
+  adminConnectionTest: {
+    limit: 10,
+    windowSecs: 60,
+    prefix: "admin-connection-test",
+  } satisfies RateLimitConfig,
+
   // RSSHub route proposal (M5a): same cost profile as aiFeedConfig — hits the
   // user's BYOK AI provider, then a real RSSHub round-trip to validate.
   rsshubRoute: {

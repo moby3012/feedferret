@@ -13,6 +13,7 @@ import { renderWithConfigDetailed } from "@/lib/render-sidecar";
 import { validateRsshubRoute } from "@/lib/rsshub";
 import { testChangedetectionConnection as runChangedetectionTest } from "@/lib/changedetection";
 import { logger } from "@/lib/logger";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /** Single source of the admin gate: lib/admin-auth.ts (also used by the newsletter wizard). */
 async function checkAdmin() {
@@ -402,7 +403,10 @@ export async function testRenderSidecar(config: { url?: string; token?: string; 
 const RSSHUB_TEST_ROUTE = "/github/repos/DIYgod/RSSHub/releases";
 
 export async function testRsshubConnection(config: { baseUrl?: string; apiKey?: string; testRoute?: string }) {
-  await checkAdmin();
+  const admin = await checkAdmin();
+  if (!checkRateLimit(`user:${admin.user.id}`, RATE_LIMITS.adminConnectionTest).success) {
+    return { success: false as const, error: "Too many connection tests. Try again in a minute." };
+  }
   const baseUrl = String(config.baseUrl || "").trim();
   if (!/^https?:\/\//i.test(baseUrl)) {
     return { success: false as const, error: "RSSHub base URL must start with http:// or https://" };
@@ -555,13 +559,22 @@ export async function getStorageStats() {
 }
 
 export async function testTwitchConnection(input: { clientId: string; clientSecret: string }) {
-  await checkAdmin();
+  const admin = await checkAdmin();
+  if (!checkRateLimit(`user:${admin.user.id}`, RATE_LIMITS.adminConnectionTest).success) {
+    return { success: false as const, error: "Too many connection tests. Try again in a minute." };
+  }
   const { getTwitchCredentials, twitchRequest } = await import("@/lib/twitch");
   try {
-    const stored = input.clientSecret === "__encrypted__" ? await getTwitchCredentials() : null;
-    const clientSecret = input.clientSecret === "__encrypted__" ? stored?.clientSecret : input.clientSecret;
-    if (!input.clientId.trim() || !clientSecret) return { success: false, error: "Client ID and Client Secret required" };
-    await twitchRequest("users", { login: "twitch" }, { clientId: input.clientId.trim(), clientSecret });
-    return { success: true };
-  } catch { return { success: false, error: "Twitch connection failed. Check credentials or retry after the API rate limit resets." }; }
+    const clientId = String(input.clientId ?? "").trim();
+    // Sentinel = "untouched": test against the stored secret, never echo it back.
+    const clientSecret = input.clientSecret === "__encrypted__" ? (await getTwitchCredentials())?.clientSecret : String(input.clientSecret ?? "").trim();
+    if (!clientId || !clientSecret) return { success: false as const, error: "Client ID and Client Secret required" };
+    // Ephemeral: the unsaved test credentials must not enter the shared token cache.
+    await twitchRequest("users", { login: "twitch" }, { clientId, clientSecret }, undefined, { ephemeral: true });
+    return { success: true as const };
+  } catch (error) {
+    const status = (error as { status?: unknown } | null)?.status;
+    logger.warn(`[admin] Twitch connection test failed${typeof status === "number" ? ` (HTTP ${status})` : ""}`);
+    return { success: false as const, error: "Twitch connection failed. Check credentials or retry after the API rate limit resets." };
+  }
 }

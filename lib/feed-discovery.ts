@@ -1,4 +1,4 @@
-import { matchApiPlatform, parseApiSourceUrl } from "./feed-adapters/api-source-url";
+import { canonicalApiSourceUrl, matchApiPlatform, parseApiSourceUrl } from "./feed-adapters/api-source-url";
 import { fetchTextWithSsrfProtection, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { parseHttpLinkHeader } from "./http-link-header";
 import { hintForFetchError } from "./fetch-error-hint";
@@ -1097,7 +1097,7 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
   // cleaned first; phrases stay phrases.
   const cleaned = cleanUrlInput(input);
   const internal = parseApiSourceUrl(cleaned);
-  if (internal) return { mode: "url", feeds: [{ url: cleaned, title: `${internal.source.name} · ${internal.account} · ${internal.variant}`, type: "json", source: "resolver", platform: internal.source.id }] };
+  if (internal) return { mode: "url", feeds: [{ url: canonicalApiSourceUrl(cleaned) ?? cleaned, title: `${internal.source.name} · ${internal.account} · ${internal.variant}`, type: "json", source: "resolver", platform: internal.source.id }] };
   const parsed = parseSourceInput(cleaned);
   if (parsed.type === "empty") return { mode: "empty", feeds: [] };
   if (parsed.type === "topic") {

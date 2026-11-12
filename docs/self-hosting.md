@@ -546,7 +546,11 @@ Only the [official Helix API](https://dev.twitch.tv/docs/api/) is used, with a
 [client credentials app token](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#client-credentials-grant-flow).
 Tokens are cached until expiry and retried once on 401; quota exhaustion defers
 requests to the API host until `Ratelimit-Reset`. Credentials and access tokens
-stay on the server, including during connection tests.
+stay on the server, including during connection tests (which use a throw-away
+token and are rate-limited per admin). Missing or rejected credentials and an
+exhausted quota only defer Twitch feeds to a later sync: they never count as feed
+failures, so no feed is auto-muted. A rejected credential pair is not retried for
+one minute.
 
 API sources share the ordinary feed ingestion/deduplication pipeline. Their
 strict internal identifiers, e.g. `feedferret://twitch/example/live`, contain no

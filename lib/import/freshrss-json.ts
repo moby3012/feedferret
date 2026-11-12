@@ -36,6 +36,7 @@ import { sanitizeFeedItemBodies } from "@/lib/feed-item-sanitize-client";
 
 /** Queue wait for the import's sanitize batches behind a busy background sync (ms). */
 const IMPORT_SANITIZE_QUEUE_WAIT_MS = 10 * 60_000;
+import { canonicalApiSourceUrl } from "@/lib/feed-adapters/api-source-url";
 import { MAX_FEED_URL_LENGTH, MAX_LABEL_NAME, validateFeedUrl } from "@/lib/validation";
 import type { ImportIssue } from "./opml-import";
 
@@ -201,7 +202,7 @@ export function normalizeFreshRssItem(raw: unknown): NormalizedFrssItem {
   const streamId = asString(origin.streamId);
   const declaredFeedUrl = asString(origin.feedUrl);
   const feedUrl = declaredFeedUrl && declaredFeedUrl.length <= MAX_FEED_URL_LENGTH && validateFeedUrl(declaredFeedUrl) === null
-    ? declaredFeedUrl
+    ? (canonicalApiSourceUrl(declaredFeedUrl) ?? declaredFeedUrl)
     : `urn:freshrss:${(streamId ?? "feed/unknown").replace(/[^A-Za-z0-9/_.-]/g, "_").slice(0, 100)}`;
 
   const publishedAt = toDate(item.published, "s") ?? toDate(item.updated, "s") ?? toDate(item.crawlTimeMsec, "ms") ?? new Date(0);

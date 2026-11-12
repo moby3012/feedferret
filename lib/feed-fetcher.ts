@@ -1,4 +1,5 @@
 import Parser from "rss-parser";
+import { parseApiSourceUrl } from "./feed-adapters/api-source-url";
 import {
   BLOCKED_REQUEST_HEADERS,
   MAX_FEED_REDIRECTS,
@@ -350,7 +351,7 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
 }
 
 export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedFeed> {
-  if (feed.url.startsWith("feedferret:")) {
+  if (parseApiSourceUrl(feed.url)) {
     const { fetchApiPlatformSource } = await import("./api-platform-source");
     return fetchApiPlatformSource(feed.url, feed.signal);
   }

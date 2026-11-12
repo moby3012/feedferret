@@ -1,6 +1,7 @@
 import type { FetchedFeed } from "./feed-item-fields";
 import { parseApiSourceUrl } from "./feed-adapters/api-source-url";
-import { getTwitchCredentials, twitchRequest, fetchTwitchFeed } from "./twitch";
+import { isApiSourceDeferredError } from "./api-source-errors";
+import { getTwitchCredentials, resolveTwitchUser, fetchTwitchFeed } from "./twitch";
 
 type AccountState = "ready" | "unconfigured" | "missing";
 type ApiSourceProvider = {
@@ -15,7 +16,14 @@ const providers: Record<string, ApiSourceProvider> = {
     async verifyAccount(account, signal) {
       const credentials = await getTwitchCredentials();
       if (!credentials) return "unconfigured";
-      return (await twitchRequest("users", { login: account }, credentials, signal)).length ? "ready" : "missing";
+      try {
+        return (await resolveTwitchUser(account, credentials, signal)) ? "ready" : "missing";
+      } catch (error) {
+        // Rejected credentials are a setup problem (same guidance, RSSHub fallback);
+        // quota exhaustion propagates so discovery reports "rate-limited".
+        if (isApiSourceDeferredError(error) && error.reason === "auth") return "unconfigured";
+        throw error;
+      }
     },
   },
 };

@@ -1388,7 +1388,7 @@ export function ServerManagementDialog({
                       <SettingsField label={t("sync.twitchClientSecret")} placeholder="••••••••" field="twitchClientSecret" settings={settings} setSettings={setSettings} type="password" isSecret />
                       <p className="text-footnote text-muted-foreground">{t("sync.twitchDisableHint")}</p>
                       <div className="flex flex-wrap justify-end gap-2">
-                        <Button variant="outline" onClick={handleTestTwitch} disabled={isSaving}>{t("sync.rsshubTest")}</Button>
+                        <Button variant="outline" onClick={handleTestTwitch} disabled={isSaving}>{t("sync.testConnection")}</Button>
                         <Button onClick={handleSaveTwitch} disabled={isSaving}>{t("sync.save")}</Button>
                       </div>
                     </div>

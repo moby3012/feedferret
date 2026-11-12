@@ -3,16 +3,18 @@ const mocks = vi.hoisted(() => ({ fetch: vi.fn(), settings: vi.fn(), decrypt: vi
 vi.mock("@/lib/db", () => ({ db: { globalSettings: { findUnique: mocks.settings } } }));
 vi.mock("@/lib/crypto", () => ({ decryptIfValue: mocks.decrypt }));
 vi.mock("@/lib/ssrf", () => ({ safeFetch: mocks.fetch }));
-import { fetchTwitchFeed, twitchRequest, getTwitchCredentials } from "../../lib/twitch";
+import { fetchTwitchFeed, twitchRequest, getTwitchCredentials, resetTwitchCaches } from "../../lib/twitch";
+import { isApiSourceDeferredError } from "../../lib/api-source-errors";
+import { fetchFeedArticles } from "../../lib/feed-fetcher";
 import { hostBackoffRemainingMs, resetHostBackoff } from "../../lib/host-backoff";
-import { matchApiPlatform, parseApiSourceUrl } from "../../lib/feed-adapters/api-source-url";
+import { canonicalApiSourceUrl, matchApiPlatform, parseApiSourceUrl } from "../../lib/feed-adapters/api-source-url";
 import { normalizeUrlInput } from "../../lib/url-input";
 import { validateFeedUrl } from "../../lib/validation";
 import { generateOpml, parseOpml } from "../../lib/opml";
 const reply = (data: unknown, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers });
 let sequence = 0;
 beforeEach(() => {
-  vi.clearAllMocks(); resetHostBackoff();
+  vi.clearAllMocks(); resetHostBackoff(); resetTwitchCaches();
   mocks.settings.mockResolvedValue({ twitchClientId: `synthetic-${++sequence}`, twitchClientSecret: "sealed" });
   mocks.decrypt.mockReturnValue("synthetic-secret");
   mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? reply({ access_token: "synthetic-token", expires_in: 3600 }) : url.includes("/users?") ? reply({ data: [{ id: "123", display_name: "Example" }] }) : reply({ data: [] }));
@@ -76,8 +78,101 @@ describe("official Twitch API platform source", () => {
   it("requires admin credentials and decrypts with the field purpose", async () => {
     mocks.settings.mockResolvedValue(null); mocks.decrypt.mockReturnValue(null);
     expect(await getTwitchCredentials()).toBeNull();
-    await expect(fetchTwitchFeed("example", "live")).rejects.toThrow("Server settings");
+    const error = await fetchTwitchFeed("example", "live").catch((e) => e);
+    expect(error.message).toContain("Server settings");
+    // Typed so syncFeed defers instead of counting a feed failure (no auto-mute).
+    expect(isApiSourceDeferredError(error) && error.reason).toBe("unconfigured");
     expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+  it("decrypts the stored secret with the globalSettings.twitchClientSecret purpose", async () => {
+    mocks.settings.mockResolvedValue({ twitchClientId: "id", twitchClientSecret: "sealed-value" });
+    mocks.decrypt.mockReturnValue("plain");
+    expect(await getTwitchCredentials()).toEqual({ clientId: "id", clientSecret: "plain" });
+    expect(mocks.decrypt).toHaveBeenCalledWith("sealed-value", "globalSettings.twitchClientSecret");
+  });
+  it("mints one token for N concurrent requests and never uses a caller's abort signal", async () => {
+    const creds = { clientId: "single-flight", clientSecret: "secret" };
+    const first = new AbortController();
+    const calls = Promise.all([twitchRequest("users", {}, creds, first.signal), ...Array.from({ length: 4 }, () => twitchRequest("users", {}, creds))]);
+    first.abort();
+    await calls.catch(() => undefined);
+    const tokens = mocks.fetch.mock.calls.filter(([url]) => url.includes("oauth2/token"));
+    expect(tokens).toHaveLength(1);
+    expect(tokens[0][1].signal).not.toBe(first.signal);
+    expect(tokens[0][1].signal.aborted).toBe(false);
+    await expect(Promise.all(Array.from({ length: 3 }, () => twitchRequest("users", {}, creds)))).resolves.toHaveLength(3);
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.includes("oauth2/token"))).toHaveLength(1);
+  });
+  it("on 401 drops the cached token only if it is the one that was rejected", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      const creds = { clientId: "stale-401", clientSecret: "secret" };
+      let tokenCount = 0;
+      const auth: string[] = [];
+      mocks.fetch.mockImplementation(async (url: string, init: { headers?: Record<string, string> }) => {
+        if (url.includes("oauth2/token")) return reply({ access_token: ++tokenCount === 1 ? "old" : "new", expires_in: 3600 });
+        auth.push(init.headers!.Authorization);
+        if (auth.length === 1) {
+          // While request A is in flight with "old", the clock passes its expiry
+          // and a concurrent request B mints and caches "new".
+          vi.setSystemTime(Date.now() + 3600_000);
+          await twitchRequest("users", {}, creds);
+          return reply({}, 401);
+        }
+        return reply({ data: [] });
+      });
+      await twitchRequest("users", {}, creds);
+      expect(tokenCount).toBe(2); // "old" and B's "new"; A's retry reused the cache
+      expect(auth).toEqual(["Bearer old", "Bearer new", "Bearer new"]);
+    } finally { vi.useRealTimers(); }
+  });
+  it("negative-caches a failed token mint per credential and defers instead of failing", async () => {
+    mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? reply({ message: "SENSITIVE-OAUTH-BODY" }, 400) : reply({ data: [] }));
+    const bad = { clientId: "bad-mint", clientSecret: "secret" };
+    const errors = [];
+    for (let i = 0; i < 3; i++) errors.push(await twitchRequest("users", {}, bad).catch((e) => e));
+    expect(errors.every((e) => isApiSourceDeferredError(e) && e.reason === "auth")).toBe(true);
+    expect(errors.map((e) => e.status)).toEqual([400, 400, 400]);
+    expect(String(errors[0].message)).not.toContain("SENSITIVE");
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.includes("oauth2/token"))).toHaveLength(1);
+    // Other (e.g. just corrected) credentials are not blocked by the failure.
+    await twitchRequest("users", {}, { clientId: "bad-mint-fixed", clientSecret: "secret" }).catch(() => undefined);
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.includes("oauth2/token"))).toHaveLength(2);
+  });
+  it("ephemeral (connection-test) requests never touch the shared token or failure caches", async () => {
+    const creds = { clientId: "ephemeral", clientSecret: "secret" };
+    await twitchRequest("users", {}, creds, undefined, { ephemeral: true });
+    await twitchRequest("users", {}, creds, undefined, { ephemeral: true });
+    await twitchRequest("users", {}, creds);
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.includes("oauth2/token"))).toHaveLength(3);
+    mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? reply({}, 401) : reply({ data: [] }));
+    const bad = { clientId: "ephemeral-bad", clientSecret: "secret" };
+    await twitchRequest("users", {}, bad, undefined, { ephemeral: true }).catch(() => undefined);
+    await twitchRequest("users", {}, bad, undefined, { ephemeral: true }).catch(() => undefined);
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.includes("oauth2/token"))).toHaveLength(5);
+  });
+  it("defers (typed) on rate limit and on a 429 answer", async () => {
+    const creds = { clientId: "typed-429", clientSecret: "secret" };
+    mocks.fetch.mockReset().mockResolvedValueOnce(reply({ access_token: "token", expires_in: 3600 })).mockResolvedValueOnce(reply({}, 429));
+    const hit = await twitchRequest("users", {}, creds).catch((e) => e);
+    expect(isApiSourceDeferredError(hit) && hit.reason).toBe("rate-limited");
+    const blocked = await twitchRequest("users", {}, creds).catch((e) => e);
+    expect(isApiSourceDeferredError(blocked) && blocked.reason).toBe("rate-limited");
+  });
+  it("caches login → user id so repeated polls skip the users lookup", async () => {
+    resetTwitchCaches();
+    await fetchTwitchFeed("cacheme", "live");
+    await fetchTwitchFeed("cacheme", "videos");
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.includes("/users?"))).toHaveLength(1);
+  });
+  it("canonicalises internal URLs and dispatches mixed-case ones to the API provider", async () => {
+    expect(canonicalApiSourceUrl("FEEDFERRET://Twitch/Example/LIVE")).toBe("feedferret://twitch/example/live");
+    expect(canonicalApiSourceUrl("feedferret://twitch/example/live?x=1")).toBeNull();
+    expect(normalizeUrlInput("FEEDFERRET://twitch/Example/Live")).toMatchObject({ ok: true, url: "feedferret://twitch/example/live" });
+    expect(validateFeedUrl("FEEDFERRET://twitch/Example/Live")).toBeNull();
+    const feed = await fetchFeedArticles({ url: "FEEDFERRET://twitch/Example/live" } as Parameters<typeof fetchFeedArticles>[0]);
+    expect(feed.articles).toEqual([]);
+    expect(mocks.fetch.mock.calls.some(([url]) => url.includes("/streams?"))).toBe(true);
   });
 });
 
@@ -94,6 +189,19 @@ it("shows setup guidance without Twitch credentials or RSSHub", async () => {
   const { discoverFeeds } = await import("../../lib/feed-discovery");
   expect(await discoverFeeds("https://twitch.tv/example/clips")).toMatchObject({ feeds: [], hint: "needs-twitch" });
   expect(mocks.fetch).not.toHaveBeenCalled();
+});
+
+it("rejected credentials give setup guidance and still try the RSSHub fallback", async () => {
+  mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? reply({}, 400) : reply({ data: [] }));
+  const { discoverFeeds } = await import("../../lib/feed-discovery");
+  expect(await discoverFeeds("https://twitch.tv/example")).toMatchObject({ feeds: [], hint: "needs-twitch" });
+  const rsshub = await import("../../lib/rsshub");
+  const config = vi.spyOn(rsshub, "getRsshubConfig").mockResolvedValue({ baseUrl: "https://rsshub.example.com", apiKey: null });
+  const validate = vi.spyOn(rsshub, "validateRsshubRoute").mockResolvedValue({ ok: true, title: "Example", itemCount: 1, sampleTitles: ["Synthetic"] });
+  try {
+    resetTwitchCaches();
+    expect((await discoverFeeds("https://twitch.tv/example")).feeds[0].url).toBe("https://rsshub.example.com/twitch/video/example");
+  } finally { config.mockRestore(); validate.mockRestore(); }
 });
 
 it("falls back to the existing RSSHub video route for every channel tab", async () => {
