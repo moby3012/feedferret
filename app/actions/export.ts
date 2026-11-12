@@ -270,10 +270,14 @@ export async function testReadeckExportConnection(overrides?: {
     },
   });
 
-  const baseUrl = overrides?.readeckUrl || user?.exportReadeckUrl;
-  const apiKey = overrides?.readeckApiKey || decryptIfValue(user?.exportReadeckApiKey, "user.exportReadeckApiKey");
+  const baseUrl = (overrides?.readeckUrl !== undefined ? overrides.readeckUrl : user?.exportReadeckUrl)?.trim();
+  const isNewUrl = overrides?.readeckUrl !== undefined && overrides.readeckUrl.trim() !== (user?.exportReadeckUrl || "").trim();
+  const apiKey = overrides?.readeckApiKey?.trim() || (!isNewUrl && user?.exportReadeckApiKey ? decryptIfValue(user.exportReadeckApiKey, "user.exportReadeckApiKey") : null);
 
   if (!baseUrl || !apiKey) {
+    if (isNewUrl && !overrides?.readeckApiKey) {
+      return { success: false, error: "API token is required when testing a new or modified URL" };
+    }
     return { success: false, error: "Fill in the instance URL and API token first" };
   }
 
@@ -321,10 +325,14 @@ export async function testLinkwardenExportConnection(overrides?: {
     },
   });
 
-  const baseUrl = overrides?.linkwardenUrl || user?.exportLinkwardenUrl;
-  const apiKey = overrides?.linkwardenApiKey || decryptIfValue(user?.exportLinkwardenApiKey, "user.exportLinkwardenApiKey");
+  const baseUrl = (overrides?.linkwardenUrl !== undefined ? overrides.linkwardenUrl : user?.exportLinkwardenUrl)?.trim();
+  const isNewUrl = overrides?.linkwardenUrl !== undefined && overrides.linkwardenUrl.trim() !== (user?.exportLinkwardenUrl || "").trim();
+  const apiKey = overrides?.linkwardenApiKey?.trim() || (!isNewUrl && user?.exportLinkwardenApiKey ? decryptIfValue(user.exportLinkwardenApiKey, "user.exportLinkwardenApiKey") : null);
 
   if (!baseUrl || !apiKey) {
+    if (isNewUrl && !overrides?.linkwardenApiKey) {
+      return { success: false, error: "API token is required when testing a new or modified URL" };
+    }
     return { success: false, error: "Fill in the instance URL and API token first" };
   }
 

@@ -81,10 +81,25 @@ export function ExportDestinationsSection() {
     });
   };
 
+  const handleClearReadeckToken = () => {
+    setReadeckApiKey("");
+    setReadeckTestResult(null);
+    updateExport.mutate({ clearReadeckApiKey: true });
+  };
+
   const handleTestReadeck = async () => {
     setReadeckTestResult(null);
+    const trimmedUrl = readeckUrl.trim();
+    const urlChanged = trimmedUrl !== (exportSettings?.readeckUrl || "");
+    if (urlChanged && !readeckApiKey && exportSettings?.hasReadeckApiKey) {
+      setReadeckTestResult({
+        success: false,
+        error: t("tokenRequiredForNewUrl"),
+      });
+      return;
+    }
     const result = await testReadeck.mutateAsync({
-      readeckUrl: readeckUrl.trim(),
+      readeckUrl: trimmedUrl,
       ...(readeckApiKey ? { readeckApiKey } : {}),
     });
     setReadeckTestResult(result);
@@ -98,10 +113,25 @@ export function ExportDestinationsSection() {
     });
   };
 
+  const handleClearLinkwardenToken = () => {
+    setLinkwardenApiKey("");
+    setLinkwardenTestResult(null);
+    updateExport.mutate({ clearLinkwardenApiKey: true });
+  };
+
   const handleTestLinkwarden = async () => {
     setLinkwardenTestResult(null);
+    const trimmedUrl = linkwardenUrl.trim();
+    const urlChanged = trimmedUrl !== (exportSettings?.linkwardenUrl || "");
+    if (urlChanged && !linkwardenApiKey && exportSettings?.hasLinkwardenApiKey) {
+      setLinkwardenTestResult({
+        success: false,
+        error: t("tokenRequiredForNewUrl"),
+      });
+      return;
+    }
     const result = await testLinkwarden.mutateAsync({
-      linkwardenUrl: linkwardenUrl.trim(),
+      linkwardenUrl: trimmedUrl,
       ...(linkwardenApiKey ? { linkwardenApiKey } : {}),
     });
     setLinkwardenTestResult(result);
@@ -271,12 +301,24 @@ export function ExportDestinationsSection() {
           </div>
 
           <div className="grid gap-1.5">
-            <label className="text-body-sm font-medium" htmlFor="export-readeck-token-input">
-              {t("readeckApiKeyLabel")}
-              {exportSettings?.hasReadeckApiKey && !readeckApiKey && (
-                <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("currentlySet")})</span>
+            <div className="flex items-center justify-between">
+              <label className="text-body-sm font-medium" htmlFor="export-readeck-token-input">
+                {t("readeckApiKeyLabel")}
+                {exportSettings?.hasReadeckApiKey && !readeckApiKey && (
+                  <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("currentlySet")})</span>
+                )}
+              </label>
+              {exportSettings?.hasReadeckApiKey && (
+                <button
+                  type="button"
+                  onClick={handleClearReadeckToken}
+                  disabled={updateExport.isPending}
+                  className="text-caption text-muted-foreground transition hover:text-destructive hover:underline"
+                >
+                  {t("removeToken")}
+                </button>
               )}
-            </label>
+            </div>
             <Input
               id="export-readeck-token-input"
               type="password"
@@ -341,12 +383,24 @@ export function ExportDestinationsSection() {
           </div>
 
           <div className="grid gap-1.5">
-            <label className="text-body-sm font-medium" htmlFor="export-linkwarden-token-input">
-              {t("linkwardenApiKeyLabel")}
-              {exportSettings?.hasLinkwardenApiKey && !linkwardenApiKey && (
-                <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("currentlySet")})</span>
+            <div className="flex items-center justify-between">
+              <label className="text-body-sm font-medium" htmlFor="export-linkwarden-token-input">
+                {t("linkwardenApiKeyLabel")}
+                {exportSettings?.hasLinkwardenApiKey && !linkwardenApiKey && (
+                  <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("currentlySet")})</span>
+                )}
+              </label>
+              {exportSettings?.hasLinkwardenApiKey && (
+                <button
+                  type="button"
+                  onClick={handleClearLinkwardenToken}
+                  disabled={updateExport.isPending}
+                  className="text-caption text-muted-foreground transition hover:text-destructive hover:underline"
+                >
+                  {t("removeToken")}
+                </button>
               )}
-            </label>
+            </div>
             <Input
               id="export-linkwarden-token-input"
               type="password"

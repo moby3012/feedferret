@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import Image from "next/image";
 import { ExternalLink, MailCheck, ShieldAlert } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
@@ -34,9 +34,16 @@ export function ReaderHeader({ article, hideImage, onOpenFeed }: { article: Arti
   // Failed sender check: the banner stays, but without the primary call to action.
   const senderFailed = newsletter?.auth === "fail";
   const isAudioOrVideo = article.kind === "audio" || article.kind === "video";
-  const readMinutes = isAudioOrVideo
-    ? null
-    : (article.readTime ?? (article.content ? estimateReadMinutes(article.contentFormat === "markdown" ? markdownToPlainText(article.content) : htmlToPlainText(article.content)) : null));
+  const fallbackReadMinutes = useMemo(() => {
+    if (article.readTime != null) return article.readTime;
+    if (!article.content) return null;
+    return estimateReadMinutes(
+      article.contentFormat === "markdown"
+        ? markdownToPlainText(article.content)
+        : htmlToPlainText(article.content),
+    );
+  }, [article.readTime, article.content, article.contentFormat]);
+  const readMinutes = isAudioOrVideo ? null : fallbackReadMinutes;
 
   useLayoutEffect(() => {
     markTitlePainted(article.id);

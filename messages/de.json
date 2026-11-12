@@ -512,6 +512,8 @@
     "leaveBlankToKeep": "Leer lassen, um den aktuellen Wert zu behalten",
     "save": "Speichern",
     "saving": "Speichert…",
+    "removeToken": "Token entfernen",
+    "tokenRequiredForNewUrl": "Für eine geänderte URL muss der Token neu eingegeben werden",
     "testConnection": "Verbindung testen",
     "testing": "Teste…",
     "connectionSuccessful": "Verbindung erfolgreich"
@@ -639,9 +641,13 @@
     "help": "Hilfe",
     "toggleHelp": "Hilfe umschalten",
     "audio": "Audio & Podcast",
-    "audioPlayPause": "Abspielen / Pause",
+    "audioPlayPause": "Wiedergabe / Pause",
+    "audioPauseOnly": "Pause (bei laufender Wiedergabe)",
     "audioSkipBack": "15s zurück",
-    "audioSkipForward": "30s vor"
+    "audioSkipBack15": "15 Sekunden zurück",
+    "audioSkipBack30": "30 Sekunden zurück (Shift+←)",
+    "audioSkipForward": "30s vor",
+    "audioSkipForward30": "30 Sekunden vor"
   },
   "podcastPlayer": {
     "play": "Abspielen",
@@ -650,7 +656,8 @@
     "skipForward30": "30 Sekunden vor",
     "speed": "Geschwindigkeit",
     "seek": "Position",
-    "audioTrack": "Audio"
+    "playbackError": "Wiedergabe nicht möglich",
+    "openOriginal": "Original öffnen"
   },
   "login": {
     "signIn": "Anmelden",

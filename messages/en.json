@@ -512,6 +512,8 @@
     "leaveBlankToKeep": "Leave blank to keep current",
     "save": "Save",
     "saving": "Saving…",
+    "removeToken": "Remove token",
+    "tokenRequiredForNewUrl": "API token is required when changing the URL",
     "testConnection": "Test connection",
     "testing": "Testing…",
     "connectionSuccessful": "Connection successful"
@@ -640,8 +642,12 @@
     "toggleHelp": "Toggle help",
     "audio": "Audio & Podcast",
     "audioPlayPause": "Play / Pause",
+    "audioPauseOnly": "Pause (while playing)",
     "audioSkipBack": "15s back",
-    "audioSkipForward": "30s forward"
+    "audioSkipBack15": "Skip back 15s",
+    "audioSkipBack30": "Skip back 30s (Shift+←)",
+    "audioSkipForward": "30s forward",
+    "audioSkipForward30": "Skip forward 30s"
   },
   "podcastPlayer": {
     "play": "Play",
@@ -650,7 +656,8 @@
     "skipForward30": "30 seconds forward",
     "speed": "Playback speed",
     "seek": "Seek",
-    "audioTrack": "Audio"
+    "playbackError": "Playback failed",
+    "openOriginal": "Open original"
   },
   "login": {
     "signIn": "Sign In",

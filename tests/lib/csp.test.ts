@@ -13,6 +13,11 @@ it("uses strict dynamic and permits eval only in development", () => {
   expect(legacyCsp).toContain("'unsafe-inline' 'unsafe-eval'");
 });
 
+it("permits self, https hosts, and v.redd.it in media-src for podcasts and video", () => {
+  expect(nonceCsp("test")).toContain("media-src 'self' https: https://v.redd.it");
+  expect(legacyCsp).toContain("media-src 'self' https: https://v.redd.it");
+});
+
 it("defaults unknown FEEDFERRET_CSP values to report mode", () => {
   expect([undefined, "", "REPORT", "off", "report"].map(cspMode)).toEqual(Array(5).fill("report"));
   expect(cspMode("legacy")).toBe("legacy");

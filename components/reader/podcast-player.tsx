@@ -2,16 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Gauge, Pause, Play, RotateCcw, RotateCw } from "lucide-react";
+import { ExternalLink, Gauge, Pause, Play, RotateCcw, RotateCw } from "lucide-react";
 import type { Article } from "@/lib/rss-data";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { cn } from "@/lib/utils";
 
 const PLAYBACK_SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const;
 type PlaybackSpeed = (typeof PLAYBACK_SPEEDS)[number];
 
 const SPEED_STORAGE_KEY = "ff_audio_playback_speed";
+const POS_INDEX_KEY = "ff_audio_pos_index";
+const MAX_STORED_KEYS = 200;
 
 function getStoredSpeed(): PlaybackSpeed {
   if (typeof window === "undefined") return 1;
@@ -36,14 +37,37 @@ function getStoredPosition(articleId: string): number {
   }
 }
 
+function updatePosIndex(articleId: string, remove = false) {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(POS_INDEX_KEY);
+    let list: string[] = raw ? JSON.parse(raw) : [];
+    list = list.filter((id) => id !== articleId);
+    if (!remove) {
+      list.push(articleId);
+      if (list.length > MAX_STORED_KEYS) {
+        const evict = list.splice(0, list.length - MAX_STORED_KEYS);
+        for (const id of evict) {
+          localStorage.removeItem(`ff_audio_pos_${id}`);
+        }
+      }
+    }
+    localStorage.setItem(POS_INDEX_KEY, JSON.stringify(list));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
 function savePosition(articleId: string, time: number, duration: number) {
   if (typeof window === "undefined") return;
   try {
     // If completed or within 5s of end, reset position so re-playing starts fresh.
     if (duration > 0 && time >= duration - 5) {
       localStorage.removeItem(`ff_audio_pos_${articleId}`);
+      updatePosIndex(articleId, true);
     } else if (time > 0) {
       localStorage.setItem(`ff_audio_pos_${articleId}`, String(Math.floor(time)));
+      updatePosIndex(articleId, false);
     }
   } catch {
     // Ignore storage errors
@@ -68,8 +92,10 @@ export interface PodcastPlayerProps {
 export function PodcastPlayer({ article, src, durationSecs }: PodcastPlayerProps) {
   const t = useTranslations("podcastPlayer");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const lastSavedRef = useRef<{ time: number; wallTime: number }>({ time: 0, wallTime: 0 });
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(durationSecs ?? 0);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
@@ -99,8 +125,11 @@ export function PodcastPlayer({ article, src, durationSecs }: PodcastPlayerProps
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    setHasError(false);
     if (audio.paused) {
-      void audio.play().catch(() => {});
+      void audio.play().catch(() => {
+        setHasError(true);
+      });
     } else {
       audio.pause();
     }
@@ -143,9 +172,13 @@ export function PodcastPlayer({ article, src, durationSecs }: PodcastPlayerProps
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      setHasError(false);
+      setIsPlaying(true);
+    };
     const handlePause = () => {
       setIsPlaying(false);
+      lastSavedRef.current = { time: audio.currentTime, wallTime: Date.now() };
       savePosition(article.id, audio.currentTime, audio.duration);
     };
     const handleEnded = () => {
@@ -156,7 +189,12 @@ export function PodcastPlayer({ article, src, durationSecs }: PodcastPlayerProps
       if (!isSeeking) {
         setCurrentTime(audio.currentTime);
       }
-      savePosition(article.id, audio.currentTime, audio.duration);
+      const now = Date.now();
+      // Throttle position writes to localStorage to every ~5 seconds
+      if (now - lastSavedRef.current.wallTime >= 5000) {
+        lastSavedRef.current = { time: audio.currentTime, wallTime: now };
+        savePosition(article.id, audio.currentTime, audio.duration);
+      }
     };
     const handleDurationChange = () => {
       if (Number.isFinite(audio.duration) && audio.duration > 0) {
@@ -178,6 +216,24 @@ export function PodcastPlayer({ article, src, durationSecs }: PodcastPlayerProps
       audio.removeEventListener("durationchange", handleDurationChange);
     };
   }, [article.id, isSeeking]);
+
+  // Persist position on unload or unmount
+  useEffect(() => {
+    const handleUnload = () => {
+      const audio = audioRef.current;
+      if (audio && audio.currentTime > 0) {
+        savePosition(article.id, audio.currentTime, audio.duration);
+      }
+    };
+
+    window.addEventListener("pagehide", handleUnload);
+    window.addEventListener("beforeunload", handleUnload);
+    return () => {
+      window.removeEventListener("pagehide", handleUnload);
+      window.removeEventListener("beforeunload", handleUnload);
+      handleUnload();
+    };
+  }, [article.id]);
 
   // Media Session API integration
   useEffect(() => {
@@ -250,21 +306,50 @@ export function PodcastPlayer({ article, src, durationSecs }: PodcastPlayerProps
   // Keyboard shortcuts when reader is active
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in form inputs
-      const target = e.target;
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      ) {
-        return;
-      }
+      if (e.defaultPrevented) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
-      if (e.key === " " || e.code === "Space") {
+      const active = document.activeElement as HTMLElement | null;
+      const isInteractive = (el: HTMLElement | null): boolean => {
+        if (!el) return false;
+        const tag = el.tagName.toLowerCase();
+        if (["input", "textarea", "select", "button", "a"].includes(tag)) return true;
+        if (el.isContentEditable) return true;
+        if (el.getAttribute("role") != null) return true;
+        return !!el.closest("button, [role], a, input, textarea, select");
+      };
+
+      if (isInteractive(active) || (e.target instanceof HTMLElement && isInteractive(e.target))) {
+        return;
+      }
+
+      // Skip when a dialog, alertdialog, or menu is open
+      if (document.querySelector('[role="dialog"], [role="menu"], [role="alertdialog"], [data-radix-menu-content]')) {
+        return;
+      }
+
+      // 'k' key: preferred play/pause toggle everywhere in reader
+      if (e.key === "k" || e.key === "K") {
         e.preventDefault();
         togglePlay();
-      } else if (e.key === "ArrowLeft") {
+        return;
+      }
+
+      // Space: only while playing and focus is on body/reader
+      if (e.key === " " || e.code === "Space") {
+        const isBodyOrReader =
+          active === document.body ||
+          !active ||
+          active.closest(".ff-reader-container") != null ||
+          active.closest('[data-testid="podcast-player"]') != null;
+        if (isPlaying && isBodyOrReader) {
+          e.preventDefault();
+          togglePlay();
+          return;
+        }
+      }
+
+      if (e.key === "ArrowLeft") {
         e.preventDefault();
         seekRelative(e.shiftKey ? -30 : -15);
       } else if (e.key === "ArrowRight") {
@@ -275,7 +360,7 @@ export function PodcastPlayer({ article, src, durationSecs }: PodcastPlayerProps
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [togglePlay, seekRelative]);
+  }, [togglePlay, seekRelative, isPlaying]);
 
   const maxDuration = duration > 0 ? duration : 100;
 
@@ -284,11 +369,27 @@ export function PodcastPlayer({ article, src, durationSecs }: PodcastPlayerProps
       className="ff-podcast-player mb-6 rounded-panel border border-border/60 bg-card/85 p-4"
       data-testid="podcast-player"
     >
+      {hasError && (
+        <div className="mb-3 flex items-center justify-between rounded-panel border border-destructive/30 bg-destructive/10 px-3 py-2 text-footnote text-destructive">
+          <span>{t("playbackError")}</span>
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 font-medium underline underline-offset-4 hover:text-foreground"
+          >
+            {t("openOriginal")}
+            <ExternalLink className="size-3.5" />
+          </a>
+        </div>
+      )}
+
       <audio
         ref={audioRef}
         src={src}
-        preload="metadata"
+        preload="none"
         onLoadedMetadata={onLoadedMetadata}
+        onError={() => setHasError(true)}
       />
 
       <div className="flex items-center gap-3">

@@ -66,9 +66,11 @@ export function KeyboardShortcutsDialog({
     {
       title: t("audio"),
       items: [
-        { keys: ["Space"], description: t("audioPlayPause") },
-        { keys: ["←"], description: t("audioSkipBack") },
-        { keys: ["→"], description: t("audioSkipForward") },
+        { keys: ["k"], description: t("audioPlayPause") },
+        { keys: ["Space"], description: t("audioPauseOnly") },
+        { keys: ["←"], description: t("audioSkipBack15") },
+        { keys: ["Shift", "←"], description: t("audioSkipBack30") },
+        { keys: ["→"], description: t("audioSkipForward30") },
       ],
     },
   ];
