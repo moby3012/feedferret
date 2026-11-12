@@ -182,10 +182,27 @@ export function decideFullText(
     candidate: ExtractionQuality | null | undefined,
     baselineHtml: string | null | undefined,
     mode: "auto" | "manual" = "auto",
+    candidateHtml?: string | null,
 ): FullTextDecision {
-    if (!candidate || candidate.verdict === "empty") return { accept: false, reason: "empty" };
+    if (!candidate || candidate.verdict === "empty") return { accept: false, reason: candidate?.reason ?? "empty" };
     if (candidate.verdict !== "good") return { accept: false, reason: candidate.reason };
-    const baseline = htmlToPlainText(baselineHtml ?? "").length;
+    const baselineText = htmlToPlainText(baselineHtml ?? "");
+    const baseline = baselineText.length;
+    if (candidateHtml && baseline >= 300) {
+        const lead = textWords(baselineText).slice(0, 40);
+        const pageWords = textWords(htmlToPlainText(candidateHtml));
+        const page = new Set(pageWords);
+        // Substantial feed content needs shared phrases, not just topical words.
+        const pageSequence = ` ${pageWords.join(" ")} `;
+        let phrases = 0;
+        for (let i = 0; i + 4 <= lead.length; i++) {
+            if (pageSequence.includes(` ${lead.slice(i, i + 4).join(" ")} `)) phrases++;
+        }
+        if (lead.length >= 10 && (lead.filter((word) => page.has(word)).length / lead.length < 0.5 ||
+            (baseline >= 1000 && phrases / (lead.length - 3) < 0.2))) {
+            return { accept: false, reason: "lead_mismatch" };
+        }
+    }
     if (mode === "manual") {
         return candidate.textLength > baseline ? { accept: true, reason: "ok" } : { accept: false, reason: "not_longer" };
     }
@@ -193,4 +210,9 @@ export function decideFullText(
     // re-renders the feed item (plus a byline and a share bar) is not "full text".
     if (candidate.textLength < baseline * 1.2 + 100) return { accept: false, reason: "teaser" };
     return { accept: true, reason: "ok" };
+}
+
+/** Unicode words, shared by lead matching and bounded cross-item fingerprints. */
+export function textWords(text: string): string[] {
+    return text.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }

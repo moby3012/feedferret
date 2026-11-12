@@ -561,3 +561,89 @@ describe("full text: review round 2", () => {
     }
   });
 });
+
+
+describe("full-text quality guards", () => {
+  it("rejects duplicate pages, restores the first item, preserves timestamps and does not retry", async () => {
+    const feed = await autoFeed();
+    state.page = async () => fullPage("same");
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off" } });
+    await syncFeed(userId, feed.id);
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "auto" } });
+    const before = await rows(feed.id);
+    await syncFeed(userId, feed.id);
+    const after = await rows(feed.id);
+    expect(after.map((row) => row.fullTextReason)).toEqual(Array(3).fill("duplicate_across_items"));
+    expect(after.map((row) => row.content)).toEqual(items().map((item) => item.content));
+    expect(after.map((row) => row.updatedAt)).toEqual(before.map((row) => row.updatedAt));
+    state.pageFetches = [];
+    await syncFeed(userId, feed.id);
+    expect(state.pageFetches).toEqual([]);
+  });
+
+  it("rejects a duplicate found in a later sync of the same feed", async () => {
+    const feed = await autoFeed();
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: items().slice(0, 1) });
+    state.page = async () => fullPage("same");
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id))[0].fullTextStatus).toBe("ok");
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: items().slice(0, 2) });
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id)).map((row) => row.fullTextReason)).toEqual(Array(2).fill("duplicate_across_items"));
+  });
+
+  it("does not roll back a sibling whose accepted text changed during the fetch", async () => {
+    const feed = await autoFeed();
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: items().slice(0, 1) });
+    state.page = async () => fullPage("same");
+    await syncFeed(userId, feed.id);
+    const first = (await rows(feed.id))[0];
+    const replacement = "An independent report about marine habitats and migrating seabirds. ".repeat(40);
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: items().slice(0, 2) });
+    state.page = async () => {
+      await state.db.article.update({ where: { id: first.id }, data: { content: replacement, updatedAt: first.updatedAt } });
+      return fullPage("same");
+    };
+    await syncFeed(userId, feed.id);
+    const current = (await rows(feed.id))[0];
+    expect(current.content).toBe(replacement);
+    expect(current.fullTextStatus).toBe("ok");
+    expect(current.updatedAt).toEqual(first.updatedAt);
+  });
+
+  it("keeps substantial feed content when the page has an unrelated lead", async () => {
+    const feed = await autoFeed();
+    const content = "The marine reserve protects nesting seabirds along the estuary, where biologists monitor coastal habitats and migration patterns. ".repeat(5);
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: [{ ...items()[0], content }] });
+    await syncFeed(userId, feed.id);
+    const row = (await rows(feed.id))[0];
+    expect(row.fullTextReason).toBe("lead_mismatch");
+    expect(row.content).toBe(content);
+  });
+
+  it("records JS shells as terminal rejections, including when render budget is exhausted", async () => {
+    const feed = await autoFeed();
+    state.page = async () => '<html><body><div id="app"></div><script src="/app.js"></script></body></html>';
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id)).map((row) => row.fullTextReason)).toEqual(Array(3).fill("js_shell"));
+    state.pageFetches = [];
+    await syncFeed(userId, feed.id);
+    expect(state.pageFetches).toEqual([]);
+  });
+
+  it("trims chrome and rejects duplicate selector extractions through the shared sync engine", async () => {
+    const feed = await autoFeed();
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "selector", fullTextSelector: ".chosen" } });
+    state.page = async () => `<main>Unrelated navigation</main><article class="chosen">${P("same", 0).repeat(12)}<div>Checking your browser</div></article>`;
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id)).map((row) => row.fullTextReason)).toEqual(Array(3).fill("duplicate_across_items"));
+  });
+
+  it("fetches configured selectors through the shared app engine used by the benchmark", async () => {
+    const { fetchAndExtractReadable } = await import("../../lib/readability-extract");
+    state.page = async () => `<main>${P("irrelevant", 0).repeat(30)}</main><section class="chosen">${P("chosen", 0).repeat(5)}</section>`;
+    const result = await fetchAndExtractReadable("https://example.test/story", { selector: ".chosen", baselineHtml: "teaser", gate: "auto" });
+    expect(result.html).toContain("story chosen");
+    expect(result.html).not.toContain("irrelevant");
+  });
+});

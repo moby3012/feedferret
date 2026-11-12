@@ -24,6 +24,7 @@ import { assessExtraction, decideFullText, isBetterCandidate } from "@/lib/extra
 import { classifyFetchFailure, recordHostFailure, recordHostSuccess } from "@/lib/host-backoff";
 import { guardHtml } from "@/lib/html-guard";
 import { isHtmlWorkerError, runHtmlTask } from "@/lib/html-worker/pool";
+import { runInHtmlWorker } from "@/lib/html-worker";
 import { countWords, type ExtractionResult } from "@/lib/readability-types";
 import { logger, urlForLog } from "@/lib/logger";
 
@@ -97,6 +98,10 @@ async function buildResultFromMarkdown(
 }
 
 export type FetchAndExtractReadableOptions = {
+  /** Optional page capture for offline bench diagnostics, called on successful direct fetches. */
+  onFetchedPage?: (html: string) => void;
+  selector?: string | null;
+  removeSelectors?: string | null;
   // When set, a hosted BYOK connector (M7-T3, Jina Reader / Firecrawl Cloud)
   // is tried as the final fallback if configured for this user AND the
   // in-process + sidecar tiers didn't produce a good result. Omit to skip this
@@ -208,6 +213,19 @@ export async function fetchAndExtractReadable(
   url: string,
   options: FetchAndExtractReadableOptions = {},
 ): Promise<ExtractionResult> {
+  const extractPage = async (html: string): Promise<ExtractionResult> => {
+    if (options.selector === undefined) return extractReadableContent(html, url);
+    try {
+      const selected = await runInHtmlWorker({ task: "css", html, url, selector: options.selector, removeSelectors: options.removeSelectors, mode: "sync" });
+      return { html: selected.html, markdown: null, title: null, byline: null, excerpt: null,
+        wordCount: selected.html ? countWords(selected.html) : 0, extractedBy: "selector", quality: selected.quality };
+    } catch (error) {
+      if (!isHtmlWorkerError(error)) throw error;
+      return { html: null, markdown: null, title: null, byline: null, excerpt: null, wordCount: 0,
+        extractedBy: "none", quality: null,
+        parseAborted: error.reason === "busy" || error.reason === "unavailable" ? error.reason : "too_complex" };
+    }
+  };
   let directError: unknown = null;
   let best: ExtractionResult | null = null;
   let firstResult: ExtractionResult | null = null;
@@ -235,7 +253,7 @@ export async function fetchAndExtractReadable(
     // render/hosted calls on it.
     if (options.gate === "manual") return true;
     if (options.baselineHtml === undefined || baselineLength >= SUBSTANTIAL_FEED_TEXT_LENGTH) return true;
-    return decideFullText(current.quality, options.baselineHtml, options.gate ?? "auto").accept;
+    return decideFullText(current.quality, options.baselineHtml, options.gate ?? "auto", current.html).accept;
   };
   let budgetSkipped = false;
   const skipped = () => {
@@ -247,9 +265,10 @@ export async function fetchAndExtractReadable(
   for (const [index, transport] of transports.entries()) {
     try {
       const html = await fetchPage(url, transport);
+      options.onFetchedPage?.(html);
       anyFetchSucceeded = true;
       lastFetchedHtml = html;
-      const extracted = await extractReadableContent(html, url);
+      const extracted = await extractPage(html);
       consider(extracted, html);
       // The other transport would fetch the same page and abort the same way.
       if (extracted.parseAborted) break;
@@ -284,7 +303,7 @@ export async function fetchAndExtractReadable(
   // Every attempt counts against the per-sync budget (a no-op when no sidecar is configured).
   if (!goodEnough() && takeBudget(options.escalationBudget, "render", skipped)) {
     const rendered = await renderViaSidecar(url, { context: "Full-text" });
-    if (rendered) consider(await extractReadableContent(rendered, url), rendered);
+    if (rendered) consider(await extractPage(rendered), rendered);
   }
 
   // Last resort: the user's own hosted-API BYOK connector (M7-T3), for pages

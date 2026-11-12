@@ -21,6 +21,7 @@ import { normalizeLazyMedia } from "@/lib/lazy-media";
 import { collapseNewlineWhitespace, stripTags } from "@/lib/linear-text";
 import { countWords, type ExtractionResult } from "@/lib/readability-types";
 import { assessExtraction, isBetterCandidate, type ExtractionQuality } from "@/lib/extraction-quality";
+import { isJavaScriptShell } from "@/lib/extraction-shell-core";
 import { trimEdgeBoilerplate } from "@/lib/extraction-trim-core";
 
 export type { ExtractionResult } from "@/lib/readability-types";
@@ -357,6 +358,9 @@ function normalizePageHtml(html: string, url: string): { html: string; title: st
  * extraction. Lazy-loaded images are normalized before any extractor runs.
  */
 export async function extractReadableContentInProcess(rawHtml: string, url: string): Promise<ExtractionResult> {
+  if (isJavaScriptShell(rawHtml, url)) {
+    return { ...noneResult(null), quality: { ...assessExtraction(""), reason: "js_shell" } };
+  }
   const stripped = stripStyleBlocks(rawHtml);
   let html = stripped;
   let pageTitle: string | null = null;

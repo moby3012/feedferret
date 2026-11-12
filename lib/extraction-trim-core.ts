@@ -10,7 +10,9 @@ import { LEAK_TEST } from "@/lib/extraction-quality";
 // ---------------------------------------------------------------------------
 
 const CTA_PATTERN =
-    /newsletter|subscribe|abonn|follow us|folgen sie|share (?:this|on)|teilen|related|weitere artikel|mehr zum thema|lesen sie auch|auch interessant|das könnte (?:dich|sie) (?:auch )?interessieren|you might also like|more from|read more|recommended|empfohlen|startseite|zur startseite|anzeige|advertisement|sponsored|comments?|kommentare|join (?:the|our) community|sign up|melde dich/i;
+    /newsletter|subscribe|abonn|follow us|folgen sie|share (?:this|on|via)|teilen|related|weitere artikel|mehr zum thema|lesen sie auch|auch interessant|das könnte (?:dich|sie) (?:auch )?interessieren|you might also like|more from|read more|recommended|empfohlen|startseite|zur startseite|anzeige|advertisement|sponsored|comments?|kommentare|partager|compartir|condividi|join (?:the|our) community|sign up|melde dich/i;
+
+const CHECK_PATTERN = /^(?:(?:comments?|kommentare)\s*)?(?:sitzung wird überprüft|checking your browser|vérification du navigateur|verificando (?:su navegador|tu navegador))[.…! ]*$/i;
 
 function blockText(el: Element): string {
     return (el.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -29,9 +31,16 @@ function isEdgeBoilerplate(el: Element): boolean {
     if (tag === "IMG" || tag === "PICTURE" || tag === "FIGURE" || tag === "VIDEO" || tag === "TABLE" || tag === "PRE") return false;
     const text = blockText(el);
     if (text.length === 0) return !el.querySelector("img, picture, video, iframe, svg");
+    if (text.length < 200 && CHECK_PATTERN.test(text)) return true;
     if (LEAK_TEST.test(text)) return text.length < 400;
     const density = blockLinkDensity(el);
     if (density > 0.5 && text.length < 1200) return true; // link lists, breadcrumbs, tag clouds
+    if (text.length < 80 && !/[.!?。]/.test(text) && text.split(/\s+/).length <= 6) {
+        const neighbor = [el.previousElementSibling, el.nextElementSibling].some((sibling) =>
+            sibling && blockText(sibling).length < 200 && /share (?:via|on)|teilen|partager|compartir|condividi/i.test(blockText(sibling)),
+        );
+        if (neighbor && /^(?:by|von|par|por|di) /i.test(text)) return true;
+    }
     if (text.length < 200 && CTA_PATTERN.test(text)) return true; // short CTA / "Anzeige" / "Startseite"
     return false;
 }
@@ -46,8 +55,9 @@ const WRAPPER_TAGS = new Set(["DIV", "SECTION", "ARTICLE", "MAIN", "HEADER", "FO
  * the body, and never more than a third of the text.
  */
 export function trimEdgeBoilerplate(html: string): string {
+    let dom: JSDOM | undefined;
     try {
-        const dom = new JSDOM(`<body>${html}</body>`);
+        dom = new JSDOM(`<body>${html}</body>`);
         const body = dom.window.document.body;
         const totalText = blockText(body).length;
         if (totalText === 0) return html;
@@ -83,5 +93,7 @@ export function trimEdgeBoilerplate(html: string): string {
         return budget.removed > 0 ? body.innerHTML : html;
     } catch {
         return html;
+    } finally {
+        dom?.window.close();
     }
 }

@@ -159,7 +159,8 @@ export async function recordFullTextMiss(
     const revert =
         status === "rejected" &&
         article.feedContent != null &&
-        htmlToPlainText(article.feedContent).length >= plainOf(article.content, article.contentFormat).length;
+        (reason === "duplicate_across_items" || reason === "lead_mismatch" ||
+        htmlToPlainText(article.feedContent).length >= plainOf(article.content, article.contentFormat).length);
     const feedPlain = revert ? htmlToPlainText(article.feedContent!) : "";
     return casWrite(article, `${status} outcome`, (current) => ({
         fullTextStatus: status,

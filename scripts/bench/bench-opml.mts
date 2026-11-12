@@ -6,7 +6,7 @@
  *   health     fetchFeedArticles + fetchWithSsrfProtection (status/redirect/size)
  *   discovery  discoverFeeds(htmlUrl) and discoverFeeds(bare domain)
  *   pagefeed   fetchAndSuggestFeedCandidatesDetailed (sites without a feed only)
- *   fulltext   same fetch options as fetchAndExtractReadable + extractReadableContent,
+ *   fulltext   fetchAndExtractReadable + configured full-text selector + app quality gate,
  *              scored against the feed item (bench-only scoring, see scoreExtraction)
  *   ai         buildExtractionPrompt / buildFeedConfigPrompt dry-run (no model call);
  *              live extractArticleWithAi only with --ai and a BENCH_AI_* provider env
@@ -27,6 +27,8 @@ type Entry = {
   feedUrl?: string;
   /** feed: OPML htmlUrl if any. site: the page URL to test. */
   htmlUrl?: string;
+  fullTextSelector?: string;
+  fullTextRemoveSelectors?: string;
   title?: string;
   category?: string;
   platform?: string;
@@ -188,14 +190,13 @@ function scoreExtraction(feedHtml: string, extractedHtml: string | null, pageHtm
   if (feedPlain.length >= 1500 && ext.length < feedPlain.length * 1.2) return { ...base, verdict: 'good', reason: 'feed-already-full' };
   return { ...base, verdict: 'good', reason: 'ok' };
 }
-const VERDICT_RANK = { fail: 0, partial: 1, good: 2 } as const;
 
 // ---------------------------------------------------------------- input collection
 async function readOpmlEntries(file: string, label: string): Promise<Entry[]> {
   const { parseOpml } = await import('../../lib/opml');
-  type Outline = { xmlUrl?: string; htmlUrl?: string; text?: string; title?: string; category?: string; children?: Outline[] };
+  type Outline = { xmlUrl?: string; htmlUrl?: string; text?: string; title?: string; category?: string; extensions?: Record<string, string>; children?: Outline[] };
   const flatten = (outlines: Outline[], cat = ''): Entry[] => outlines.flatMap(o => o.xmlUrl
-    ? [{ id: '', kind: 'feed' as const, feedUrl: o.xmlUrl, htmlUrl: o.htmlUrl || undefined, title: o.text || o.title, category: o.category || cat, sources: [label] }]
+    ? [{ id: '', kind: 'feed' as const, feedUrl: o.xmlUrl, fullTextSelector: o.extensions?.cssFullContent, fullTextRemoveSelectors: o.extensions?.cssContentFilter, htmlUrl: o.htmlUrl || undefined, title: o.text || o.title, category: o.category || cat, sources: [label] }]
     : flatten(o.children || [], o.text || cat));
   return flatten(await parseOpml(await readFile(file, 'utf8')) as Outline[]);
 }
@@ -226,6 +227,7 @@ function finalizeEntries(raw: Entry[]): Entry[] {
     const prev = byKey.get(key);
     if (prev) {
       prev.sources = [...new Set([...prev.sources, ...e.sources])];
+      prev.fullTextSelector ||= e.fullTextSelector; prev.fullTextRemoveSelectors ||= e.fullTextRemoveSelectors;
       prev.htmlUrl ||= e.htmlUrl; prev.title ||= e.title; prev.id ||= e.id; prev.platform ||= e.platform; prev.nativeFeed ||= e.nativeFeed;
       continue;
     }
@@ -260,10 +262,12 @@ async function runWorker(entry: Entry, opt: Options) {
   const { fetchFeedArticles } = await import('../../lib/feed-fetcher');
   const { discoverFeeds } = await import('../../lib/feed-discovery');
   const { fetchAndSuggestFeedCandidatesDetailed } = await import('../../lib/page-feed-suggest');
-  const { extractReadableContent } = await import('../../lib/readability-extract');
+  const { fetchAndExtractReadable } = await import('../../lib/readability-extract');
+  const { RecentFullTextIndex } = await import('../../lib/full-text-duplicates');
+  const { decideFullText } = await import('../../lib/extraction-quality');
   const { matchRadarRules } = await import('../../lib/rsshub-radar-rules');
   const { getRsshubConfig } = await import('../../lib/rsshub');
-  const { getRenderSidecarConfig, renderViaSidecar } = await import('../../lib/render-sidecar');
+  const { getRenderSidecarConfig } = await import('../../lib/render-sidecar');
   const { buildExtractionPrompt } = await import('../../lib/ai-extraction');
   const { buildFeedConfigPrompt } = await import('../../lib/ai-feed-config');
 
@@ -526,53 +530,50 @@ async function runWorker(entry: Entry, opt: Options) {
         .filter(a => /^https?:\/\//.test(a.link || ''))
         .sort((a, b) => (b.publishedAt ? new Date(b.publishedAt).getTime() : 0) - (a.publishedAt ? new Date(a.publishedAt).getTime() : 0))
         .slice(0, opt.articles);
-      const fulltext: unknown[] = [];
+      const fulltext: Record<string, unknown>[] = [];
+      const duplicateIndex = new RecentFullTextIndex();
+      const escalationBudget = { ai: 0, hosted: 0, render: opt.render ? 3 : 0 };
       for (const a of picks) {
         const item: Record<string, unknown> = { link: maskUrl(a.link), host: hostOf(a.link) };
         if (!(await robotsAllowed(a.link))) { fulltext.push({ ...item, verdict: 'skipped', reason: 'robots-disallowed' }); continue; }
-        const attempt = async (impersonate: boolean) => {
+        const attempt = async () => {
           const t = now();
           try {
-            // Identical options to fetchAndExtractReadable's direct fetch.
-            const r = await polite(() => ssrf.fetchWithSsrfProtection(a.link, {}, { allowInternal: false, context: 'Full-text', impersonate, maxBytes: 2 * 1024 * 1024, maxRedirects: 5, timeoutMs: 12_000 }));
-            if (r.notModified) throw new Error('Fetch failed: 304');
-            const ext = await extractReadableContent(r.text, a.link);
-            const score = scoreExtraction(a.content || a.summary || '', ext.html, r.text);
-            const lazyImgs = (r.text.match(/<img\b[^>]*\sdata-(?:src|lazy-src|original|srcset)=/gi) || []).length;
-            const extImgs = ((ext.html || '').match(/<img\b/gi) || []).length;
-            return { html: r.text, extHtml: ext.html, finalUrl: r.url, status: r.status, ms: now() - t, extractedBy: ext.extractedBy, words: ext.wordCount, images: extImgs, lazyImgsInPage: lazyImgs, aiPromptHasArticle: undefined as boolean | undefined, ...score };
+            let pageHtml: string | undefined;
+            const baseline = a.content || a.summary || '';
+            const ext = await polite(() => fetchAndExtractReadable(a.link, {
+              onFetchedPage: (html) => { pageHtml = html; },
+              baselineHtml: baseline, gate: 'auto', selector: entry.fullTextSelector,
+              removeSelectors: entry.fullTextRemoveSelectors,
+              escalationBudget,
+            }));
+            let decision = decideFullText(ext.quality, baseline, 'auto', ext.html);
+            if (ext.html && ext.quality?.verdict === 'good') {
+              const duplicates = duplicateIndex.observe(a.link, a.link, ext.html);
+              if (duplicates.length) {
+                decision = { accept: false, reason: 'duplicate_across_items' };
+                for (const previous of fulltext) if (duplicates.some(link => maskUrl(link) === previous.link)) {
+                  previous.verdict = 'fail'; previous.reason = 'duplicate_across_items';
+                }
+              }
+            }
+            const diagnostics = scoreExtraction(baseline, ext.html, pageHtml || '');
+            return { html: pageHtml, extHtml: ext.html, finalUrl: a.link,
+              status: undefined as number | undefined, ms: now() - t, extractedBy: ext.extractedBy,
+              words: ext.wordCount, images: ((ext.html || '').match(/<img\b/gi) || []).length,
+              ...diagnostics, verdict: decision.accept ? 'good' as const : 'fail' as const,
+              reason: decision.reason, budgetSkipped: ext.budgetSkipped, parseAborted: ext.parseAborted };
           } catch (e) {
             const msg = cleanError(e); const c = classifyError(msg);
             return { ms: now() - t, error: msg, status: c.status, verdict: 'fail' as const, reason: c.status ? (c.status === 404 || c.status === 410 ? `http-${c.status}` : [401, 402, 403, 429, 451].includes(c.status) ? `blocked-http-${c.status}` : `http-${c.status}`) : `fetch-${c.cls}` };
           }
         };
-        const primary = await attempt(true);
+        const primary = await attempt();
         const { html: pageHtml, extHtml, ...primaryOut } = primary as typeof primary & { html?: string; extHtml?: string | null };
-        if (pageHtml) await cacheWrite('articles', a.link, pageHtml, { finalUrl: maskUrl((primary as { finalUrl?: string }).finalUrl), status: primary.status, transport: 'impit' });
-        Object.assign(item, primaryOut, { finalUrl: maskUrl((primary as { finalUrl?: string }).finalUrl), transport: 'impit' });
-        // Today's chain escalates only on fetch error / extractedBy "none" (R7).
-        const chainEscalates = !!primary.error || (primary as { extractedBy?: string }).extractedBy === 'none';
-        item.appChainEscalates = chainEscalates;
+        if (pageHtml) await cacheWrite('articles', a.link, pageHtml, { finalUrl: maskUrl((primary as { finalUrl?: string }).finalUrl), status: primary.status, transport: 'app-chain' });
+        Object.assign(item, primaryOut, { finalUrl: maskUrl((primary as { finalUrl?: string }).finalUrl), transport: 'app-chain' });
+        item.appChainEscalates = primary.verdict !== 'good';
         item.qualityGateWouldEscalate = primary.verdict !== 'good';
-        // Transport fallback measurement (F-P0-4): undici, once, when the impit result is not good.
-        if (primary.verdict === 'fail' && primary.reason !== 'http-404' && primary.reason !== 'http-410') {
-          const fb = await attempt(false);
-          const { html: fbHtml, extHtml: _fbExt, ...fbOut } = fb as typeof fb & { html?: string; extHtml?: string | null };
-          void _fbExt;
-          if (fbHtml) await cacheWrite('articles-undici', a.link, fbHtml, { status: fb.status, transport: 'undici' });
-          item.undiciFallback = { verdict: fb.verdict, reason: fb.reason, status: fb.status, extractedBy: (fbOut as { extractedBy?: string }).extractedBy, extractedChars: (fbOut as { extractedChars?: number }).extractedChars };
-          item.transportFallbackHelps = VERDICT_RANK[fb.verdict] > VERDICT_RANK[primary.verdict];
-        }
-        if (opt.render && renderConfigured && primary.verdict !== 'good') {
-          const t = now();
-          const rendered = await polite(() => renderViaSidecar(a.link, { context: 'Full-text' }));
-          if (rendered) {
-            const ext = await extractReadableContent(rendered, a.link);
-            const sc = scoreExtraction(a.content || a.summary || '', ext.html, rendered);
-            item.render = { ms: now() - t, verdict: sc.verdict, reason: sc.reason, extractedBy: ext.extractedBy, extractedChars: sc.extractedChars };
-            item.renderHelps = VERDICT_RANK[sc.verdict] > VERDICT_RANK[primary.verdict];
-          } else item.render = { ms: now() - t, verdict: 'fail', reason: 'render-empty' };
-        }
         if (opt.stages.has('ai-dryrun') && pageHtml) {
           const prompt = buildExtractionPrompt(pageHtml, a.link);
           // Does the 8K-prefix prompt contain article body text? Probe with sentences from the
@@ -698,7 +699,7 @@ export function buildSummary(results: R[], meta: R): string {
     [k, ...(['good', 'partial', 'fail'] as const).map(v => tested.filter(a => a.extractedBy === k && a.verdict === v).length)])));
   const fb = tested.filter(a => a.undiciFallback);
   out.push(`\n- Transport fallback (impit→undici) tried ${fb.length}×, improved verdict ${fb.filter(a => a.transportFallbackHelps).length}×`);
-  out.push(`- App chain escalates today (fetch error / extractedBy none): ${rate(tested.filter(a => a.appChainEscalates).length, tested.length)}; a quality gate (verdict ≠ good) would escalate: ${rate(tested.filter(a => a.qualityGateWouldEscalate).length, tested.length)}`);
+  out.push(`- App chain did not produce accepted full text: ${rate(tested.filter(a => a.appChainEscalates).length, tested.length)}; a quality gate (verdict ≠ good) would escalate: ${rate(tested.filter(a => a.qualityGateWouldEscalate).length, tested.length)}`);
   out.push(`- Pages with lazy images (data-src…): ${tested.filter(a => a.lazyImgsInPage > 0).length}; of those extracts with 0 images: ${tested.filter(a => a.lazyImgsInPage > 0 && a.images === 0).length}`);
   const ai = tested.filter(a => a.aiPromptHasArticle != null);
   out.push(`- AI extraction prompt (8K prefix) contains article text: ${rate(ai.filter(a => a.aiPromptHasArticle).length, ai.length)}`);

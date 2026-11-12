@@ -118,20 +118,19 @@ Site lists use the `feed-everything.sites.json` shape
 | health | `fetchFeedArticles` (parse, items, dates, content length) + `fetchWithSsrfProtection` (status, final URL, size, content type; one-hop `safeFetch` for the redirect status) | verdict `ok` / `ok-undated` / `stale` (>30 d) / `dead-stale` (>180 d) / `empty` / `broken` + error class |
 | discovery | `discoverFeeds(htmlUrl)` and `discoverFeeds(bare domain)` | exact match after normalisation (scheme, `www.`, trailing slash) plus a same-content check: the top candidate's item links vs. the shipped feed's (≥ 50 % overlap). `matchSource: resolver` = found only through platform/publisher rules |
 | sites | `discoverFeeds` → first 3 candidates validated with `fetchFeedArticles`; `nativeFeed` (if listed) fetched separately; `fetchAndSuggestFeedCandidatesDetailed` when nothing validated; `matchRadarRules` for RSSHub routes | the feed-creation path for URLs without a known feed |
-| fulltext | `fetchWithSsrfProtection` with exactly `fetchAndExtractReadable`'s direct-fetch options (impit, 2 MiB, 5 redirects, 12 s) + `extractReadableContent` | N newest items. On `fail` the page is fetched once more with undici to measure transport fallback (diagnosis F-P0-4). `--render` adds `renderViaSidecar` |
+| fulltext | `fetchAndExtractReadable` + `decideFullText`, with OPML `frss:cssFullContent` / `cssContentFilter` | N newest items; app transport fallback and quality gate, bounded cross-item duplicate comparison, shared render budget when `--render` is enabled |
 | ai-dryrun | `buildFeedConfigPrompt` (homepage, same fetch as `proposeAiFeedConfig`), `buildExtractionPrompt` (articles) | no model call: checks whether body text / feed links reach the prompt |
 
-The full-text **verdict is bench-only scoring**, generic and host-agnostic:
-extracted plain text vs. the feed item (length ratio, link density, overlap of
-the feed's first sentences, multilingual consent / paywall / bot-challenge
-lexicon, `isAccessibleForFree:false`, CTA words at the edges). Reasons:
-`fail` = `blocked-http-4xx`, `http-404`, `fetch-*`, `bot-challenge`,
-`consent-wall`, `paywall-stub`, `worse-than-feed`, `js-shell-or-empty`,
-`no-content-extracted`; `partial` = `content-mismatch`,
-`link-heavy-boilerplate`, `teaser-no-gain`, `paywall-signals`,
-`edge-boilerplate`; `good` = `ok` / `feed-already-full`. Each article also
-records `appChainEscalates` (today's chain only escalates on fetch error /
-`extractedBy: "none"`) and `qualityGateWouldEscalate` (verdict ≠ good).
+The full-text verdict uses the app's storage decision: `good` means accepted;
+`fail` means the feed content is kept (including an already-full feed), or fetch
+failed. Reasons come from the app gate (`teaser`, `lead_mismatch`, `js_shell`,
+wall/thin/empty reasons), the bounded duplicate guard (`duplicate_across_items`),
+or fetch classification. Extra length/overlap/chrome metrics remain diagnostics
+and do not override that decision. `appChainEscalates` and
+`qualityGateWouldEscalate` are legacy output names for an unaccepted final result;
+they do not count actual escalation calls. Transport fallback runs inside the
+app chain, without an additional benchmark-only fetch. Each entry uses a fresh
+scratch database, so comparisons cover sampled items rather than stored history.
 
 ### Outputs
 
@@ -142,7 +141,7 @@ records `appChainEscalates` (today's chain only escalates on fetch error /
   list entries needing attention. `PLATFORMS.md` when `platforms.sites.json`
   was part of the input.
 - `meta.json` – run parameters (base commit, stages, helper flags).
-- `<cache-dir>/{feeds,pages,articles,articles-undici}/<sha1(url)>.gz` +
+- `<cache-dir>/{feeds,pages,articles}/<sha1(url)>.gz` +
   `.meta.json` raw snapshots (source for the offline fixture corpus, diagnosis
   §10), `<cache-dir>/robots/`, `<cache-dir>/bench.db` (fresh SQLite, schema via
   `prisma:push`). `bench-out/` is gitignored; private OPML snapshots must not be
@@ -153,8 +152,8 @@ records `appChainEscalates` (today's chain only escalates on fetch error /
 - Refuses to run when `CI` is set unless `--allow-ci`; needs `--live`.
 - One worker process per entry (hard-killed at `--worker-timeout-ms`). The
   scheduler never runs two entries that share a host and waits `--delay-ms`
-  between entries per host; inside a worker every request is sequential with
-  the same delay. App-internal parallelism (discovery verifies candidates in
+  between entries per host; inside a worker stage calls are sequential with
+  the same delay. Internal retries/escalations keep the app's own policy. App-internal parallelism (discovery verifies candidates in
   batches) is unchanged.
 - robots.txt (RFC 9309 wildcards, group `*` or `feedferret`) is honoured for
   homepages and article pages: disallowed URLs are reported as

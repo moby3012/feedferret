@@ -12,7 +12,7 @@ export type ExtractionResult = {
   byline: string | null;
   excerpt: string | null;
   wordCount: number;
-  extractedBy: "ftr" | "defuddle" | "readability" | "extractus" | "jsonld" | "ai" | "hosted" | "none";
+  extractedBy: "selector" | "ftr" | "defuddle" | "readability" | "extractus" | "jsonld" | "ai" | "hosted" | "none";
   // Generic quality assessment of `html` (lib/extraction-quality.ts); null when nothing was extracted.
   quality: ExtractionQuality | null;
   // Set by fetchAndExtractReadable when an escalation tier would have run but

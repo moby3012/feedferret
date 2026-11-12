@@ -6,7 +6,6 @@ import { queueNewArticleNotifications } from "./notifications";
 import { applyFeedReadFilter } from "./feed-content-filter";
 import { fetchFeedArticles, type FetchedFeedArticle } from "./feed-fetcher";
 import { syncDynamicOpmlCategories } from "./dynamic-opml";
-import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { computeContentHash, normalizeLinkForComparison } from "./content-hash";
 import { buildDedupeKey, isFreshRssHashedCriteria, legacyDedupeKeys } from "./dedupe-key";
 import { decryptIfValue } from "./crypto";
@@ -14,12 +13,12 @@ import type { AiConfig, MeteredAiConfig } from "./ai-summary";
 import { logger, urlForLog } from "./logger";
 import { getConnectorSecretRules, redactConnectorTextWith, stripConnectorSecretsWith } from "./connector-secrets";
 import { sanitizeFeedItemBodies } from "./feed-item-sanitize-client";
-import { isHtmlWorkerError, runInHtmlWorker } from "./html-worker";
+import { isHtmlWorkerError } from "./html-worker";
 import { runAsBackgroundHtmlWork } from "./html-worker/pool";
-import type { SelectorExtractOutput } from "./selector-extract";
 import { resolveFullTextMode } from "./full-text-mode";
 import { filterByFullTextConditions } from "./full-text-conditions";
 import { EscalationBudgetExhaustedError, fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
+import { RecentFullTextIndex, RECENT_FULL_TEXT_LIMIT } from "./full-text-duplicates";
 import { decideFullText } from "./extraction-quality";
 import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
 import {
@@ -769,7 +768,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             });
             const candidates = eligible.slice(0, MAX_FULL_TEXT_FETCHES_PER_SYNC);
             if (fullTextMode === "selector") {
-                await autoFetchFullTextForArticles(userId, candidates, feed);
+                await autoFetchFullTextViaEngine(userId, candidates, feed, "selector");
             } else if (fullTextMode === "auto" || fullTextMode === "ai") {
                 await autoFetchFullTextViaEngine(userId, candidates, feed, fullTextMode);
             }
@@ -905,77 +904,34 @@ async function recordFullTextFetchError(article: FullTextArticleState, error: un
     await recordFullTextMiss(article, "failed", reason).catch((e) => logger.warn("[rss-sync] recording full-text failure failed:", e));
 }
 
-async function autoFetchFullTextForArticles(
-    userId: string,
-    articleIds: string[],
-    feed: {
-        fullTextSelector?: string | null;
-        fullTextRemoveSelectors?: string | null;
-    },
-) {
-    const { recordHostFailure, recordHostSuccess } = await import("./host-backoff");
-
-    const articles = await loadFullTextCandidates(userId, articleIds);
-
-    for (const article of articles) {
-        if (!article.link) continue;
-        try {
-            if (await deferIfHostBackingOff(article)) continue;
-            let html: string;
-            try {
-                html = await fetchTextWithSsrfProtection(
-                    article.link,
-                    { headers: { "User-Agent": "FeedFerret/1.0", Accept: "text/html" } },
-                    {
-                        allowInternal: await isTrustedFeedFetchingAllowed(),
-                        context: "Full-text fetch",
-                        maxBytes: 2 * 1024 * 1024,
-                        maxRedirects: 5,
-                        timeoutMs: 12_000,
-                    },
-                );
-                recordHostSuccess(article.link);
-            } catch (error) {
-                recordHostFailure(article.link, error);
-                await recordFullTextFetchError(article, error);
-                continue;
+/** Scope the history query to this user's feed, with a fixed upper bound. */
+async function duplicateGuard(userId: string, feedId: string) {
+    const index = new RecentFullTextIndex();
+    const recent = await db.article.findMany({
+        where: { userId, feedId, fullTextStatus: "ok" },
+        orderBy: { fullTextFetchedAt: "desc" },
+        take: RECENT_FULL_TEXT_LIMIT,
+        select: FULL_TEXT_STATE_SELECT,
+    });
+    for (const row of [...recent].reverse()) index.observe(row.id, row.link, row.contentFormat === "markdown" ? markdownToPlainText(row.content) : row.content);
+    return async (article: FullTextArticleState, html: string) => {
+        const matches = index.observe(article.id, article.link, html);
+        if (matches.length === 0) return false;
+        // Re-read accepted siblings: includes one stored earlier in this batch.
+        const siblings = await db.article.findMany({
+            where: { userId, feedId, id: { in: matches }, fullTextStatus: "ok" },
+            select: FULL_TEXT_STATE_SELECT,
+        });
+        for (const sibling of siblings) {
+            // A concurrent extraction may have replaced the indexed version.
+            const body = sibling.contentFormat === "markdown" ? markdownToPlainText(sibling.content) : sibling.content;
+            if (index.observe(sibling.id, sibling.link, body).includes(article.id)) {
+                await recordFullTextMiss(sibling, "rejected", "duplicate_across_items");
             }
-            // Parsing + selector evaluation of the (attacker-controlled) page
-            // runs in the HTML worker pool on bounded input.
-            let extracted: SelectorExtractOutput;
-            try {
-                extracted = await runInHtmlWorker({
-                    task: "css",
-                    html,
-                    url: article.link,
-                    selector: feed.fullTextSelector,
-                    removeSelectors: feed.fullTextRemoveSelectors,
-                    mode: "sync",
-                });
-            } catch (error) {
-                if (!isHtmlWorkerError(error)) throw error;
-                await recordParseAborted(article, error.reason === "busy" || error.reason === "unavailable" ? error.reason : "too_complex");
-                continue;
-            }
-
-            if (!extracted.html) {
-                await recordFullTextMiss(article, "rejected", "empty");
-                continue;
-            }
-
-            const sanitized = extracted.html;
-            // Same generic quality gate as the engine path: walls, link lists,
-            // thin pages and "no better than the feed" results are not stored.
-            const decision = decideFullText(extracted.quality, feedBaseline(article), "auto");
-            if (!decision.accept) {
-                await recordFullTextMiss(article, "rejected", decision.reason);
-                continue;
-            }
-            await storeFullText(article, { content: sanitized, format: "html", excerpt: null });
-        } catch (e) {
-            logger.warn(`[rss-sync] autoFetchFullText failed for ${urlForLog(article.link)}:`, e);
         }
-    }
+        await recordFullTextMiss(article, "rejected", "duplicate_across_items");
+        return true;
+    };
 }
 
 /**
@@ -983,18 +939,22 @@ async function autoFetchFullTextForArticles(
  * it through the readability extraction engine (ensemble + quality gate +
  * escalation chain), storing the result as either HTML or Markdown per the
  * feed's `defaultContentFormat` — but only when it is clearly better than the
- * feed-provided content (`decideFullText`). Unlike the selector/heuristic path,
- * this doesn't use `feed.fullTextSelector` at all.
+ * feed-provided content (`decideFullText`). Selector mode uses the same fetch
+ * pipeline with CSS extraction in the HTML worker.
  */
 async function autoFetchFullTextViaEngine(
     userId: string,
     articleIds: string[],
     feed: {
+        id: string;
         defaultContentFormat?: string | null;
+        fullTextSelector?: string | null;
+        fullTextRemoveSelectors?: string | null;
     },
-    mode: "auto" | "ai" = "auto",
+    mode: "auto" | "ai" | "selector" = "auto",
 ) {
     const articles = await loadFullTextCandidates(userId, articleIds);
+    const isDuplicate = await duplicateGuard(userId, feed.id);
     if (articles.length === 0) return;
 
     // The hosted-API BYOK connector (M7-T3) sends article content to a third
@@ -1045,6 +1005,7 @@ async function autoFetchFullTextViaEngine(
             const baselineHtml = feedBaseline(article);
             const extractOptions = {
                 ...baseExtractOptions,
+                ...(mode === "selector" ? { selector: feed.fullTextSelector ?? null, removeSelectors: feed.fullTextRemoveSelectors } : {}),
                 ...(aiConfig ? { aiExtraction: aiConfig } : {}),
                 escalationBudget,
                 baselineHtml,
@@ -1072,8 +1033,9 @@ async function autoFetchFullTextViaEngine(
                 await recordParseAborted(article, result.parseAborted);
                 continue;
             }
-            const decision = decideFullText(result.quality, baselineHtml, "auto");
-            if ((!decision.accept || !result.html) && result.budgetSkipped) {
+            if (result.quality?.verdict === "good" && result.html && await isDuplicate(article, result.html)) continue;
+            const decision = decideFullText(result.quality, baselineHtml, "auto", result.html);
+            if ((!decision.accept || !result.html) && result.budgetSkipped && result.quality?.reason !== "js_shell") {
                 // Escalation was cut short by the per-sync budget: retry next sync
                 // instead of recording a final "rejected".
                 await recordFullTextMiss(article, "deferred", "budget");
