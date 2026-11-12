@@ -1,7 +1,7 @@
 -- ff:allow-destructive Empty databases only (fresh install, Prisma shadow replay): swap the five disposable Article GIN indexes for ArticleSearch ones. Populated databases keep them; lib/search-indexes.ts swaps them in the background with CREATE/DROP INDEX CONCURRENTLY. No Article column or row is removed.
 --
 -- Every statement is idempotent so an interrupted deploy can simply be re-run
--- (`prisma migrate resolve --rolled-back 20261112093000_article_search_table`, restart).
+-- (`prisma migrate resolve --rolled-back 20261112130000_article_search_table`, restart).
 -- Each phase is its own short transaction; no phase locks ArticleSearch and then Article.
 -- On a populated database this migration builds NO index: GIN builds would hold a SHARE
 -- lock on ArticleSearch (blocking ingestion through the trigger) for minutes.
@@ -11,7 +11,10 @@ EXCEPTION WHEN insufficient_privilege OR undefined_file OR feature_not_supported
   RAISE NOTICE 'pg_trgm unavailable';
 END $$;
 
--- Phase 1: table, FK and sync triggers (short SHARE ROW EXCLUSIVE lock on Article, first run only).
+-- Phase 1: table, sync function, FK and triggers. Only the FK/trigger DDL needs a lock on Article
+-- (SHARE ROW EXCLUSIVE, first run only; a re-run takes none). Writers queue behind a pending lock
+-- request, so each attempt waits at most lock_timeout (2 s) and then lets writers through for
+-- 1 s before retrying; after 30 attempts (~90 s) the migration fails and the next start re-runs it.
 BEGIN;
 CREATE TABLE IF NOT EXISTS "ArticleSearch" (
     "id" TEXT NOT NULL,
@@ -24,12 +27,6 @@ CREATE TABLE IF NOT EXISTS "ArticleSearch" (
     CONSTRAINT "ArticleSearch_pkey" PRIMARY KEY ("id")
 );
 
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ArticleSearch_id_fkey' AND conrelid = '"ArticleSearch"'::regclass) THEN
-    ALTER TABLE "ArticleSearch" ADD CONSTRAINT "ArticleSearch_id_fkey" FOREIGN KEY ("id") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-  END IF;
-END $$;
-
 CREATE OR REPLACE FUNCTION article_search_sync() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     INSERT INTO "ArticleSearch" ("id", "title", "content", "excerpt", "author", "entities") VALUES (NEW."id", NEW."title", NEW."content", NEW."excerpt", NEW."author", NEW."entities") ON CONFLICT ("id")
@@ -37,17 +34,35 @@ BEGIN
     RETURN NEW;
 END $$;
 
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'article_search_ai' AND tgrelid = '"Article"'::regclass) THEN
-    CREATE TRIGGER article_search_ai AFTER INSERT ON "Article" FOR EACH ROW EXECUTE FUNCTION article_search_sync();
-  END IF;
-END $$;
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'article_search_au' AND tgrelid = '"Article"'::regclass) THEN
-    CREATE TRIGGER article_search_au AFTER UPDATE OF "id", "title", "content", "excerpt", "author", "entities" ON "Article"
-    FOR EACH ROW WHEN (ROW(OLD."id", OLD."title", OLD."content", OLD."excerpt", OLD."author", OLD."entities") IS DISTINCT FROM ROW(NEW."id", NEW."title", NEW."content", NEW."excerpt", NEW."author", NEW."entities")) EXECUTE FUNCTION article_search_sync();
-  END IF;
+DO $$
+DECLARE
+  attempt int := 0;
+BEGIN
+  PERFORM set_config('lock_timeout', '2s', true);
+  LOOP
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ArticleSearch_id_fkey' AND conrelid = '"ArticleSearch"'::regclass)
+         OR (SELECT count(*) FROM pg_trigger WHERE tgname IN ('article_search_ai', 'article_search_au') AND tgrelid = '"Article"'::regclass) < 2 THEN
+        LOCK TABLE "Article" IN SHARE ROW EXCLUSIVE MODE;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ArticleSearch_id_fkey' AND conrelid = '"ArticleSearch"'::regclass) THEN
+          ALTER TABLE "ArticleSearch" ADD CONSTRAINT "ArticleSearch_id_fkey" FOREIGN KEY ("id") REFERENCES "Article"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'article_search_ai' AND tgrelid = '"Article"'::regclass) THEN
+          CREATE TRIGGER article_search_ai AFTER INSERT ON "Article" FOR EACH ROW EXECUTE FUNCTION article_search_sync();
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'article_search_au' AND tgrelid = '"Article"'::regclass) THEN
+          CREATE TRIGGER article_search_au AFTER UPDATE OF "id", "title", "content", "excerpt", "author", "entities" ON "Article"
+          FOR EACH ROW WHEN (ROW(OLD."id", OLD."title", OLD."content", OLD."excerpt", OLD."author", OLD."entities") IS DISTINCT FROM ROW(NEW."id", NEW."title", NEW."content", NEW."excerpt", NEW."author", NEW."entities")) EXECUTE FUNCTION article_search_sync();
+        END IF;
+      END IF;
+      EXIT;
+    EXCEPTION WHEN lock_not_available THEN
+      -- The failed attempt's lock request is released with its subtransaction.
+      attempt := attempt + 1;
+      IF attempt >= 30 THEN RAISE; END IF;
+      PERFORM pg_sleep(1);
+    END;
+  END LOOP;
 END $$;
 COMMIT;
 

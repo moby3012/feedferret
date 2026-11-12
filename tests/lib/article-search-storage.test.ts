@@ -14,7 +14,7 @@ vi.mock("@/lib/db", () => ({
   get db() { return state.db; },
   getDatabaseProvider: () => process.env.SEARCH_TEST_PG_URL ? "postgresql" : "sqlite",
 }));
-import { articleSearchProjectionStatus, backfillArticleSearch, ensureArticleSearchStorage, isArticleSearchReady, POSTGRES_SEARCH_TRIGGERS, SQLITE_SEARCH_TRIGGERS } from "@/lib/article-search-storage";
+import { articleSearchProjectionStatus, backfillArticleSearch, ensureArticleSearchStorage, isArticleSearchReady, setPostgresSearchIndexStatus, POSTGRES_SEARCH_DDL, SQLITE_SEARCH_TRIGGERS } from "@/lib/article-search-storage";
 import pg from "pg";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { ensureSearchIndexes, postgresSearchIndexStatus } from "@/lib/search-indexes";
@@ -89,7 +89,7 @@ it("backfills exactly, installs the reviewed triggers, and cannot silently adopt
     expect(await state.db.articleSearch.count()).toBe(16);
   }
   const sql = readFileSync(join(root, migration, "migration.sql"), "utf8");
-  for (const statement of provider === "sqlite" ? SQLITE_SEARCH_TRIGGERS : POSTGRES_SEARCH_TRIGGERS) {
+  for (const statement of provider === "sqlite" ? SQLITE_SEARCH_TRIGGERS : Object.values(POSTGRES_SEARCH_DDL)) {
     expect(sql).toContain(statement);
   }
   // Backfill and triggers must execute. Broadening pure-DDL adoption would silently lose search.
@@ -141,7 +141,15 @@ it("serves complete results from the Article columns while the projection is inc
   expect(expected.get("-author:Jane")!.length).toBeGreaterThan(0);
   // The startup check repairs it and only then switches search to the projection.
   await ensureArticleSearchStorage({ yieldMs: 0 });
+  if (pgUrl) {
+    // Postgres: a complete projection is not enough while its trigram indexes are still building.
+    setPostgresSearchIndexStatus({ state: "building", detail: "test" });
+    expect(isArticleSearchReady()).toBe(false);
+    expect(JSON.stringify(await buildAdvancedSearchWhere("a", "title:Alpha"))).not.toContain('"search"');
+    setPostgresSearchIndexStatus({ state: "ready" });
+  }
   expect(isArticleSearchReady()).toBe(true);
+  expect(JSON.stringify(await buildAdvancedSearchWhere("a", "title:Alpha"))).toContain('"search"');
   for (const query of queries) {
     expect(await ids(await buildAdvancedSearchWhere("a", query)), `repaired: ${query}`).toEqual(expected.get(query));
   }

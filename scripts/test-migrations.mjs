@@ -239,7 +239,7 @@ async function startupUpgradeChecks(legacySchema) {
     await execute(url, `UPDATE _prisma_migrations SET finished_at = started_at WHERE migration_name = '${other}'`);
     await execute(url, `DELETE FROM "ArticleSearch"; UPDATE _prisma_migrations SET finished_at = NULL, logs = 'simulated interruption' WHERE migration_name = '${name}'`);
     r = startup(url);
-    expect(r.status === 0 && new RegExp(`${name} was interrupted \\(P3009\\)`).test(r.output), `interrupted idempotent migration not re-run automatically (exit ${r.status})`);
+    expect(r.status === 0 && new RegExp(`${name} failed or was interrupted \\(P3009\\)`).test(r.output), `interrupted idempotent migration not re-run automatically (exit ${r.status})`);
     expect(/Database schema matches prisma\/schema.prisma/.test(r.output), 're-run: drift');
     expect(JSON.stringify(await migrationRows(url)) === JSON.stringify(expected), 're-run: wrong history');
     expect(Number((await query(url, 'SELECT count(*) AS n FROM "ArticleSearch"'))[0].n) ===

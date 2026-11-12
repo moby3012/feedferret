@@ -30,6 +30,7 @@ const LOCK_KEY = "5063819808149225812";
 const ts = () => new Date().toISOString().replace("T", " ").slice(0, 19);
 const log = (message) => console.log(`[${ts()}] ${message}`);
 
+const MAX_AUTO_RERUNS = 3;
 const LOCK_WAIT_MS = lockWaitMs(process.env.FEEDFERRET_DB_LOCK_TIMEOUT_MS, log);
 class StartupError extends Error {}
 const fail = (message) => { throw new StartupError(message); };
@@ -211,22 +212,34 @@ async function main() {
     log(`🔎 Database state: ${state}`);
     if (state === "legacy") adoptLegacy();
     if (state === "migrated") {
-      // Interrupted idempotent migration (P3009): re-run it instead of refusing to start. Any other
-      // unfinished migration is left alone, so `migrate deploy` stops as before (manual recovery).
+      // Failed/interrupted idempotent migration (P3009): re-run it instead of refusing to start, at
+      // most MAX_AUTO_RERUNS times (a permanent cause such as a full disk must not loop forever).
+      // Any other unfinished migration is left alone, so `migrate deploy` stops as before.
       // Runs under the schema lock (Postgres), so it is never another instance's in-progress run.
-      // Unreadable history: resolve nothing; `migrate deploy` reports the real state.
       const unfinished = await unfinishedMigrations({ provider, url, configDir: resolve("prisma"), client: lock ?? undefined })
         .catch((error) => { log(`⚠️ Could not read the migration history (${error?.message ?? error}); not resolving anything.`); return []; });
-      if (unfinished.length && unfinished.every((name) => IDEMPOTENT_MIGRATIONS.has(name))) {
-        for (const name of unfinished) {
-          log(`♻️ Migration ${name} was interrupted (P3009). It is idempotent: marking it rolled back and running it again.`);
+      if (unfinished.length && unfinished.every((m) => IDEMPOTENT_MIGRATIONS.has(m.name))) {
+        for (const { name, rolledBack } of unfinished) {
+          if (rolledBack >= MAX_AUTO_RERUNS) {
+            log(`❌ Migration ${name} failed or was interrupted again after ${rolledBack} automatic re-runs; not retrying automatically.
+   Find the cause first: the Postgres server log has the real error (Prisma often only shows "current transaction is aborted").
+   Typical causes: disk full, a lock that is never granted (long-running transaction), missing privileges.
+   Then: prisma migrate resolve --config prisma/startup.config.mjs --rolled-back ${name}  and restart. See docs/database.md ("Recovering from a failed migration").`);
+            continue;
+          }
+          log(`♻️ Migration ${name} failed or was interrupted (P3009). It is idempotent: marking it rolled back and running it again (automatic re-run ${rolledBack + 1}/${MAX_AUTO_RERUNS}).`);
           if (prisma(["migrate", "resolve", "--rolled-back", name]).status !== 0) fail(`migrate resolve --rolled-back ${name} failed.`);
         }
       }
     }
 
     log("🔄 Applying migrations (prisma migrate deploy)...");
-    if (prisma(["migrate", "deploy"]).status !== 0) {
+    const deploy = prisma(["migrate", "deploy"], { capture: true });
+    console.log(deploy.out);
+    if (deploy.status !== 0) {
+      if (/current transaction is aborted/i.test(deploy.out)) {
+        log("ℹ️ \"current transaction is aborted\" is a follow-up error: an earlier statement of the migration failed inside an explicit transaction. The real error is in the Postgres server log (e.g. `docker logs <postgres container>`), not in _prisma_migrations.logs.");
+      }
       fail('prisma migrate deploy failed. The database was NOT started. Check the error above; for a failed migration see docs/database.md ("Recovering from a failed migration").');
     }
   } finally {

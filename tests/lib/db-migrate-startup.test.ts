@@ -381,10 +381,23 @@ exit 0
       CREATE TABLE _prisma_migrations(id TEXT, migration_name TEXT, started_at TEXT, finished_at TEXT, rolled_back_at TEXT);
       INSERT INTO _prisma_migrations VALUES ('1', '00000000000000_init', '2026-01-01', '2026-01-01', NULL);
       INSERT INTO _prisma_migrations VALUES ('2', '${name}', '2026-01-02', NULL, NULL);`);
-    const idempotent = runStartup(history("20261112093000_article_search_table"));
+    const idempotent = runStartup(history("20261112130000_article_search_table"));
     expect(idempotent.status).toBe(0);
-    expect(idempotent.out).toMatch(/20261112093000_article_search_table was interrupted \(P3009\)/);
-    expect(idempotent.calls.some((c) => c.includes("migrate resolve") && c.includes("--rolled-back") && c.includes("20261112093000_article_search_table"))).toBe(true);
+    expect(idempotent.out).toMatch(/20261112130000_article_search_table failed or was interrupted \(P3009\)/);
+    expect(idempotent.calls.some((c) => c.includes("migrate resolve") && c.includes("--rolled-back") && c.includes("20261112130000_article_search_table"))).toBe(true);
+
+    // A permanent failure (e.g. disk full) must not loop: after 3 automatic re-runs, stop and explain.
+    const exhausted = sqliteDb("p3009-exhausted.db", `CREATE TABLE "User"(id TEXT);
+      CREATE TABLE _prisma_migrations(id TEXT, migration_name TEXT, started_at TEXT, finished_at TEXT, rolled_back_at TEXT);
+      INSERT INTO _prisma_migrations VALUES ('1', '20261112130000_article_search_table', '2026-01-01', NULL, '2026-01-01');
+      INSERT INTO _prisma_migrations VALUES ('2', '20261112130000_article_search_table', '2026-01-02', NULL, '2026-01-02');
+      INSERT INTO _prisma_migrations VALUES ('3', '20261112130000_article_search_table', '2026-01-03', NULL, '2026-01-03');
+      INSERT INTO _prisma_migrations VALUES ('4', '20261112130000_article_search_table', '2026-01-04', NULL, NULL);`);
+    const stopped = runStartup(exhausted, { FAKE_DEPLOY_RC: "1" });
+    expect(stopped.status).toBe(1);
+    expect(stopped.out).toMatch(/after 3 automatic re-runs; not retrying automatically/);
+    expect(stopped.out).toMatch(/Postgres server log/);
+    expect(has(stopped.calls, "migrate resolve")).toBe(false);
 
     const other = runStartup(history("20261111105727_feed_failing_since"));
     expect(other.out).not.toMatch(/was interrupted/);

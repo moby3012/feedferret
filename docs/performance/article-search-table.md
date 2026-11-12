@@ -23,12 +23,16 @@ databases; migration-managed installations take a cheap catalog probe. It then c
 the Article and ArticleSearch row counts (the FK makes the projection a subset, so equal
 counts mean complete) and, if rows are missing, fills them in small batches in the
 background, logging it and reporting `search.projection` in /api/health. **Search uses the
-projection only after this process has verified it complete** (`isArticleSearchReady()`);
+projection only after this process has verified it complete and, on Postgres, its five trigram
+indexes are valid** (`isArticleSearchReady()`; with pg_trgm unavailable, completeness suffices);
 until then lib/search.ts runs the identical predicates on the Article columns (free text,
 fields, entities and negations; result-equivalence is tested), so an incomplete projection
 can never hide articles. A failed or incomplete check is retried with backoff (30 s … 15 min),
 not only on restart; a verified projection is re-checked hourly. The legacy Article trigram
-indexes are dropped only once the projection is verified. db-push test databases use
+indexes are dropped only once the projection is verified and its indexes are valid, right after
+search switched over, so search never runs unindexed (an unindexed `content:` query was measured
+at 2.7 s vs 0.18 s on 100k). The newsletter test-mail lookup uses the same routing
+(`articleTextWhere`). db-push test databases use
 tests/helpers/sqlite-test-db.ts (schema + triggers + verified), mirroring production.
 
 SQLite's existing external-content trigram FTS now reads ArticleSearch. The old
@@ -44,9 +48,15 @@ semantics, especially -author and -entity.
 The migration only does the fast part; it is idempotent and never builds or drops a GIN index
 on a populated database (that is what made the first version deadlock and run ~130 s at 200k).
 
-Postgres migration (`20261112093000_article_search_table`), each phase its own short transaction:
-1. Table (`IF NOT EXISTS`), FK and triggers in guarded `DO` blocks, `CREATE OR REPLACE FUNCTION`.
-   First run: short SHARE ROW EXCLUSIVE lock on Article; a re-run takes no table lock.
+Postgres migration (`20261112130000_article_search_table`), each phase its own short transaction:
+1. Table (`IF NOT EXISTS`), `CREATE OR REPLACE FUNCTION`, then FK and triggers in one guarded
+   `DO` block. Only the FK/trigger DDL locks Article (SHARE ROW EXCLUSIVE, first run only; a
+   re-run takes none). Writers queue behind a pending lock request, so each attempt is bounded by
+   `lock_timeout = 2s`, followed by a 1 s pause that lets them through; up to 30 attempts. **True
+   bound: writers wait at most ~2 s at a time** (instead of as long as the longest running
+   transaction). If the lock is never granted in ~90 s the migration fails and the next start
+   re-runs it (see P3009 below). App routes with a 5 s interactive transaction (e.g. REST v1
+   PATCH) therefore no longer hit Prisma's timeout because of this phase.
 2. Copy into the unindexed projection under `LOCK TABLE "Article" IN EXCLUSIVE MODE` with
    `lock_timeout = 15s`. Plain reads continue; writers **and row-locking readers** (bulk
    mark-read's `SELECT … FOR UPDATE`) wait for the copy. The lock is granted only after every
@@ -104,10 +114,17 @@ bulk mark-read 50 articles as server/articles/bulk-read.ts does (`SELECT … FOR
 | background index build (app helper, writers running) | 485.5 s: content 357.5 s, entities 74.5 s, author 17.6 s, excerpt 9.2 s, title 3.3 s; 2,348 writer transactions completed meanwhile, 0 errors; then 5 valid ArticleSearch indexes, 0 legacy. (An earlier run with lighter writers: 295 s. CONCURRENTLY builds also wait for running transactions, so expect variance.) |
 | projection size | 869 MB incl. 414 MB GIN indexes |
 | kill during `CREATE INDEX CONCURRENTLY` (SIGKILL + backend terminated) | INVALID leftover detected on restart, dropped, rebuilt; all 5 valid |
-| kill during the migration copy (SIGKILL + backend terminated) | plain restart: `♻️ … was interrupted (P3009)`, auto `--rolled-back`, re-run completes; projection complete, triggers present |
+| kill during the migration copy (SIGKILL + backend terminated) | plain restart: `♻️ … failed or was interrupted (P3009)`, auto `--rolled-back`, re-run completes; projection complete, triggers present |
 | legacy Article GIN build (what an older image does at start after rollback) | 66.8 s, blocking |
 
-The PG test suite (tests/lib/article-search-storage.test.ts with `SEARCH_TEST_PG_URL`) also runs
+Regression run after the round-3 fixes (phase-1 lock retry, interactive backfill transactions),
+100,000 articles, same writers: migration 2.1 / 2.9 / 2.9 s, 0 writer errors; background index
+build 160 s, 0 writer errors; projection 446 MB incl. 240 MB GIN; both kill tests pass. Phase 1
+behind a 10 s writer transaction (1,000 articles): other writers waited at most 2.0 s at a time,
+the migration completed after 9.5 s.
+
+The PG test suite (tests/lib/article-search-storage.test.ts with `SEARCH_TEST_PG_URL`, also run
+in the CI `Migrations (postgresql)` job) also runs
 the real migration copy and the app backfill against a bulk mark-read writer in both orders
 (writer row-locks first / copy locks first) with no error, plus a control showing the old SHARE
 copy deadlocks (40P01) in the same setup.
@@ -119,17 +136,24 @@ total content size (the content index dominates).
 
 ### Deploy procedure (production)
 
-1. Backup (`pg_dump -Fc`, restore tested) — owner's normal process.
-2. Deploy normally. Expected startup log: `Applying migration 20261112093000_article_search_table`,
+1. Backup (`pg_dump -Fc`, restore tested) — owner's normal process. **Disk:** the projection
+   adds roughly 0.9–1 GB per 100k articles once indexed (measured: 937 MB per 100k on a Postgres 17
+   review corpus; 869 MB per 200k with the shorter synthetic bodies here), with a peak of about
+   1.5× that during the copy and the index builds (WAL, build temp files). The legacy Article
+   indexes are freed only at the end.
+2. Deploy normally. Expected startup log: `Applying migration 20261112130000_article_search_table`,
    then `…except the search index swap the app finishes in the background…`.
 3. Watch `[search-indexes] … built in N s` / `Dropped legacy Article_*` lines, or poll
    `/api/health` until `search.indexes` is `ready` and `search.projection.state` is `complete`.
    Search works meanwhile (slower). Ingestion continues.
-4. If the container is killed during the migration: just restart. Prisma records the
-   migration as failed (P3009); because it is listed in `IDEMPOTENT_MIGRATIONS`
-   (scripts/migration-utils.mjs), startup logs `♻️ Migration … was interrupted (P3009)…`,
-   marks it rolled back and runs it again (under the schema lock). Any other failed migration
-   still stops the start for manual recovery (docs/database.md).
+4. If the container is killed during the migration, or it fails: just restart. Prisma records
+   the migration as failed (P3009); because it is listed in `IDEMPOTENT_MIGRATIONS`
+   (scripts/migration-utils.mjs), startup logs `♻️ Migration … failed or was interrupted (P3009)…`,
+   marks it rolled back and runs it again (under the schema lock), **at most 3 times**. After that
+   (a permanent cause such as a full disk, SQLSTATE 53100) it stops with manual steps instead of
+   re-taking the Article lock on every start. Prisma then often shows only `current transaction
+   is aborted…` and `_prisma_migrations.logs` is empty: the real error is in the Postgres server
+   log. Any other failed migration still stops the start for manual recovery (docs/database.md).
    If it is killed during the index build: just restart (INVALID indexes are rebuilt).
 
 SQLite copies text in its migration write transaction (`IF NOT EXISTS`/`ON CONFLICT`, so it is
@@ -143,7 +167,7 @@ the pure-DDL adoption allowlist** in migration-utils.mjs: that allowlist means "
 applied WITHOUT executing", which would skip both triggers and backfill. Consequence: every
 legacy db-push database that is already *ahead of* the baseline now stops at startup and needs
 the operator path in docs/database.md (run the idempotent migration SQL, then
-`FEEDFERRET_DB_ADOPT_CONFIRM=20261112093000_article_search_table` once). Databases with
+`FEEDFERRET_DB_ADOPT_CONFIRM=20261112130000_article_search_table` once). Databases with
 `_prisma_migrations` (production) are not affected.
 
 ## Rollback

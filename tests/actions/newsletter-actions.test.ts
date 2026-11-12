@@ -38,7 +38,7 @@ const h = vi.hoisted(() => {
     article: {
       rows: [] as { userId: string; title: string; createdAt: Date }[],
       findFirst: vi.fn(async ({ where }: any) =>
-        db.article.rows.find((r) => r.userId === where.userId && r.title.includes(where.search.is.title.contains) && r.createdAt >= where.createdAt.gte) ?? null,
+        db.article.rows.find((r) => r.userId === where.userId && r.title.includes((where.search?.is ?? where).title.contains) && r.createdAt >= where.createdAt.gte) ?? null,
       ),
     },
     adminAuditLog: { create: vi.fn(async () => ({})) },

@@ -149,15 +149,15 @@ the log-only drift check that runs after `migrate deploy` and takes about a seco
   A database that only matches the baseline never needs this, because `migrate deploy`
   runs the newer migrations normally.
 
-  **Since `20261112093000_article_search_table` this applies to every legacy db-push database
+  **Since `20261112130000_article_search_table` this applies to every legacy db-push database
   that is *ahead of* the baseline** (any newer object already pushed, up to the full current
   schema): that migration installs triggers and backfills `ArticleSearch`, so it is never
   pure DDL and the start stops with `cannot be marked as applied without running them`. A
   database exactly at the baseline is not affected. Production is not affected either (it has
   `_prisma_migrations`). The migration is idempotent, so the operator path is: take a backup,
-  run it as-is (`psql "$DATABASE_URL" -f prisma/migrations/postgresql/20261112093000_article_search_table/migration.sql`,
+  run it as-is (`psql "$DATABASE_URL" -f prisma/migrations/postgresql/20261112130000_article_search_table/migration.sql`,
   or `sqlite3 <file> < prisma/migrations/sqlite/…/migration.sql`), then start once with
-  `FEEDFERRET_DB_ADOPT_CONFIRM=20261112093000_article_search_table` (plus any other names the
+  `FEEDFERRET_DB_ADOPT_CONFIRM=20261112130000_article_search_table` (plus any other names the
   log lists) and unset it. CI runs exactly this path.
 
 **Concurrency.** On Postgres, the whole step runs while holding a session advisory lock on a
@@ -229,13 +229,22 @@ logging `prisma migrate deploy failed`. A failed migration can be partially appl
    if the running image works with the old schema.
 
 Migrations listed in `IDEMPOTENT_MIGRATIONS` (scripts/migration-utils.mjs; currently only
-`20261112093000_article_search_table`) are written to be re-run from any point: every statement
+`20261112130000_article_search_table`) are written to be re-run from any point: every statement
 is idempotent (`IF NOT EXISTS`, guarded `DO` blocks, `ON CONFLICT DO NOTHING`). If one was
 interrupted (killed container, lost connection), startup does steps 1–3 itself: it logs
-`♻️ Migration … was interrupted (P3009)…`, runs `migrate resolve --rolled-back` and lets
+`♻️ Migration … failed or was interrupted (P3009)…`, runs `migrate resolve --rolled-back` and lets
 `migrate deploy` run it again, under the schema lock. If any *other* migration is unfinished,
-nothing is resolved automatically. CI and `scripts/bench-search-migration.mjs` test this,
-including a kill in the middle of the copy.
+nothing is resolved automatically. The automatic re-run happens at most 3 times per migration
+(counted from its rolled-back rows); after that startup stops and prints these manual steps, so a
+permanent cause (disk full, a lock never granted, missing privilege) cannot loop on every start.
+CI and `scripts/bench-search-migration.mjs` test this, including a kill in the middle of the copy.
+
+**`current transaction is aborted, commands ignored until end of transaction block`** in the
+deploy output is a follow-up error: an earlier statement of a migration that uses explicit
+`BEGIN`/`COMMIT` phases failed, and Prisma reports only the next statement's error
+(`_prisma_migrations.logs` may be empty). Startup logs a hint; the real error (for example
+`53100 could not extend file … No space left on device`) is in the Postgres server log
+(`docker logs <postgres container>`).
 
 ## Schema changes (developer workflow)
 

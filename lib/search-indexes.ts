@@ -1,6 +1,6 @@
 import { db, getDatabaseProvider } from "./db";
 import pg from "pg";
-import { ensureArticleSearchStorage, isArticleSearchReady, scheduleArticleSearchMaintenance } from "./article-search-storage";
+import { ensureArticleSearchStorage, isArticleSearchProjectionComplete, scheduleArticleSearchMaintenance, setPostgresSearchIndexStatus } from "./article-search-storage";
 
 // Audit finding P-11: free-text search (lib/search.ts) uses leading-wildcard
 // `contains` (LIKE '%term%') matching, which can't use a normal B-tree index.
@@ -90,14 +90,9 @@ export async function ensureSearchIndexes(options: EnsureSearchIndexesOptions = 
 //   * PRISMA_PG_TRGM=0, a missing pg_trgm extension that this role cannot create, or no
 //     privilege: nothing is built and search keeps using unindexed ILIKE.
 
-export type PostgresSearchIndexState = "pending" | "building" | "ready" | "unavailable" | "error";
-export type PostgresSearchIndexStatus = { state: PostgresSearchIndexState; detail?: string };
-const PG_INDEX_STATUS_KEY = "__feedferret_pg_search_indexes__";
-const pgStatusStore = globalThis as unknown as Record<string, PostgresSearchIndexStatus | undefined>;
-function setPgIndexStatus(status: PostgresSearchIndexStatus) { pgStatusStore[PG_INDEX_STATUS_KEY] = status; }
-export function postgresSearchIndexStatus(): PostgresSearchIndexStatus {
-    return pgStatusStore[PG_INDEX_STATUS_KEY] ?? { state: "pending" };
-}
+export { postgresSearchIndexStatus } from "./article-search-storage";
+export type { PostgresSearchIndexState, PostgresSearchIndexStatus } from "./article-search-storage";
+const setPgIndexStatus = setPostgresSearchIndexStatus;
 
 // Distinct from the schema-migration lock in scripts/db-migrate.mjs.
 const PG_SEARCH_INDEX_LOCK_KEY = "4207513662990112";
@@ -153,17 +148,24 @@ async function ensurePostgresTrigramIndexes(url: string | undefined) {
                 if (!(await validity(name))) throw new Error(`${name} is not valid after CREATE INDEX CONCURRENTLY`);
                 console.info(`[search-indexes] ${name} built in ${((Date.now() - started) / 1000).toFixed(1)} s.`);
             }
-            if (!isArticleSearchReady()) {
+            if (!isArticleSearchProjectionComplete()) {
                 // Search still runs on the Article columns: keep their indexes until the projection is verified.
                 setPgIndexStatus({ state: "building", detail: "legacy Article indexes kept until the projection is complete" });
                 return;
             }
-            for (const name of LEGACY_ARTICLE_TRGM_INDEXES) {
-                if ((await validity(name)) === null) continue;
-                await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${name}"`);
-                console.info(`[search-indexes] Dropped legacy ${name} (replaced by the ArticleSearch index).`);
-            }
+            // All five valid and the projection verified: search may switch now (isArticleSearchReady),
+            // before the legacy indexes go, so it never runs unindexed.
             setPgIndexStatus({ state: "ready" });
+            try {
+                for (const name of LEGACY_ARTICLE_TRGM_INDEXES) {
+                    if ((await validity(name)) === null) continue;
+                    await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${name}"`);
+                    console.info(`[search-indexes] Dropped legacy ${name} (replaced by the ArticleSearch index).`);
+                }
+            } catch (err) {
+                // Search is already on the indexed projection; a leftover legacy index only costs write time.
+                console.warn("[search-indexes] Could not drop the legacy Article trigram indexes; retried on next start.", err instanceof Error ? err.message : err);
+            }
         } finally {
             await client.query("SELECT pg_advisory_unlock($1::bigint)", [PG_SEARCH_INDEX_LOCK_KEY]).catch(() => {});
         }

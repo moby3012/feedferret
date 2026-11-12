@@ -15,23 +15,29 @@ BEGIN
 END`,
 ];
 
-// Idempotent (guarded) like the migration, so re-running never takes an Article lock once installed.
-export const POSTGRES_SEARCH_TRIGGERS = [
-    `CREATE OR REPLACE FUNCTION article_search_sync() RETURNS trigger LANGUAGE plpgsql AS $$
+// The exact DDL of the Postgres migration (tests assert it appears there verbatim).
+export const POSTGRES_SEARCH_DDL = {
+    syncFunction: `CREATE OR REPLACE FUNCTION article_search_sync() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     INSERT INTO "ArticleSearch" ("id", "title", "content", "excerpt", "author", "entities") VALUES (NEW."id", NEW."title", NEW."content", NEW."excerpt", NEW."author", NEW."entities") ON CONFLICT ("id")
     DO UPDATE SET "title" = excluded."title", "content" = excluded."content", "excerpt" = excluded."excerpt", "author" = excluded."author", "entities" = excluded."entities";
     RETURN NEW;
 END $$`,
+    insertTrigger: `CREATE TRIGGER article_search_ai AFTER INSERT ON "Article" FOR EACH ROW EXECUTE FUNCTION article_search_sync()`,
+    updateTrigger: `CREATE TRIGGER article_search_au AFTER UPDATE OF "id", "title", "content", "excerpt", "author", "entities" ON "Article"
+          FOR EACH ROW WHEN (ROW(OLD."id", OLD."title", OLD."content", OLD."excerpt", OLD."author", OLD."entities") IS DISTINCT FROM ROW(NEW."id", NEW."title", NEW."content", NEW."excerpt", NEW."author", NEW."entities")) EXECUTE FUNCTION article_search_sync()`,
+};
+// Idempotent (guarded) like the migration, so re-running never takes an Article lock once installed.
+export const POSTGRES_SEARCH_TRIGGERS = [
+    POSTGRES_SEARCH_DDL.syncFunction,
     `DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'article_search_ai' AND tgrelid = '"Article"'::regclass) THEN
-    CREATE TRIGGER article_search_ai AFTER INSERT ON "Article" FOR EACH ROW EXECUTE FUNCTION article_search_sync();
+    ${POSTGRES_SEARCH_DDL.insertTrigger};
   END IF;
 END $$`,
     `DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'article_search_au' AND tgrelid = '"Article"'::regclass) THEN
-    CREATE TRIGGER article_search_au AFTER UPDATE OF "id", "title", "content", "excerpt", "author", "entities" ON "Article"
-    FOR EACH ROW WHEN (ROW(OLD."id", OLD."title", OLD."content", OLD."excerpt", OLD."author", OLD."entities") IS DISTINCT FROM ROW(NEW."id", NEW."title", NEW."content", NEW."excerpt", NEW."author", NEW."entities")) EXECUTE FUNCTION article_search_sync();
+    ${POSTGRES_SEARCH_DDL.updateTrigger};
   END IF;
 END $$`,
 ];
@@ -50,16 +56,42 @@ function setStatus(status: ArticleSearchProjectionStatus) { store[STATUS_KEY] = 
 export function articleSearchProjectionStatus(): ArticleSearchProjectionStatus {
     return store[STATUS_KEY] ?? { state: "unknown" };
 }
+/** True once this process verified the projection complete (startup self-check or periodic re-check). */
+export function isArticleSearchProjectionComplete(): boolean {
+    return articleSearchProjectionStatus().state === "complete";
+}
+
+// Postgres trigram index state of ArticleSearch (written by lib/search-indexes.ts; kept here so
+// lib/search.ts can read it without an import cycle).
+export type PostgresSearchIndexState = "pending" | "building" | "ready" | "unavailable" | "error";
+export type PostgresSearchIndexStatus = { state: PostgresSearchIndexState; detail?: string };
+const PG_INDEX_STATUS_KEY = "__feedferret_pg_search_indexes__";
+const pgStatusStore = globalThis as unknown as Record<string, PostgresSearchIndexStatus | undefined>;
+export function setPostgresSearchIndexStatus(status: PostgresSearchIndexStatus) { pgStatusStore[PG_INDEX_STATUS_KEY] = status; }
+export function postgresSearchIndexStatus(): PostgresSearchIndexStatus {
+    return pgStatusStore[PG_INDEX_STATUS_KEY] ?? { state: "pending" };
+}
+
 /**
- * True only after this process verified the projection complete (startup self-check, or the
- * periodic re-check). Until then lib/search.ts runs the same predicates on Article columns.
+ * May search read the projection? Only after this process verified it complete AND, on Postgres,
+ * once its trigram indexes are valid (or pg_trgm is unavailable, so neither table has them).
+ * Until then lib/search.ts runs the identical predicates on the Article columns, which keep
+ * their legacy trigram indexes until the swap: never incomplete, never unindexed.
  */
 export function isArticleSearchReady(): boolean {
-    return articleSearchProjectionStatus().state === "complete";
+    if (!isArticleSearchProjectionComplete()) return false;
+    if (getDatabaseProvider() !== "postgresql") return true;
+    const indexes = postgresSearchIndexStatus().state;
+    return indexes === "ready" || indexes === "unavailable";
+}
+/** One text predicate (title/content/excerpt/author/entities) for an Article `where`, routed like search. */
+export function articleTextWhere(predicate: object): object {
+    return isArticleSearchReady() ? { search: { is: predicate } } : predicate;
 }
 /** Tests only: a freshly pushed, empty database with the triggers installed is complete by definition. */
 export function markArticleSearchVerifiedForTests() {
     setStatus({ state: "complete", missing: 0 });
+    setPostgresSearchIndexStatus({ state: "ready" });
 }
 
 const PG_BATCH = 5000;
@@ -75,7 +107,9 @@ async function missingProjectionRows(): Promise<number> {
     return Number(row.articles) - Number(row.search);
 }
 
-const isLockConflict = (err: unknown) => /lock timeout|deadlock|55P03|40P01/i.test(String((err as { message?: string })?.message ?? err));
+// Lock timeout (55P03), deadlock (40P01), or Prisma's own transaction timeout (P2028).
+const isLockConflict = (err: unknown) =>
+    (err as { code?: string })?.code === "P2028" || /lock timeout|deadlock|55P03|40P01|P2028/i.test(String((err as { message?: string })?.message ?? err));
 
 /**
  * Fills missing projection rows in small key-ordered batches (never one long statement).
@@ -101,16 +135,19 @@ export async function backfillArticleSearch(options: { yieldMs?: number } = {}):
             if (!bound?.upper) break;
             for (let attempt = 1; ; attempt++) {
                 try {
-                    const [, , count] = await db.$transaction([
-                        db.$executeRawUnsafe("SET LOCAL lock_timeout = '5s'"),
-                        db.$executeRawUnsafe('LOCK TABLE "Article" IN EXCLUSIVE MODE'),
-                        db.$executeRawUnsafe(
+                    // Interactive transaction with a timeout well above lock_timeout, so a lock wait
+                    // surfaces as 55P03 (retried here), not as Prisma's 5 s default timeout.
+                    const upper = bound.upper;
+                    const count = await db.$transaction(async (tx) => {
+                        await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '5s'");
+                        await tx.$executeRawUnsafe('LOCK TABLE "Article" IN EXCLUSIVE MODE');
+                        return tx.$executeRawUnsafe(
                             `INSERT INTO "ArticleSearch" ("id", "title", "content", "excerpt", "author", "entities")
                              SELECT a."id", a."title", a."content", a."excerpt", a."author", a."entities" FROM "Article" a
                              WHERE a."id" > $1 AND a."id" <= $2 AND NOT EXISTS (SELECT 1 FROM "ArticleSearch" s WHERE s."id" = a."id")
-                             ON CONFLICT ("id") DO NOTHING`, after, bound.upper
-                        ),
-                    ]);
+                             ON CONFLICT ("id") DO NOTHING`, after, upper
+                        );
+                    }, { timeout: 30_000, maxWait: 10_000 });
                     inserted += count;
                     break;
                 } catch (err) {
@@ -159,7 +196,12 @@ export async function ensureArticleSearchStorage(options: { yieldMs?: number } =
             : "SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name IN ('article_search_ai', 'article_search_au')");
         if (installed.length < 2) {
             // Triggers first: every later write is mirrored, the backfill covers everything before.
-            await db.$transaction((pg ? POSTGRES_SEARCH_TRIGGERS : SQLITE_SEARCH_TRIGGERS).map(sql => db.$executeRawUnsafe(sql)));
+            // Postgres: short lock_timeout, so writers never queue long behind the trigger DDL's
+            // SHARE ROW EXCLUSIVE request; a timeout fails this check and the backoff retries it.
+            await db.$transaction([
+                ...(pg ? [db.$executeRawUnsafe("SET LOCAL lock_timeout = '2s'")] : []),
+                ...(pg ? POSTGRES_SEARCH_TRIGGERS : SQLITE_SEARCH_TRIGGERS).map(sql => db.$executeRawUnsafe(sql)),
+            ]);
             console.info("[search-projection] Installed ArticleSearch sync triggers.");
         }
         const missing = await missingProjectionRows();
@@ -199,14 +241,14 @@ const timers = globalThis as unknown as Record<string, ReturnType<typeof setTime
 /** `onReady` runs whenever a check turns an incomplete projection complete (e.g. finish the index swap). */
 export function scheduleArticleSearchMaintenance(onReady?: () => void, attempt = 0) {
     if (timers[TIMER_KEY]) clearTimeout(timers[TIMER_KEY]);
-    const wasReady = isArticleSearchReady();
+    const wasReady = isArticleSearchProjectionComplete();
     const delay = wasReady ? RECHECK_MS : Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** attempt);
     const timer = setTimeout(() => {
         timers[TIMER_KEY] = undefined;
         void ensureArticleSearchStorage()
             .catch((err) => console.warn("[search-projection] check failed; search stays on the Article columns, retrying.", err instanceof Error ? err.message : err))
             .finally(() => {
-                const ready = isArticleSearchReady();
+                const ready = isArticleSearchProjectionComplete();
                 if (ready && !wasReady) onReady?.();
                 scheduleArticleSearchMaintenance(onReady, ready ? 0 : attempt + 1);
             });
