@@ -165,7 +165,8 @@ export async function recordFullTextMiss(
         htmlToPlainText(article.feedContent).length >= plainOf(article.content, article.contentFormat).length);
     const feedPlain = revert ? htmlToPlainText(article.feedContent!) : "";
     return casWrite(article, `${status} outcome`, (current) => ({
-        fullTextStatus: status,
+        fullTextStatus: countsAttempt && status === "deferred" &&
+            (current.fullTextAttempts ?? 0) + 1 >= MAX_FULL_TEXT_ATTEMPTS ? "failed" : status,
         fullTextReason: shortReason,
         fullTextFetchedAt: new Date(),
         ...(countsAttempt ? { fullTextAttempts: (current.fullTextAttempts ?? 0) + 1 } : {}),

@@ -310,6 +310,7 @@ export async function fetchAndExtractReadable(
       rendered = await renderViaSidecar(url, { context: "Full-text" });
     } catch (error) {
       if (!shellOnly) throw error;
+      logger.debug(`[readability] render failed for JS shell at ${urlForLog(url)}`, error);
     }
     renderDeferred = shellOnly && !rendered;
     if (rendered) {

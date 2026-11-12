@@ -596,6 +596,38 @@ describe("full-text quality guards", () => {
     expect(state.pageFetches).toEqual([]);
   });
 
+  it("rejects personalized generic age gates across eight items, including later sync history", async () => {
+    const feed = await autoFeed();
+    const batch = Array.from({ length: 8 }, (_, n) => ({ ...items()[0],
+      externalId: `age-${n}`, link: `https://games.example/game-${n}`,
+      content: `<p>${Array.from({ length: 35 }, (_, w) => `g${n}w${w}`).join(" ")}</p>`,
+    }));
+    state.page = async (url) => `<article><h1>Age check for Game ${url.slice(-1)}</h1><p>${Array.from({ length: 150 }, (_, w) => `ageverificationword${w}`).join(" ")}</p></article>`;
+    // First item is tentatively accepted; later siblings prove the page generic.
+    state.fetchFeed.mockResolvedValue({ title: "Games", articles: batch.slice(0, 1) });
+    await syncFeed(userId, feed.id);
+    state.fetchFeed.mockResolvedValue({ title: "Games", articles: batch });
+    await syncFeed(userId, feed.id);
+    const current = await rows(feed.id);
+    expect(current).toHaveLength(8);
+    expect(current.every(row => row.fullTextReason === "duplicate_across_items")).toBe(true);
+    expect(current.every(row => row.fullTextStatus !== "ok")).toBe(true);
+    expect(current.map(row => row.content)).toEqual(batch.map(item => item.content));
+  });
+
+  it("keeps short articles with a 400-word shared footer when their own feed lead is present", async () => {
+    const feed = await autoFeed();
+    const footer = Array.from({ length: 400 }, (_, n) => `footerword${n}`).join(" ");
+    const batch = Array.from({ length: 8 }, (_, n) => ({ ...items()[0],
+      externalId: `short-${n}`, link: `https://short.example/story-${n}`,
+      content: `<p>${Array.from({ length: 20 }, (_, w) => `article${n}uniquedetail${w}`).join(" ")}</p>`,
+    }));
+    state.fetchFeed.mockResolvedValue({ title: "Short articles", articles: batch });
+    state.page = async (url) => `<article>${batch[Number(url.slice(-1))].content}<p>${footer}</p></article>`;
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id)).map(row => `${row.fullTextStatus}:${row.fullTextReason}`)).toEqual(Array(8).fill("ok:null"));
+  });
+
   it("rejects a duplicate found in a later sync, keeping an unverifiable sibling until the page proves generic", async () => {
     const feed = await autoFeed();
     state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems().slice(0, 1) });
@@ -666,7 +698,7 @@ describe("full-text quality guards", () => {
     expect(first.every(row => row.fullTextStatus === "deferred" && row.fullTextReason === "render_unavailable" && row.fullTextAttempts === 1)).toBe(true);
     for (let i = 1; i < MAX_FULL_TEXT_ATTEMPTS; i++) await syncFeed(userId, feed.id);
     const capped = await rows(feed.id);
-    expect(capped.every(row => row.fullTextStatus === "deferred" && row.fullTextAttempts === MAX_FULL_TEXT_ATTEMPTS)).toBe(true);
+    expect(capped.every(row => row.fullTextStatus === "failed" && row.fullTextAttempts === MAX_FULL_TEXT_ATTEMPTS)).toBe(true);
     expect(capped.map(row => row.updatedAt)).toEqual(first.map(row => row.updatedAt));
     expect(capped.map(row => row.content)).toEqual(first.map(row => row.content));
     state.pageFetches = [];

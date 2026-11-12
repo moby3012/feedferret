@@ -1009,6 +1009,9 @@ function duplicateGuard(userId: string, feedId: string) {
         observed.set(article.id, html);
         if (observed.size > RECENT_FULL_TEXT_LIMIT) observed.delete(observed.keys().next().value!);
         if (!matches.length) return false;
+        // Shared footers may dominate a short article. A page demonstrably
+        // containing this item's own feed lead is not a wrong generic page.
+        if ((leadCoverage(feedBaseline(article), html) ?? 0) >= 0.3) return false;
         const siblings = await db.article.findMany({
             where: { userId, feedId, id: { in: matches } },
             select: FULL_TEXT_STATE_SELECT,

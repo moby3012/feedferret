@@ -111,7 +111,11 @@ it("ignores a long feed-wide footer when comparing short distinct article bodies
     const index = new RecentFullTextIndex();
     const footer = Array.from({ length: 400 }, (_, i) => `footerword${i}`).join(" ");
     for (let i = 0; i < 3; i++) index.observe(`history-${i}`, `/history-${i}`, `A brief historical story number ${i} with distinct details. ${footer}`);
-    expect(index.observe("new", "/new", `Seabirds return to the protected estuary after their annual migration. ${footer}`)).toEqual([]);
+    const body = Array.from({ length: 20 }, (_, n) => `seabirddetail${n}`).join(" ");
+    const page = `${body} ${footer}`;
+    expect(index.observe("new", "/new", page).length).toBeGreaterThan(0);
+    // Candidate matches are vetoed by sync when the article's own lead is present.
+    expect(leadCoverage(body, page)).toBeGreaterThanOrEqual(0.3);
 });
 
 it("compares only the candidate lead, ignoring matching text in a long tail", () => {
@@ -119,4 +123,24 @@ it("compares only the candidate lead, ignoring matching text in a long tail", ()
     const unrelated = "Marine habitats protect migrating seabirds along coastal wetlands. ".repeat(40);
     expect(leadCoverage(baseline, `<div>${unrelated}</div><p>${baseline}</p>`)).toBe(0);
     expect(leadCoverage(baseline, `<script>${unrelated}</script><p>${baseline}</p>${unrelated}`)).toBe(1);
+});
+
+
+it.each([
+    `<!-- > ${"comment text ".repeat(200)} -->`,
+    `<div title="> ${"attribute text ".repeat(200)}"></div>`,
+    `<div>${"&nbsp;".repeat(400)}</div>`,
+])("does not count comments, quoted attributes or nonbreaking spaces as shell prose", async (padding) => {
+    const { isJavaScriptShell } = await import("@/lib/extraction-shell-core");
+    expect(isJavaScriptShell(`${padding}<div id="app"></div><script src="/app.js"></script>`, "https://example.test/app")).toBe(true);
+});
+
+it("updates shingle postings when replacing an item and evicting old history", () => {
+    const index = new RecentFullTextIndex();
+    index.observe("a", "/a", prose);
+    index.observe("a", "/a", "Completely different replacement words. ".repeat(40));
+    expect(index.observe("b", "/b", prose)).toEqual([]);
+    expect(index.observe("c", "/c", prose)).toContain("b");
+    for (let i = 0; i < RECENT_FULL_TEXT_LIMIT; i++) index.observe(`new-${i}`, `/new-${i}`, `Replacement history ${i}. `.repeat(100));
+    expect(index.observe("last", "/last", prose)).toEqual([]);
 });
