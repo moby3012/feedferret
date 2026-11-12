@@ -21,7 +21,7 @@ import { filterByFullTextConditions } from "./full-text-conditions";
 import { EscalationBudgetExhaustedError, fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
 import { RecentFullTextIndex, RECENT_FULL_TEXT_LIMIT, baselinesDiffer } from "./full-text-duplicates";
 import { decideFullText, leadCoverage } from "./extraction-quality";
-import { adaptiveInterval, publicationCadence, dueFeedWhere } from "./adaptive-refresh";
+import { adaptiveInterval, publicationCadence, dueFeedWhere, initialSyncAt, deferredSyncAt } from "./adaptive-refresh";
 import { HostDeferredError, withPoliteHost, recordHostFailure, classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
 import {
     FULL_TEXT_STATE_SELECT,
@@ -615,6 +615,11 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
     // have no fetchable URL — a sync must not fail/auto-mute them.
     if (feed.sourceType === NEWSLETTER_SOURCE_TYPE) return { success: true, count: 0, createdArticleIds: [] };
 
+    if (options.background && feed.nextSyncAt === null) {
+        await db.feed.updateMany({ where: { id: feed.id, nextSyncAt: null }, data: { nextSyncAt: initialSyncAt(feed.id) } });
+        return { success: true, skipped: true, deferred: true, deferredReason: "initial_schedule", count: 0, createdArticleIds: [] };
+    }
+
     // Connector secrets (RSSHub key / changedetection.io token) must not reach
     // stored article links, feed errors, notifications or rule payloads.
     const secretRules = await getConnectorSecretRules();
@@ -631,7 +636,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 orderBy: { publishedAt: "desc" }, take: 40,
                 select: { publishedAt: true, createdAt: true },
             });
-            const minutes = adaptiveInterval(items, feed.updateFrequency, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency));
+            const minutes = politeUpdateFrequency({ ...feed, consecutiveFailureCount: 0 }, adaptiveInterval(items, feed.updateFrequency, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency)));
             return { nextSyncAt: new Date(Date.now() + minutes * 60_000), cadenceMinutes: publicationCadence(items) };
         };
         // G1: Google News keyword feeds — resolve redirect links to publisher
@@ -834,11 +839,18 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
         return { success: true, count: articles.length, createdArticleIds };
     } catch (error) {
-        const status = classifyFetchFailure(error).status;
-        if (error instanceof HostDeferredError || status === 429 || status === 503 || status === 403) {
+        const { status, retryAfterMs } = classifyFetchFailure(error);
+        if (status === 403) {
+            await db.feed.update({ where: { id: feed.id }, data: {
+                nextSyncAt: deferredSyncAt(Math.max(15 * 60_000, retryAfterMs ?? 0)),
+                lastStatus: "attention", lastError: "HTTP 403: feed_blocked",
+            } });
+            return { success: true, skipped: true, deferred: true, deferredReason: "feed_blocked", count: 0, createdArticleIds: [] };
+        }
+        if (error instanceof HostDeferredError || status === 429 || status === 503 || retryAfterMs !== null) {
             const waitMs = error instanceof HostDeferredError ? error.waitMs : recordHostFailure(feed.url, error);
-            await db.feed.update({ where: { id: feed.id }, data: { nextSyncAt: new Date(Date.now() + waitMs) } });
-            return { success: true, skipped: true, deferred: true, count: 0, createdArticleIds: [] };
+            await db.feed.update({ where: { id: feed.id }, data: { nextSyncAt: deferredSyncAt(waitMs) } });
+            return { success: true, skipped: true, deferred: true, deferredReason: error instanceof HostDeferredError ? error.reason : "host_backoff", count: 0, createdArticleIds: [] };
         }
         // A saturated (`busy`, incl. a background queue-wait deadline) or missing
         // (`unavailable`) HTML worker pool says nothing about the feed: no failure
@@ -875,7 +887,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             where: { id: feed.id },
             data: {
                 lastFetchedAt: new Date(),
-                nextSyncAt: new Date(Date.now() + Math.max(15, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency)) * 60_000),
+                nextSyncAt: new Date(Date.now() + politeUpdateFrequency({ ...feed, consecutiveFailureCount: failureUpdate.consecutiveFailureCount }, adaptiveInterval([], feed.updateFrequency, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency))) * 60_000),
                 lastStatus: "error",
                 lastError: redact(String(error)).slice(0, 1000),
                 consecutiveFailureCount: failureUpdate.consecutiveFailureCount,
@@ -1317,8 +1329,6 @@ async function syncUserFeedsNow(userId: string, background: boolean) {
         logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );
 
-
-
     const feeds = await db.feed.findMany({
         // Archived feeds are never fetched in the background (restore re-enables them).
         where: background ? { userId, ...dueFeedWhere() } : { userId, archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
@@ -1366,7 +1376,7 @@ async function syncAllFeedsNow() {
 
     const feeds = await db.feed.findMany({
         where: dueFeedWhere(),
-        orderBy: [{ nextSyncAt: "asc" }, { id: "asc" }],
+        orderBy: [{ nextSyncAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
         select: { id: true, userId: true, url: true, autoMuted: true },
     });
 

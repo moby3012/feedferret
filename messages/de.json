@@ -1150,6 +1150,9 @@
     "feedsInCategory": "{count} Feeds"
   },
   "common": {
+    "feedRefreshDeferred": "Abruf verschoben: {reason}",
+    "feedBlockedReason": "Zugriff auf diesen Feed blockiert (HTTP 403)",
+    "feedHostReason": "Server pausiert oder Abrufabstand noch nicht erreicht",
     "apiSourceAttention": {
       "status": "Braucht Aufmerksamkeit",
       "unconfigured": "Twitch ist nicht eingerichtet (oder wurde deaktiviert). Ein Admin muss unter Admin → Server-Einstellungen → Twitch Client ID und Client Secret speichern. Der Feed läuft danach automatisch weiter.",
@@ -1580,7 +1583,7 @@
       "updateInterval": "Aktualisierungsintervall (Minuten)",
       "globalDefault": "Globaler Standard",
       "automatic": "Automatisch",
-"cadence": "Automatisch (Ø {count} Beiträge/Tag)",
+"cadence": "Automatisch (Ø {count} Beiträge/Tag (gebündelt))",
 "learning": "Automatisch (Publikationsrhythmus wird ermittelt)",
 "nextSync": "Nächster Abruf ca. {time}",
 "overrideSync": "Leer = automatisch; geerbte Intervalle gelten als Mindestabstand. Minuten eingeben, um diesen Feed fest einzustellen.",

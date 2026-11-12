@@ -60,6 +60,7 @@ async function makeFeed(userId: string, data: Record<string, unknown> = {}) {
       name: "Feed",
       url: `https://f${++seq}.example/feed.xml`,
       lastFetchedAt: daysAgo(0),
+      nextSyncAt: daysAgo(0),
       lastStatus: "success",
       createdAt: daysAgo(1000),
       ...data,
@@ -346,6 +347,25 @@ describe("archive / restore", () => {
 });
 
 describe("archived feeds leave the reader but keep their articles", () => {
+  it("a feed-level 403 attention row appears as blocked without a failure streak", async () => {
+    const feed = await makeFeed(alice, { lastStatus: "attention", lastError: "HTTP 403: feed_blocked", consecutiveFailureCount: 0, autoMuted: false });
+    const broken = await getBrokenFeeds();
+    expect(broken.find(row => row.id === feed.id)).toMatchObject({ kind: "blocked", consecutiveFailureCount: 0, autoMuted: false });
+  });
+
+  it("a deployment with many NULL schedules persists staggered Prisma Dates before fetching", async () => {
+    for (let i = 0; i < 100; i++) await makeFeed(alice, { nextSyncAt: null });
+    const before = Date.now();
+    await syncAllFeeds();
+    expect(h.syncedUrls).toEqual([]);
+    const feeds = await h.db.feed.findMany({ where: { userId: alice } });
+    expect(feeds.every(feed => feed.nextSyncAt instanceof Date && feed.nextSyncAt.getTime() > before && feed.nextSyncAt.getTime() <= Date.now() + 901000)).toBe(true);
+    expect(new Set(feeds.map(feed => feed.nextSyncAt!.getTime())).size).toBeGreaterThan(90);
+    // Compare through Prisma/SQLite, not raw integer timestamp fixtures.
+    expect(await h.db.feed.count({ where: { nextSyncAt: { lte: new Date(before) } } })).toBe(0);
+    expect(await h.db.feed.count({ where: { nextSyncAt: { lte: new Date(Date.now() + 901000) } } })).toBe(100);
+  });
+
   it("background sync skips archived feeds and resumes after restore", async () => {
     const live = await makeFeed(alice, { name: "live", lastFetchedAt: daysAgo(2) });
     const archived = await makeFeed(alice, { name: "archived", lastFetchedAt: daysAgo(2), archivedAt: daysAgo(1) });
@@ -355,6 +375,7 @@ describe("archived feeds leave the reader but keep their articles", () => {
 
     h.syncedUrls.length = 0;
     await restoreFeeds([archived.id]);
+    await h.db.feed.update({ where: { id: archived.id }, data: { nextSyncAt: daysAgo(0) } });
     await syncAllFeeds();
     // `live` was just synced and is not due again; the restored feed is picked up on the next pass.
     expect(h.syncedUrls).toEqual([archived.url]);

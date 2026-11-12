@@ -66,6 +66,7 @@ const BROKEN_SELECT = {
     url: true,
     sourceType: true,
     lastError: true,
+    lastStatus: true,
     autoMuted: true,
     consecutiveFailureCount: true,
     failingSince: true,
@@ -166,7 +167,7 @@ export async function getBrokenFeeds(): Promise<BrokenFeedDto[]> {
             userId,
             archivedAt: null,
             sourceType: { not: NEWSLETTER_SOURCE_TYPE },
-            OR: [{ autoMuted: true }, { consecutiveFailureCount: { gt: 0 } }],
+            OR: [{ autoMuted: true }, { consecutiveFailureCount: { gt: 0 } }, { lastStatus: "attention", lastError: "HTTP 403: feed_blocked" }],
         },
         select: BROKEN_SELECT,
         orderBy: [{ autoMuted: "desc" }, { consecutiveFailureCount: "desc" }, { name: "asc" }],
@@ -207,7 +208,7 @@ export async function unmuteBrokenFeed(feedId: string): Promise<{ success: true 
     await ownedFeed(userId, feedId);
     await db.feed.update({
         where: { id: feedId, userId },
-        data: { ...applyManualUnmute(), failingSince: null, nextSyncAt: null },
+        data: { ...applyManualUnmute(), failingSince: null, nextSyncAt: null, lastStatus: null, lastError: null },
     });
     revalidatePath("/");
     return { success: true };
@@ -355,12 +356,13 @@ export type InactiveFeedsResult = { thresholdDays: number; feeds: InactiveFeedDt
 
 /** Rows that can possibly be inactive; the date test itself happens against the newest article below. */
 const INACTIVE_CANDIDATE = {
+    OR: [{ lastStatus: null }, { lastStatus: { not: "attention" } }, { lastError: null }, { lastError: { not: "HTTP 403: feed_blocked" } }],
     archivedAt: null,
     autoMuted: false,
     consecutiveFailureCount: 0,
     lastFetchedAt: { not: null },
     sourceType: { not: NEWSLETTER_SOURCE_TYPE },
-} as const;
+};
 
 async function inactiveThreshold(userId: string): Promise<number> {
     const user = await db.user.findUnique({ where: { id: userId }, select: { inactiveFeedDays: true } });

@@ -100,7 +100,7 @@ export function recordHostFailure(url: string, error: unknown, now = Date.now())
     if (kind === "permanent") return 0;
     const prior = hosts.get(host);
     const failures = (prior?.failures ?? 0) + 1;
-    const base = status === 403 ? 15 * 60 * 1000 : kind === "rate_limited" ? BASE_RATE_LIMIT_MS : kind === "blocked" ? BASE_BLOCKED_MS : BASE_NETWORK_MS;
+    const base = kind === "rate_limited" ? BASE_RATE_LIMIT_MS : kind === "blocked" ? BASE_BLOCKED_MS : BASE_NETWORK_MS;
     // Only our own exponential guess is capped at 6 h; a server's explicit
     // Retry-After is honoured as sent (sanity-capped at 7 days).
     const exponential = Math.min(MAX_BACKOFF_MS, base * 2 ** (failures - 1));
@@ -108,7 +108,7 @@ export function recordHostFailure(url: string, error: unknown, now = Date.now())
     const wait = Math.max(exponential, retryAfter);
     prune(now);
     hosts.delete(host); // re-insert so Map order approximates recency for pruning
-    hosts.set(host, { failures, until: Math.max(prior?.until ?? 0, now + wait), rateLimited: kind === "rate_limited" || retryAfterMs !== null });
+    hosts.set(host, { failures, until: Math.max(prior?.until ?? 0, now + wait), rateLimited: status !== 403 && (status === 503 || kind === "rate_limited" || retryAfterMs !== null) });
     return Math.max(wait, (prior?.until ?? 0) - now);
 }
 
@@ -133,6 +133,7 @@ export function recordHostSuccess(url: string) {
 /** Test helper. */
 export function resetHostBackoff() {
     hosts.clear();
+    lanes.clear();
 }
 
 /** Honour an API's explicit quota reset even on a successful final request. */
@@ -143,46 +144,38 @@ export function recordHostRateLimit(url: string, resetAt: number, now = Date.now
     hosts.set(host, { failures: 0, until: Math.max(hosts.get(host)?.until ?? 0, Math.min(resetAt, now + MAX_RETRY_AFTER_MS)), rateLimited: true });
 }
 
-// Single-process gate shared by every user's unattended feed fetches. Different hosts proceed in parallel.
-const lanes = new Map<string, { tail: Promise<void>; next: number }>();
+// Single-process, non-blocking gate. Busy hosts must never occupy a sync pool worker.
+const lanes = new Map<string, { busy: boolean; next: number; reserved: number }>();
 export class HostDeferredError extends Error {
-    constructor(readonly waitMs: number) { super("Host fetch deferred"); }
+    constructor(readonly waitMs: number, readonly reason = "host_backoff") { super("Host fetch deferred"); }
 }
 export async function withPoliteHost<T>(url: string, task: () => Promise<T>): Promise<T> {
     const host = hostOf(url);
     if (!host) return task();
+    const backoff = hostRateLimitRemainingMs(url);
+    if (backoff) throw new HostDeferredError(backoff);
+    const configured = Number(process.env.FEED_HOST_SPACING_MS);
+    const spacing = Number.isFinite(configured) && configured >= 0 ? configured : 2000;
     let lane = lanes.get(host);
-    if (!lane) { lane = { tail: Promise.resolve(), next: 0 }; lanes.set(host, lane); }
-    const prior = lane.tail;
-    let release!: () => void;
-    const current = new Promise<void>((resolve) => { release = resolve; });
-    lane.tail = current;
-    await prior;
+    if (!lane) { lane = { busy: false, next: 0, reserved: 0 }; lanes.set(host, lane); }
+    if (lane.busy || lane.next > Date.now()) {
+        // Reserve later eligibility for this feed, without waiting for the in-flight fetch.
+        lane.reserved = Math.max(lane.reserved, lane.next, Date.now()) + spacing;
+        throw new HostDeferredError(Math.max(1, lane.reserved - Date.now()), "host_busy");
+    }
+    lane.busy = true;
+    lane.next = Date.now() + spacing;
     try {
-        let backoff = hostBackoffRemainingMs(url);
-        if (backoff) throw new HostDeferredError(backoff);
-        const delay = Math.max(0, lane.next - Date.now());
-        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
-        backoff = hostBackoffRemainingMs(url);
-        if (backoff) throw new HostDeferredError(backoff);
-        const configured = Number(process.env.FEED_HOST_SPACING_MS);
-        lane.next = Date.now() + (Number.isFinite(configured) && configured >= 0 ? configured : 2000);
-        try {
-            const result = await task();
-            // A successful API response may itself have exhausted its quota.
-            if (!hostBackoffRemainingMs(url)) recordHostSuccess(url);
-            return result;
+        return await task();
+    } catch (error) {
+        const { status, retryAfterMs } = classifyFetchFailure(error);
+        if (status !== 403 && (status === 429 || status === 503 || retryAfterMs !== null)) {
+            throw new HostDeferredError(recordHostFailure(url, error));
         }
-        catch (error) {
-            const { status } = classifyFetchFailure(error);
-            if (status === 429 || status === 503 || status === 403) {
-                throw new HostDeferredError(recordHostFailure(url, error));
-            }
-            throw error;
-        }
+        throw error;
     } finally {
-        release();
-        // Keep spacing after completion, then release idle host state (bounded by active work).
-        setTimeout(() => { if (lane.tail === current) lanes.delete(host); }, Math.max(0, lane.next - Date.now())).unref?.();
+        lane.busy = false;
+        const saved = lane;
+        setTimeout(() => { if (lanes.get(host) === saved && !saved.busy && saved.next <= Date.now()) lanes.delete(host); }, Math.max(0, lane.next - Date.now())).unref?.();
     }
 }
