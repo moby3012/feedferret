@@ -1,0 +1,464 @@
+{
+  "baseline": {
+    "provider": "postgresql",
+    "seed": {
+      "articlesA": 50000,
+      "unreadA": 44879,
+      "articlesB": 5000,
+      "labelled": 5000
+    },
+    "search": {
+      "alpha 12345": {
+        "medianMs": 1129.5,
+        "p95Ms": 1132.2,
+        "count": 1
+      },
+      "charlie": {
+        "medianMs": 378.6,
+        "p95Ms": 382.7,
+        "count": 16667
+      },
+      "title:12345": {
+        "medianMs": 3.4,
+        "p95Ms": 3.4,
+        "count": 1
+      },
+      "-author:nobody content:Benchmark": {
+        "medianMs": 7.7,
+        "p95Ms": 7.9,
+        "count": 0
+      }
+    },
+    "ui.markAll.all": {
+      "ms": 7025.8,
+      "statements": 137,
+      "loopMaxMs": 38.5,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "ui.markAll.bigFeed": {
+      "ms": 1445.7,
+      "statements": 29,
+      "loopMaxMs": 18.6,
+      "changed": 8957,
+      "unreadB": 5000,
+      "starredUnreadA": 1778,
+      "updatedAtBumped": 0
+    },
+    "ui.markAll.category": {
+      "ms": 1717.1,
+      "statements": 32,
+      "loopMaxMs": 9.8,
+      "changed": 9014,
+      "unreadB": 5000,
+      "starredUnreadA": 1860,
+      "updatedAtBumped": 0
+    },
+    "ui.markAll.label": {
+      "ms": 957.7,
+      "statements": 17,
+      "loopMaxMs": 12.5,
+      "changed": 4492,
+      "unreadB": 5000,
+      "starredUnreadA": 2021,
+      "updatedAtBumped": 0
+    },
+    "ui.markAll.search": {
+      "ms": 3149.9,
+      "statements": 47,
+      "loopMaxMs": 23,
+      "changed": 14957,
+      "unreadB": 5000,
+      "starredUnreadA": 1506,
+      "updatedAtBumped": 0
+    },
+    "ui.undo.all": {
+      "ms": 6280.6,
+      "statements": 136,
+      "restoredTo": 44879
+    },
+    "ui.range.bigFeed": {
+      "ms": 1284.3,
+      "statements": 30,
+      "loopMaxMs": 8.9,
+      "changed": 8957,
+      "unreadB": 5000,
+      "starredUnreadA": 1778,
+      "updatedAtBumped": 0
+    },
+    "greader.markAll.readingList": {
+      "ms": 6539.4,
+      "statements": 136,
+      "loopMaxMs": 25.9,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "greader.markAll.bigFeed": {
+      "ms": 1239.6,
+      "statements": 29,
+      "loopMaxMs": 10.4,
+      "changed": 8957,
+      "unreadB": 5000,
+      "starredUnreadA": 1778,
+      "updatedAtBumped": 0
+    },
+    "fever.group0": {
+      "ms": 6569.3,
+      "statements": 142,
+      "loopMaxMs": 27.1,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "v1.markAll": {
+      "ms": 5612.3,
+      "statements": 136,
+      "loopMaxMs": 31.4,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "mcp.markAll": {
+      "ms": 8020.9,
+      "statements": 136,
+      "loopMaxMs": 33.1,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "concurrency.markAllWithSync": {
+      "ms": 8953,
+      "inserted": 2800,
+      "newMarkedRead": 0,
+      "insertBatches": 140,
+      "insertP50": 25.9,
+      "insertMax": 219.6,
+      "syncUpdateMax": 175.6
+    },
+    "concurrency.overlapping": {
+      "ms": 12212.2,
+      "chunkRetries": 7,
+      "outcomes": [
+        {
+          "count": 36879,
+          "idsTruncated": true
+        },
+        {
+          "count": 8000,
+          "idsTruncated": true
+        },
+        {
+          "count": 0,
+          "incomplete": true
+        }
+      ],
+      "changedTotal": 44879,
+      "unreadLeftBeforeCutoff": 0,
+      "syncTx": 69,
+      "syncErrors": [
+        "deadlock detected"
+      ],
+      "syncErrorCount": 1
+    }
+  },
+  "projection": {
+    "provider": "postgresql",
+    "seed": {
+      "articlesA": 50000,
+      "unreadA": 44879,
+      "articlesB": 5000,
+      "labelled": 5000
+    },
+    "search": {
+      "alpha 12345": {
+        "medianMs": 1277.9,
+        "p95Ms": 1439.3,
+        "count": 1
+      },
+      "charlie": {
+        "medianMs": 401.1,
+        "p95Ms": 414.4,
+        "count": 16667
+      },
+      "title:12345": {
+        "medianMs": 32.5,
+        "p95Ms": 32.9,
+        "count": 1
+      },
+      "-author:nobody content:Benchmark": {
+        "medianMs": 5.8,
+        "p95Ms": 6.6,
+        "count": 0
+      }
+    },
+    "ui.markAll.all": {
+      "ms": 2371.8,
+      "statements": 137,
+      "loopMaxMs": 43.4,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "ui.markAll.bigFeed": {
+      "ms": 499.6,
+      "statements": 29,
+      "loopMaxMs": 7.6,
+      "changed": 8957,
+      "unreadB": 5000,
+      "starredUnreadA": 1778,
+      "updatedAtBumped": 0
+    },
+    "ui.markAll.category": {
+      "ms": 562.2,
+      "statements": 32,
+      "loopMaxMs": 8.6,
+      "changed": 9014,
+      "unreadB": 5000,
+      "starredUnreadA": 1860,
+      "updatedAtBumped": 0
+    },
+    "ui.markAll.label": {
+      "ms": 312.5,
+      "statements": 17,
+      "loopMaxMs": 7.4,
+      "changed": 4492,
+      "unreadB": 5000,
+      "starredUnreadA": 2021,
+      "updatedAtBumped": 0
+    },
+    "ui.markAll.search": {
+      "ms": 1447.5,
+      "statements": 47,
+      "loopMaxMs": 7.5,
+      "changed": 14957,
+      "unreadB": 5000,
+      "starredUnreadA": 1506,
+      "updatedAtBumped": 0
+    },
+    "ui.undo.all": {
+      "ms": 2790.4,
+      "statements": 136,
+      "restoredTo": 44879
+    },
+    "ui.range.bigFeed": {
+      "ms": 648,
+      "statements": 30,
+      "loopMaxMs": 10.1,
+      "changed": 8957,
+      "unreadB": 5000,
+      "starredUnreadA": 1778,
+      "updatedAtBumped": 0
+    },
+    "greader.markAll.readingList": {
+      "ms": 3365.4,
+      "statements": 136,
+      "loopMaxMs": 26.8,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "greader.markAll.bigFeed": {
+      "ms": 1369.7,
+      "statements": 29,
+      "loopMaxMs": 38.6,
+      "changed": 8957,
+      "unreadB": 5000,
+      "starredUnreadA": 1778,
+      "updatedAtBumped": 0
+    },
+    "fever.group0": {
+      "ms": 7801.3,
+      "statements": 142,
+      "loopMaxMs": 43.3,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "v1.markAll": {
+      "ms": 7829.4,
+      "statements": 136,
+      "loopMaxMs": 58.9,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "mcp.markAll": {
+      "ms": 5967.8,
+      "statements": 136,
+      "loopMaxMs": 54.1,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "concurrency.markAllWithSync": {
+      "ms": 7298.4,
+      "inserted": 1020,
+      "newMarkedRead": 0,
+      "insertBatches": 51,
+      "insertP50": 73.2,
+      "insertMax": 564.6,
+      "syncUpdateMax": 208.5
+    },
+    "concurrency.overlapping": {
+      "ms": 11597.3,
+      "chunkRetries": 1,
+      "outcomes": [
+        {
+          "count": 26915,
+          "idsTruncated": true
+        },
+        {
+          "count": 8957,
+          "idsTruncated": true
+        },
+        {
+          "count": 9007,
+          "idsTruncated": true
+        }
+      ],
+      "changedTotal": 44879,
+      "unreadLeftBeforeCutoff": 0,
+      "syncTx": 30,
+      "syncErrors": [
+        "deadlock detected",
+        "deadlock detected"
+      ],
+      "syncErrorCount": 2
+    }
+  },
+  "paired": {
+    "provider": "postgresql",
+    "seed": {
+      "articlesA": 50000,
+      "unreadA": 44879,
+      "articlesB": 5000,
+      "labelled": 5000
+    },
+    "paired.retained.0": {
+      "ms": 5993.6,
+      "statements": 137,
+      "loopMaxMs": 40,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "paired.removed.0": {
+      "ms": 1842,
+      "statements": 137,
+      "loopMaxMs": 33.9,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "paired.removed.1": {
+      "ms": 1967,
+      "statements": 137,
+      "loopMaxMs": 28.9,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "paired.retained.1": {
+      "ms": 5881.8,
+      "statements": 137,
+      "loopMaxMs": 39.4,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "paired.retained.2": {
+      "ms": 9726.1,
+      "statements": 137,
+      "loopMaxMs": 89.7,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "paired.removed.2": {
+      "ms": 3883.7,
+      "statements": 137,
+      "loopMaxMs": 48.3,
+      "changed": 44879,
+      "unreadB": 5000,
+      "starredUnreadA": 0,
+      "updatedAtBumped": 0
+    },
+    "paired": {
+      "retained": {
+        "samplesMs": [
+          5993.6,
+          5881.8,
+          9726.1
+        ],
+        "medianMs": 5993.6
+      },
+      "removed": {
+        "samplesMs": [
+          1842,
+          1967,
+          3883.7
+        ],
+        "medianMs": 1967
+      }
+    }
+  },
+  "steadySearch": {
+    "articles": 55000,
+    "search": {
+      "alpha 12345": {
+        "count": 1,
+        "article": {
+          "medianMs": 1162.9,
+          "p95Ms": 1206.5
+        },
+        "projection": {
+          "medianMs": 1272,
+          "p95Ms": 1370.5
+        }
+      },
+      "charlie": {
+        "count": 16667,
+        "article": {
+          "medianMs": 404.5,
+          "p95Ms": 432.5
+        },
+        "projection": {
+          "medianMs": 411.4,
+          "p95Ms": 443.4
+        }
+      },
+      "title:12345": {
+        "count": 1,
+        "article": {
+          "medianMs": 1.1,
+          "p95Ms": 1.9
+        },
+        "projection": {
+          "medianMs": 1.2,
+          "p95Ms": 1.2
+        }
+      }
+    }
+  },
+  "migration": {
+    "ms": 9160.244625,
+    "rows": 110000
+  }
+}

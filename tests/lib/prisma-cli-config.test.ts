@@ -7,7 +7,7 @@ import { ARTICLE_TEXT_COLUMNS } from "../../lib/search-indexes";
 
 const source = readFileSync("prisma/schema.prisma", "utf8");
 const trgmIndexes = (schema: string) =>
-  [...schema.matchAll(/^\s*@@index\(\[(\w+)\(ops: raw\("gin_trgm_ops"\)\)\], type: Gin, map: "Article_(\w+)_trgm_idx"\)$/gm)].map((m) => {
+  [...schema.matchAll(/^\s*@@index\(\[(\w+)\(ops: raw\("gin_trgm_ops"\)\)\], type: Gin, map: "ArticleSearch_(\w+)_trgm_idx"\)$/gm)].map((m) => {
     expect(m[1]).toBe(m[2]);
     return m[1];
   });

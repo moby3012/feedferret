@@ -12,7 +12,7 @@ function ci(value: string) {
 
 // ── SQLite FTS5 acceleration for free-text terms (see lib/search-indexes.ts) ──
 //
-// On Postgres we change nothing here: pg_trgm GIN indexes make the existing
+// On Postgres, pg_trgm GIN indexes on ArticleSearch accelerate
 // ILIKE '%term%' queries fast with no query-logic change, so the free-text
 // loop below always uses the plain LIKE/ILIKE branch for that provider.
 //
@@ -81,8 +81,8 @@ async function ftsMatchIds(userId: string, term: string, cap: number): Promise<s
     try {
         if (!(await isSqliteFtsReady())) return null;
         const rows = await db.$queryRawUnsafe<{ id: string }[]>(
-            `SELECT a.id AS id FROM "Article" a
-             WHERE a.userId = ? AND a.rowid IN (SELECT rowid FROM article_fts WHERE article_fts MATCH ?)
+            `SELECT a.id AS id FROM "ArticleSearch" s JOIN "Article" a ON a.id = s.id
+             WHERE a.userId = ? AND s.rowid IN (SELECT rowid FROM article_fts WHERE article_fts MATCH ?)
              LIMIT ?`,
             userId,
             buildFtsMatchQuery(term),
@@ -111,10 +111,12 @@ async function buildFreeTextCondition(userId: string, term: string, ftsCap: numb
 
     return {
         OR: [
-            { title: ci(term) },
-            { content: ci(term) },
-            { excerpt: ci(term) },
-            { author: ci(term) },
+            { search: { is: { OR: [
+                { title: ci(term) },
+                { content: ci(term) },
+                { excerpt: ci(term) },
+                { author: ci(term) },
+            ] } } },
             { link: ci(term) },
             { feed: { name: ci(term) } },
             { labels: { some: { label: { name: ci(term), userId } } } },
@@ -167,6 +169,7 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
         if (!value) continue;
 
         let condition: any | null = null;
+        let searchText = false;
         // Nullable tri-state flags: `NOT (col = true)` is NULL (= excluded) for
         // unknown rows in SQL, so their negation is spelled out explicitly.
         let negatedCondition: any | null = null;
@@ -185,8 +188,10 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
         } else if (hasField) {
             if (["author", "by"].includes(key)) {
                 condition = { author: ci(value) };
+                searchText = true;
             } else if (["intitle", "title"].includes(key)) {
                 condition = { title: ci(value) };
+                searchText = true;
             } else if (["intext", "text", "content"].includes(key)) {
                 condition = {
                     OR: [
@@ -194,6 +199,7 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
                         { excerpt: ci(value) },
                     ],
                 };
+                searchText = true;
             } else if (["inurl", "url", "link"].includes(key)) {
                 condition = { link: ci(value) };
             } else if (["feed", "f"].includes(key)) {
@@ -253,6 +259,7 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
                 // occur in stored entities (sanitized at write time).
                 const entity = value.replace(/["\\]/g, "").trim();
                 if (entity) {
+                    searchText = true;
                     condition = { entities: ci(`"${entity}"`) };
                     // Articles without enrichment have entities = NULL and must survive `-entity:X`.
                     negatedCondition = { OR: [{ entities: null }, { NOT: condition }] };
@@ -274,7 +281,9 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
             continue;
         }
 
-        and.push(negated ? (negatedCondition ?? { NOT: condition }) : condition);
+        const predicate = negated ? (negatedCondition ?? { NOT: condition }) : condition;
+        // Keep NOT inside the relation: SQL NULL author/content semantics must stay identical.
+        and.push(searchText ? { search: { is: predicate } } : predicate);
     }
 
     const freeTextConditions = await Promise.all(

@@ -216,7 +216,10 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
     const result = await buildAdvancedSearchWhere(USER, "database") as any;
 
     const [condition] = result.AND;
-    expect(condition.OR[0]).toEqual({ title: { contains: "database" } });
+    expect(condition.OR[0]).toEqual({ search: { is: { OR: [
+      { title: { contains: "database" } }, { content: { contains: "database" } },
+      { excerpt: { contains: "database" } }, { author: { contains: "database" } },
+    ] } } });
     expect(JSON.stringify(result)).not.toContain('"in"');
   });
 
@@ -248,7 +251,10 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
     (isSqliteFtsReady as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(false);
     const result = await buildAdvancedSearchWhere(USER, "openclaw") as any;
     expect(queryRawUnsafeMock).not.toHaveBeenCalled();
-    expect(result.AND[0].OR[0]).toEqual({ title: { contains: "openclaw" } });
+    expect(result.AND[0].OR[0]).toEqual({ search: { is: { OR: [
+      { title: { contains: "openclaw" } }, { content: { contains: "openclaw" } },
+      { excerpt: { contains: "openclaw" } }, { author: { contains: "openclaw" } },
+    ] } } });
   });
 
   it("falls back to the full LIKE-based OR list when the FTS query throws (e.g. article_fts missing)", async () => {
@@ -258,10 +264,12 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
 
     const [condition] = result.AND;
     expect(condition.OR).toEqual([
+      { search: { is: { OR: [
       { title: { contains: "openclaw" } },
       { content: { contains: "openclaw" } },
       { excerpt: { contains: "openclaw" } },
       { author: { contains: "openclaw" } },
+      ] } } },
       { link: { contains: "openclaw" } },
       { feed: { name: { contains: "openclaw" } } },
       { labels: { some: { label: { name: { contains: "openclaw" }, userId: USER } } } },
@@ -274,10 +282,12 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
     expect(queryRawUnsafeMock).not.toHaveBeenCalled();
     const [condition] = result.AND;
     expect(condition.OR).toEqual([
+      { search: { is: { OR: [
       { title: { contains: "ab" } },
       { content: { contains: "ab" } },
       { excerpt: { contains: "ab" } },
       { author: { contains: "ab" } },
+      ] } } },
       { link: { contains: "ab" } },
       { feed: { name: { contains: "ab" } } },
       { labels: { some: { label: { name: { contains: "ab" }, userId: USER } } } },
@@ -393,19 +403,19 @@ describe("K3 enrichment operators", () => {
 
   it("-entity:X keeps articles without entities (NULL)", async () => {
     expect(await buildAdvancedSearchWhere(USER, "-entity:EZB")).toEqual({
-      AND: [{ OR: [{ entities: null }, { NOT: { entities: { contains: '"EZB"' } } }] }],
+      AND: [{ search: { is: { OR: [{ entities: null }, { NOT: { entities: { contains: '"EZB"' } } }] } } }],
     });
   });
 
   it("entity:<name> matches the quoted JSON element, quoted or not", async () => {
-    const expected = { AND: [{ entities: { contains: '"OpenAI"' } }] };
+    const expected = { AND: [{ search: { is: { entities: { contains: '"OpenAI"' } } } }] };
     expect(await buildAdvancedSearchWhere(USER, "entity:OpenAI")).toEqual(expected);
     expect(await buildAdvancedSearchWhere(USER, 'entity:"OpenAI"')).toEqual(expected);
   });
 
   it("entity with spaces stays one token", async () => {
     expect(await buildAdvancedSearchWhere(USER, 'entity:"Angela Merkel"')).toEqual({
-      AND: [{ entities: { contains: '"Angela Merkel"' } }],
+      AND: [{ search: { is: { entities: { contains: '"Angela Merkel"' } } } }],
     });
     expect(tokenizeSearch('-entity:"Angela Merkel" foo author:\'Jane Doe\'')).toEqual([
       "-entity:Angela Merkel",
@@ -415,7 +425,7 @@ describe("K3 enrichment operators", () => {
   });
 
   it("entity strips quotes/backslashes from the value and ignores an empty one", async () => {
-    expect(await buildAdvancedSearchWhere(USER, 'entity:a\\"b')).toEqual({ AND: [{ entities: { contains: '"ab"' } }] });
+    expect(await buildAdvancedSearchWhere(USER, 'entity:a\\"b')).toEqual({ AND: [{ search: { is: { entities: { contains: '"ab"' } } } }] });
     // empty value after stripping → falls through as free text, never an unbounded match
     const where = (await buildAdvancedSearchWhere(USER, 'entity:""')) as { AND?: unknown[] };
     expect(JSON.stringify(where)).not.toContain('"entities"');

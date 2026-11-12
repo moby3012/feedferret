@@ -420,6 +420,7 @@ model Article {
   notifications Notification[]
   feed        Feed     @relation(fields: [feedId], references: [id], onDelete: Cascade)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  search      ArticleSearch?
   labels      ArticleLabel[]
   aiSummary      String?
   aiSummarizedAt DateTime?
@@ -478,15 +479,6 @@ model Article {
   @@index([userId, isSpoiler, publishedAt])
   @@index([userId, readAt])
   @@index([feedId, publishedAt(sort: Desc), createdAt(sort: Desc), id(sort: Desc)])
-  // Postgres only: pg_trgm GIN indexes behind the ILIKE '%term%' search (lib/search-indexes.ts).
-  // scripts/prepare-prisma-schema.mjs turns the `//@postgresql ` lines into real attributes for
-  // the Postgres schema, so `db push` keeps these indexes instead of dropping them on every deploy.
-  // SQLite has no GIN indexes; it uses the article_fts FTS5 table (external, see prisma/cli-config.mjs).
-  //@postgresql @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_title_trgm_idx")
-  //@postgresql @@index([content(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_content_trgm_idx")
-  //@postgresql @@index([excerpt(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_excerpt_trgm_idx")
-  //@postgresql @@index([author(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_author_trgm_idx")
-  //@postgresql @@index([entities(ops: raw("gin_trgm_ops"))], type: Gin, map: "Article_entities_trgm_idx")
   @@index([spoilerRuleId])
   @@index([userId, digestedAt])
   @@index([userId, isSponsored])
@@ -840,4 +832,22 @@ model EmailChangeRequest {
   expiresAt DateTime
   createdAt DateTime @default(now())
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+
+// Trigger-maintained search projection. Article retains serving content for rollback;
+// read-state writes never touch this table or its GIN/FTS indexes.
+model ArticleSearch {
+  id       String @id
+  title    String
+  content  String
+  excerpt  String?
+  author   String?
+  entities String?
+  article  Article @relation(fields: [id], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  //@postgresql @@index([title(ops: raw("gin_trgm_ops"))], type: Gin, map: "ArticleSearch_title_trgm_idx")
+  //@postgresql @@index([content(ops: raw("gin_trgm_ops"))], type: Gin, map: "ArticleSearch_content_trgm_idx")
+  //@postgresql @@index([excerpt(ops: raw("gin_trgm_ops"))], type: Gin, map: "ArticleSearch_excerpt_trgm_idx")
+  //@postgresql @@index([author(ops: raw("gin_trgm_ops"))], type: Gin, map: "ArticleSearch_author_trgm_idx")
+  //@postgresql @@index([entities(ops: raw("gin_trgm_ops"))], type: Gin, map: "ArticleSearch_entities_trgm_idx")
 }

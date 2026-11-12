@@ -192,6 +192,50 @@ describe.skipIf(!ENABLED)("bulk mark-read at scale (50 k articles)", () => {
     if (json.auth !== 1) throw new Error(`fever auth ${JSON.stringify(json)}`);
   };
 
+  it.skipIf(!PG || process.env.MARK_READ_BENCH_PAIRED !== "1")("paired: retained Article GIN versus removed Article GIN", async () => {
+    const { markAllAsRead } = await import("@/app/actions/feeds");
+    const { ARTICLE_TEXT_COLUMNS } = await import("@/lib/search-indexes");
+    // Alternate variants on the SAME corpus. No content writes in the measured operation.
+    // VACUUM outside timing drains pending GIN entries from setup/reset for both variants.
+    const samples: Record<string, number[]> = { retained: [], removed: [] };
+    for (const retained of [true, false, false, true, true, false]) {
+      for (const column of ARTICLE_TEXT_COLUMNS) {
+        await db.$executeRawUnsafe(retained
+          ? `CREATE INDEX IF NOT EXISTS "Article_${column}_trgm_idx" ON "Article" USING GIN ("${column}" gin_trgm_ops)`
+          : `DROP INDEX IF EXISTS "Article_${column}_trgm_idx"`);
+      }
+      await reset();
+      await db.$executeRawUnsafe('VACUUM ANALYZE "Article"');
+      await db.$executeRawUnsafe('VACUUM ANALYZE "ArticleSearch"');
+      const key = retained ? "retained" : "removed";
+      const name = `paired.${key}.${samples[key].length}`;
+      await measure(name, () => markAllAsRead({ category: "All", cutoff: Date.now() } as never), SEEDED_UNREAD_A.count);
+      samples[key].push((results[name] as { ms: number }).ms);
+    }
+    results.paired = Object.fromEntries(Object.entries(samples).map(([key, ms]) => [
+      key, { samplesMs: ms, medianMs: [...ms].sort((a, b) => a - b)[1] },
+    ]));
+  }, 900_000);
+
+  it("search: selective, broad, field and negative queries", async () => {
+    const { buildAdvancedSearchWhere } = await import("@/lib/search");
+    const search: Record<string, unknown> = {};
+    for (const query of ["alpha 12345", "charlie", "title:12345", "-author:nobody content:Benchmark"]) {
+      const samples: number[] = [];
+      let count = 0;
+      for (let i = 0; i < 6; i++) {
+        const t = performance.now();
+        const where = { AND: [{ userId: "ua" }, await buildAdvancedSearchWhere("ua", query)] };
+        count = await db.article.count({ where });
+        await db.article.findMany({ where, take: 50, orderBy: [{ publishedAt: "desc" }, { id: "desc" }], select: { id: true } });
+        if (i) samples.push(performance.now() - t);
+      }
+      samples.sort((a, b) => a - b);
+      search[query] = { medianMs: round(samples[2]), p95Ms: round(samples[4]), count };
+    }
+    results.search = search;
+  }, 900_000);
+
   it("UI: mark all read (all / big feed / category / label / search)", async () => {
     state.user = "ua";
     const { markAllAsRead } = await import("@/app/actions/feeds");

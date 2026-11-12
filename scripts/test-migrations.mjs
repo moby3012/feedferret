@@ -66,6 +66,8 @@ async function fingerprint(url) {
   // Only non-empty tables: a later additive migration may create new (empty) tables during the
   // upgrade, which is not a data change; a table that lost its rows still disappears from `counts`.
   for (const name of await tableNames(url)) {
+    // Derived projection is populated by the search migration; verify it separately.
+    if (name === 'ArticleSearch') continue;
     const n = Number((await query(url, `SELECT count(*) AS n FROM "${name}"`))[0].n);
     if (n > 0) counts[name] = n;
   }
@@ -76,7 +78,7 @@ async function fingerprint(url) {
       ? { objects: await query(url, "SELECT type, name, sql FROM sqlite_master WHERE name LIKE 'article_fts%' ORDER BY name"),
           fts: await query(url, 'SELECT id, title FROM article_fts ORDER BY id'),
           meta: await query(url, 'SELECT * FROM article_fts_meta') }
-      : { trgm: await query(url, "SELECT indexname, indexdef FROM pg_indexes WHERE indexname LIKE 'Article_%_trgm_idx' ORDER BY indexname") },
+      : {}, // GIN indexes move to ArticleSearch; application data must stay identical.
   });
 }
 async function migrationRows(url) {
@@ -142,6 +144,8 @@ async function startupUpgradeChecks(legacySchema) {
   expect(JSON.stringify(await migrationRows(url)) === JSON.stringify(expected), `_prisma_migrations should list ${expected}`);
   expect((await migrationRows(url)).length >= 1 && (await migrationRows(url))[0] === baseline, 'baseline row missing');
   expect(before === await fingerprint(url), 'legacy upgrade changed row counts or search objects');
+  expect(Number((await query(url, 'SELECT count(*) AS n FROM "ArticleSearch"'))[0].n) ===
+    Number((await query(url, 'SELECT count(*) AS n FROM "Article"'))[0].n), 'search projection backfill incomplete');
   expect(/Database schema matches prisma\/schema.prisma/.test(r.output), 'drift check did not report a clean schema');
 
   r = startup(url);
@@ -192,6 +196,18 @@ async function startupUpgradeChecks(legacySchema) {
   if (provider === 'sqlite') await execute(current, SQLITE_FTS_SQL);
   const currentBefore = await fingerprint(current);
   r = startup(current);
+  expect(r.status !== 0 && /cannot be marked as applied without running/.test(r.output), 'must not skip search backfill/triggers on a db-push database');
+  expect(await migrationRows(current) === null, 'non-DDL adoption must leave history untouched');
+  // Simulate the documented operator path: install triggers and backfill, then explicitly confirm.
+  const searchMigration = expected.find(name => name.endsWith('_article_search_table'));
+  const sql = readFileSync(join('prisma/migrations', provider, searchMigration, 'migration.sql'), 'utf8');
+  const operational = sql.slice(sql.indexOf(provider === 'sqlite' ? 'CREATE TRIGGER' : 'CREATE OR REPLACE FUNCTION'));
+  if (provider === 'sqlite') await execute(current, operational);
+  else {
+    // Current schema already has the new indexes/table. Only the operational phase is missing.
+    await execute(current, 'BEGIN;\n' + operational.slice(0, operational.indexOf('\nDO $$ BEGIN')));
+  }
+  r = startup(current, { FEEDFERRET_DB_ADOPT_CONFIRM: searchMigration });
   expect(r.status === 0 && /Legacy database matches the current schema: marking all/.test(r.output), `current-schema legacy exited ${r.status}`);
   expect(!/db push to the|Additive gap/.test(r.output), 'current-schema legacy must not push');
   expect(JSON.stringify(await migrationRows(current)) === JSON.stringify(expected), 'current-schema legacy: not all migrations marked applied');
@@ -305,7 +321,7 @@ try {
     await execute(privileged.toString(), `REVOKE CREATE ON DATABASE "${prefix}_restricted" FROM PUBLIC, "${role}"`);
     run(['migrate', 'deploy']);
     const ext = await query(env.DATABASE_URL, "SELECT extname FROM pg_extension WHERE extname='pg_trgm'");
-    const idx = await query(env.DATABASE_URL, "SELECT indexname FROM pg_indexes WHERE indexname LIKE 'Article_%_trgm_idx'");
+    const idx = await query(env.DATABASE_URL, "SELECT indexname FROM pg_indexes WHERE indexname LIKE 'ArticleSearch_%_trgm_idx'");
     if (ext.length || idx.length) throw new Error('Restricted test did not exercise missing pg_trgm');
     env.PRISMA_PG_TRGM = '0';
     writeFileSync(schema, prepareSchema(source, provider, { skipTrgm: env.PRISMA_PG_TRGM === '0' }));
@@ -322,7 +338,7 @@ try {
     await execute(privileged.toString(), `CREATE EXTENSION pg_trgm; REVOKE CREATE ON DATABASE "${prefix}_restricted_ext" FROM PUBLIC, "${role}"`);
     r = startup(withExt, { PRISMA_PG_TRGM: '' });
     expect(r.status === 0 && /pg_trgm extension available/.test(r.output) && !/starting without trigram/.test(r.output), 'pre-installed pg_trgm must be used');
-    const trgmIdx = await query(withExt, "SELECT indexname FROM pg_indexes WHERE indexname LIKE 'Article_%_trgm_idx'");
+    const trgmIdx = await query(withExt, "SELECT indexname FROM pg_indexes WHERE indexname LIKE 'ArticleSearch_%_trgm_idx'");
     expect(trgmIdx.length === 5 && /Database schema matches/.test(r.output), `pre-installed pg_trgm: ${trgmIdx.length} trigram indexes`);
 
     // Legacy db-push database of a restricted install (pushed without trgm indexes),

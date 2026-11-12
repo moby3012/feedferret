@@ -363,7 +363,7 @@ export async function checkNewsletterTestMail(input: unknown): Promise<{ arrived
   // Webhook ways push; only a mailbox has to be polled.
   if (source.kind === "imap" && !source.paused) await pollInboundSourceNow(source.id).catch(() => null);
   const article = await db.article.findFirst({
-    where: { userId: session.user.id, title: { contains: marker }, createdAt: { gte: new Date(sinceDate.getTime() - 15 * 60_000) } },
+    where: { userId: session.user.id, search: { is: { title: { contains: marker } } }, createdAt: { gte: new Date(sinceDate.getTime() - 15 * 60_000) } },
     orderBy: { createdAt: "asc" },
     select: { createdAt: true },
   });

@@ -1,4 +1,5 @@
 import { db, getDatabaseProvider } from "./db";
+import { ensureArticleSearchStorage } from "./article-search-storage";
 
 // Audit finding P-11: free-text search (lib/search.ts) uses leading-wildcard
 // `contains` (LIKE '%term%') matching, which can't use a normal B-tree index.
@@ -41,6 +42,7 @@ export type EnsureSearchIndexesOptions = {
 
 export async function ensureSearchIndexes(options: EnsureSearchIndexesOptions = {}): Promise<void> {
     try {
+        await ensureArticleSearchStorage();
         if (getDatabaseProvider() === "postgresql") {
             await ensurePostgresTrigramIndexes();
         } else {
@@ -61,9 +63,9 @@ async function ensurePostgresTrigramIndexes() {
     await db.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
 
     for (const column of ARTICLE_TEXT_COLUMNS) {
-        const indexName = `Article_${column}_trgm_idx`;
+        const indexName = `ArticleSearch_${column}_trgm_idx`;
         await db.$executeRawUnsafe(
-            `CREATE INDEX IF NOT EXISTS "${indexName}" ON "Article" USING GIN ("${column}" gin_trgm_ops)`
+            `CREATE INDEX IF NOT EXISTS "${indexName}" ON "ArticleSearch" USING GIN ("${column}" gin_trgm_ops)`
         );
     }
 }
@@ -105,10 +107,26 @@ const NOT_PENDING = (rowidExpr: string) =>
     `NOT EXISTS (SELECT 1 FROM article_fts_backfill b WHERE b.id = 1 AND ${rowidExpr} > b.done_rowid AND ${rowidExpr} <= b.upper_rowid)`;
 
 async function ensureSqliteFts(mode: "background" | "await" | "none") {
+    // Upgrade the old Article-backed FTS atomically. It is disposable; the existing
+    // resumable backfill repopulates it while search uses the projection's LIKE path.
+    const oldFts = await db.$queryRawUnsafe<{ sql: string }[]>(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'article_fts'"
+    );
+    if (oldFts.length && !oldFts[0].sql.includes("content='ArticleSearch'")) {
+        await db.$transaction([
+            db.$executeRawUnsafe("DROP TRIGGER IF EXISTS article_fts_ai"),
+            db.$executeRawUnsafe("DROP TRIGGER IF EXISTS article_fts_ad"),
+            db.$executeRawUnsafe("DROP TRIGGER IF EXISTS article_fts_au"),
+            db.$executeRawUnsafe("DROP TABLE article_fts"),
+            db.$executeRawUnsafe("DROP TABLE IF EXISTS article_fts_meta"),
+            db.$executeRawUnsafe("DROP TABLE IF EXISTS article_fts_backfill"),
+        ]);
+        delete (globalThis as unknown as Record<string, unknown>)[FTS_READY_KEY];
+    }
     const indexExisted =
         (await db.$queryRawUnsafe<{ n: number }[]>(`SELECT 1 AS n FROM sqlite_master WHERE type = 'table' AND name = 'article_fts'`)).length > 0;
 
-    // External-content FTS5 table: the actual text stays in "Article"; this
+    // External-content FTS5 table: the actual text stays in "ArticleSearch"; this
     // table only stores the trigram index plus the cuid `id` (unindexed) so
     // matches can be mapped back to Prisma rows.
     await db.$executeRawUnsafe(`
@@ -119,13 +137,13 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
             excerpt,
             author,
             tokenize='trigram',
-            content='Article',
+            content='ArticleSearch',
             content_rowid='rowid'
         )
     `);
 
     // NOTE: for an external-content FTS5 table, a plain (non-MATCH) `SELECT` or
-    // `count(*)` against article_fts is proxied straight to the backing "Article"
+    // `count(*)` against article_fts is proxied straight to the backing "ArticleSearch"
     // table by SQLite — it does NOT reflect whether the trigram shadow index has
     // actually been populated. So completeness is tracked in this tiny marker table.
     await db.$executeRawUnsafe(`
@@ -173,7 +191,7 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
             db.$executeRawUnsafe(`INSERT INTO article_fts(article_fts) VALUES ('delete-all')`),
             db.$executeRawUnsafe(
                 `INSERT INTO article_fts_backfill (id, upper_rowid, done_rowid)
-                 SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "Article"`
+                 SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "ArticleSearch"`
             )
         );
     }
@@ -183,14 +201,14 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
         db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS article_fts_ad`),
         db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS article_fts_au`),
         db.$executeRawUnsafe(`
-            CREATE TRIGGER article_fts_ai AFTER INSERT ON "Article"
+            CREATE TRIGGER article_fts_ai AFTER INSERT ON "ArticleSearch"
             WHEN ${NOT_PENDING("new.rowid")} BEGIN
                 INSERT INTO article_fts(rowid, id, title, content, excerpt, author)
                 VALUES (new.rowid, new.id, new.title, new.content, new.excerpt, new.author);
             END
         `),
         db.$executeRawUnsafe(`
-            CREATE TRIGGER article_fts_ad AFTER DELETE ON "Article"
+            CREATE TRIGGER article_fts_ad AFTER DELETE ON "ArticleSearch"
             WHEN ${NOT_PENDING("old.rowid")} BEGIN
                 INSERT INTO article_fts(article_fts, rowid, id, title, content, excerpt, author)
                 VALUES ('delete', old.rowid, old.id, old.title, old.content, old.excerpt, old.author);
@@ -199,7 +217,7 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
         // Only re-index when an indexed column changes (mark-read, star, aiSummary,
         // updatedAt... must not rewrite the whole trigram row).
         db.$executeRawUnsafe(`
-            CREATE TRIGGER article_fts_au AFTER UPDATE OF title, content, excerpt, author ON "Article"
+            CREATE TRIGGER article_fts_au AFTER UPDATE OF title, content, excerpt, author ON "ArticleSearch"
             WHEN ${NOT_PENDING("old.rowid")} BEGIN
                 INSERT INTO article_fts(article_fts, rowid, id, title, content, excerpt, author)
                 VALUES ('delete', old.rowid, old.id, old.title, old.content, old.excerpt, old.author);
@@ -242,7 +260,7 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
 // ── Boot-time consistency check ──────────────────────────────────────────────
 //
 // FTS5's own `INSERT INTO article_fts(article_fts) VALUES('integrity-check')` reads the
-// whole index and compares it with "Article": ~6 s for 50 k articles, synchronously on the
+// whole index and compares it with "ArticleSearch": ~6 s for 50 k articles, synchronously on the
 // single better-sqlite3 connection (event loop blocked, write lock held). Not acceptable on
 // every boot. Instead two cheap probes that catch the realistic failure modes (rows missing
 // from or left over in the index, an index that no longer matches the content):
@@ -251,7 +269,7 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
 //   2. the newest article with a title of >= 3 characters is found by an FTS MATCH on
 //      (a prefix of) its title.
 // On a mismatch the index is reset and rebuilt by the normal chunked background backfill;
-// search uses the LIKE path meanwhile. Only FTS tables are written, never "Article", so
+// search uses the LIKE path meanwhile. Only FTS tables are written, never "ArticleSearch", so
 // Article.updatedAt is untouched.
 
 export type SqliteFtsCheckResult = { ok: true } | { ok: false; reason: string };
@@ -261,7 +279,7 @@ const FTS_PROBE_TITLE_CHARS = 48;
 export async function checkSqliteFtsConsistency(): Promise<SqliteFtsCheckResult> {
     const [indexed, articles] = await db.$transaction([
         db.$queryRawUnsafe<{ n: number | bigint }[]>(`SELECT COUNT(*) AS n FROM article_fts_docsize`),
-        db.$queryRawUnsafe<{ n: number | bigint }[]>(`SELECT COUNT(*) AS n FROM "Article"`),
+        db.$queryRawUnsafe<{ n: number | bigint }[]>(`SELECT COUNT(*) AS n FROM "ArticleSearch"`),
     ]);
     const indexedCount = Number(indexed[0]?.n ?? 0);
     const articleCount = Number(articles[0]?.n ?? 0);
@@ -277,7 +295,7 @@ export async function checkSqliteFtsConsistency(): Promise<SqliteFtsCheckResult>
                     WHERE article_fts MATCH ('"' || replace(substr(a.title, 1, ?), '"', '""') || '"')
                       AND article_fts.rowid = a.rowid
                 ) AS found
-         FROM "Article" a WHERE length(a.title) >= 3 ORDER BY a.rowid DESC LIMIT 1`,
+         FROM "ArticleSearch" a WHERE length(a.title) >= 3 ORDER BY a.rowid DESC LIMIT 1`,
         FTS_PROBE_TITLE_CHARS
     );
     if (probe.length > 0 && !Number(probe[0].found)) {
@@ -314,7 +332,7 @@ export async function checkSqliteFtsAndRepair(
         db.$executeRawUnsafe(`INSERT INTO article_fts(article_fts) VALUES ('delete-all')`),
         db.$executeRawUnsafe(
             `INSERT OR REPLACE INTO article_fts_backfill (id, upper_rowid, done_rowid)
-             SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "Article"`
+             SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "ArticleSearch"`
         ),
     ]);
     // Clear again after the commit: a search that ran during the reset may have re-cached
@@ -367,7 +385,7 @@ async function backfillLoop(options: { yieldMs?: number; targetChunkMs?: number 
 
             const next = await db.$queryRawUnsafe<{ bound: number | bigint | null }[]>(
                 `SELECT MAX(rowid) AS bound FROM (
-                     SELECT rowid FROM "Article" WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?
+                     SELECT rowid FROM "ArticleSearch" WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?
                  )`,
                 done,
                 upper,
@@ -390,7 +408,7 @@ async function backfillLoop(options: { yieldMs?: number; targetChunkMs?: number 
             await db.$transaction([
                 db.$executeRawUnsafe(
                     `INSERT INTO article_fts(rowid, id, title, content, excerpt, author)
-                     SELECT rowid, id, title, content, excerpt, author FROM "Article"
+                     SELECT rowid, id, title, content, excerpt, author FROM "ArticleSearch"
                      WHERE rowid > ? AND rowid <= ?`,
                     done,
                     bound
