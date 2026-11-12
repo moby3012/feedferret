@@ -264,7 +264,11 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
         toast.error(err || t("sidebar.errors.couldNotAdd"));
         return;
       }
-      toast.success(t("sidebar.feedAdded", { name: result.feed?.name || title || "feed" }));
+      toast.success(
+        "restored" in result && result.restored
+          ? t("sidebar.feedRestoredFromArchive", { name: result.feed?.name || title || "feed" })
+          : t("sidebar.feedAdded", { name: result.feed?.name || title || "feed" }),
+      );
       if (addFeedTab === "discover") {
         return;
       }

@@ -9,6 +9,7 @@ import { importOpmlXml } from "@/lib/import/opml-import";
 import { decimalExternalId, externalItemWhere, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { restoreArchivedFeedByUrl } from "@/lib/archived-feed";
 import { markWhereRead } from "@/server/articles/bulk-read";
 import { syncFeed } from "@/lib/rss-sync";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
@@ -244,13 +245,15 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
 
   const existing = await db.feed.findFirst({ where: { userId, ...(/^\d+$/.test(feedUrl) ? { extId: storedExternalId(feedUrl) } : { url: feedUrl }) } });
   if (existing) {
+    // Subscribing to an archived feed restores it (it would otherwise answer with a stream clients can't see).
+    const restored = existing.archivedAt ? await restoreArchivedFeedByUrl(userId, existing.url) : null;
     if (!existing.extId) {
       const { allocateExternalIds } = await import("@/lib/external-id-store");
       const [extId] = await allocateExternalIds(db as unknown as import("@prisma/client").PrismaClient, 1);
       await db.feed.updateMany({ where: { id: existing.id, extId: null }, data: { extId } });
       existing.extId = (await db.feed.findUniqueOrThrow({ where: { id: existing.id } })).extId;
     }
-    return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${decimalExternalId(existing.extId)}`, numSubscribers: 1, streamName: existing.name, title: existing.name });
+    return NextResponse.json({ numResults: 1, query: feedUrl, streamId: `feed/${decimalExternalId(existing.extId)}`, numSubscribers: 1, streamName: existing.name, title: existing.name, ...(restored ? { restored: true } : {}) });
   }
 
   const discovery = await discoverFeeds(feedUrl);
@@ -260,7 +263,8 @@ async function handleSubscriptionQuickAdd(userId: string, form: FormData) {
   if (await connectorFeedUrlError(feedUrl)) return NextResponse.json({ numResults: 0, error: "Connector route not allowed" });
   feedUrl = await stripConnectorSecrets(feedUrl);
   const resolvedExisting = await db.feed.findFirst({ where: { userId, url: feedUrl } });
-  if (resolvedExisting?.extId) return NextResponse.json({ numResults: 1, streamId: `feed/${decimalExternalId(resolvedExisting.extId)}`, streamName: resolvedExisting.name, title: resolvedExisting.name });
+  const restoredResolved = resolvedExisting?.archivedAt ? await restoreArchivedFeedByUrl(userId, feedUrl) : null;
+  if (resolvedExisting?.extId) return NextResponse.json({ numResults: 1, streamId: `feed/${decimalExternalId(resolvedExisting.extId)}`, streamName: resolvedExisting.name, title: resolvedExisting.name, ...(restoredResolved ? { restored: true } : {}) });
   const remoteFeed = await fetchFeedArticles({ url: feedUrl });
   const order = await db.feed.count({ where: { userId } });
   const feed = await db.feed.create({
@@ -418,7 +422,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
 
     if (path.endsWith("subscription/export")) {
       const [feeds, categories] = await Promise.all([
-        db.feed.findMany({ where: { userId: user.id }, include: { category: true } }),
+        db.feed.findMany({ where: { userId: user.id, archivedAt: null }, include: { category: true } }),
         db.category.findMany({ where: { userId: user.id } }),
       ]);
       return new NextResponse(generateApiOpml(await redactFeedsForClient(feeds), categories), { headers: { "content-type": "text/x-opml; charset=utf-8", "content-disposition": 'attachment; filename="subscriptions.opml"' } });
@@ -426,7 +430,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ path
     if (path.endsWith("subscription/list")) {
       // Connector secrets (RSSHub key, changedetection token) never leave the server (N3).
       const feeds = await redactFeedsForClient(await db.feed.findMany({
-        where: { userId: user.id },
+        where: { userId: user.id, archivedAt: null },
         include: { category: true },
         orderBy: [{ order: "asc" }, { name: "asc" }],
       }));

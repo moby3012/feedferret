@@ -190,6 +190,13 @@ let brokenHealed = false;
 const brokenRss = (title) =>
   `<?xml version="1.0"?><rss version="2.0"><channel><title>${title}</title><link>${baseUrl}</link><description>${title}</description><item><title>${title} item</title><guid>${title}-1</guid><link>${baseUrl}/broken/article</link><description>Recovered.</description></item></channel></rss>`;
 
+// A healthy feed that simply stopped publishing: valid RSS whose only item is ~400 days old.
+const STALE_ITEM_AGE_DAYS = 400;
+const staleRss = () =>
+  `<?xml version="1.0"?><rss version="2.0"><channel><title>Stale fixture</title><link>${baseUrl}/broken/stale/</link><description>Stopped publishing long ago.</description>` +
+  `<item><title>Stale fixture last post</title><guid>stale-fixture-1</guid><link>${baseUrl}/broken/stale/last-post</link><description>Nothing newer exists.</description>` +
+  `<pubDate>${new Date(Date.now() - STALE_ITEM_AGE_DAYS * 86_400_000).toUTCString()}</pubDate></item></channel></rss>`;
+
 function handleBrokenFeeds(res, url) {
   if (!url.pathname.startsWith("/broken/")) return false;
   const text = (status, body, type = "text/plain") => res.writeHead(status, { "content-type": type }).end(body);
@@ -201,6 +208,8 @@ function handleBrokenFeeds(res, url) {
       return text(404, "not found"), true;
     case "/broken/flaky.xml":
       return brokenHealed ? text(200, brokenRss("Flaky fixture"), "application/rss+xml") : text(403, "forbidden"), true;
+    case "/broken/stale.xml":
+      return text(200, staleRss(), "application/rss+xml"), true;
     case "/broken/heal":
       brokenHealed = true;
       return text(200, "healed"), true;
