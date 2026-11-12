@@ -38,15 +38,21 @@ type Sanitizer = Awaited<ReturnType<typeof getSanitizer>>;
 /**
  * DOMPurify keeps `iframe` for this one pass (RETURN_DOM: no re-parse of its output), then every iframe is
  * replaced by a link (known provider, URL built from the provider table, never copied from the source) or
- * removed, together with its fallback content, exactly as the default profile drops it. Returns null when no
- * iframe was converted, i.e. the plain output is the answer.
+ * removed together with its fallback content, as the default profile does. Notes on wrappers:
+ *   - `<noscript>`: wherever the HTML parser keeps its children inside the element (after other content) the
+ *     whole wrapper is dropped with them, as before; a noscript that LEADS the fragment is parsed as head
+ *     content and its iframe is re-parented to the body, so that one converts like a bare iframe;
+ *   - an iframe inside `<video>` fallback content converts as well;
+ *   - an iframe inside an `<a>` is removed, never turned into a nested link (`<a><a>` is invalid, and the
+ *     surrounding link already leads somewhere).
+ * Returns null when no iframe was converted, i.e. the plain output is the answer.
  */
 function sanitizeWithEmbedLinks(DOMPurify: Sanitizer, content: string): string | null {
   const body = DOMPurify.sanitize(content, { ADD_TAGS: ["iframe"], RETURN_DOM: true }) as unknown as HTMLElement;
   let converted = 0;
   for (const frame of Array.from(body.querySelectorAll("iframe"))) {
     const watch = watchUrlForEmbed(frame.getAttribute("src") ?? "");
-    if (!watch) {
+    if (!watch || frame.closest("a")) {
       frame.remove();
       continue;
     }

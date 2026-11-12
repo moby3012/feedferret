@@ -4,9 +4,10 @@
 //
 // Purpose: catch a quadratic (or window-linear) regression of the clustering tick. The primary gate is
 // therefore GROWTH, not an absolute budget: an incremental tick of 200 new articles is measured against a
-// 1.25k-article window and again against a 5k window (4× larger). The tick is dominated by a fixed
+// 1.25k-article window (3 ticks: it grows to ≈ 1.85k) and again against a 5k window (5 ticks, up to ≈ 6k): about
+// 3.5× the window on the floor samples, which are usually the first tick of each stage. The tick is dominated by a fixed
 // per-tick cost plus inverted-index lookups, so it barely grows (measured 1.1–1.4×); a per-pending scan
-// of the window would show ≈ 3–4×, anything quadratic ≈ 16×. Growth is a ratio of two measurements taken
+// of the window would show ≈ 3–3.5×, anything quadratic ≈ 12×. Growth is a ratio of two measurements taken
 // in the same process minutes apart, so machine speed cancels out; the earlier "multiple of a calibration
 // workload < 5" gate sat at 3.0–3.3 locally but reached 5.05 on a loaded CI runner and flaked.
 //
@@ -45,9 +46,9 @@ const WINDOW_ARTICLES = 5_000;
 const NEW_ARTICLES = 200;
 /** Sanity gate (catastrophic constant-factor regression), as a multiple of `referenceCpuMs()` (see the header). */
 const TICK_RATIO = Number(process.env.STORY_BENCH_TICK_RATIO ?? 8);
-/** Main gate: tick CPU against the 5k window ÷ tick CPU against the 1.25k window (4× the data). Measured ≈ 1.1–1.4; window-linear ≈ 3–4; quadratic ≈ 16. */
+/** Main gate: tick CPU against the 5k window ÷ tick CPU against the 1.25k window (≈ 3.5× the window, see the header). Measured ≈ 1.1–1.4; window-linear ≈ 3–3.5; quadratic ≈ 12. */
 const SMALL_WINDOW_ARTICLES = 1_250;
-const TICK_GROWTH_LIMIT = Number(process.env.STORY_BENCH_GROWTH_LIMIT ?? 2.5);
+const TICK_GROWTH_LIMIT = Number(process.env.STORY_BENCH_GROWTH_LIMIT ?? 2);
 const ENGINE_RATIO = Number(process.env.STORY_BENCH_ENGINE_RATIO ?? 1.2);
 /** Opt-in: also hold the wall-clock time to the reference machine's budgets (quiet machine only). */
 const STRICT = process.env.STORY_BENCH_STRICT === "1";
@@ -252,7 +253,7 @@ describe("story clustering performance (5k articles / 48 h, SQLite)", () => {
 
     // --- small window: backfill, then warm ticks
     await backfill(SMALL_WINDOW_ARTICLES, "small");
-    const small = await measureTicks(5);
+    const small = await measureTicks(3);
 
     // --- full 5k window: backfill the rest, then the ticks that count
     await backfill(WINDOW_ARTICLES - SMALL_WINDOW_ARTICLES - tickSeq * NEW_ARTICLES, "full");
@@ -271,7 +272,7 @@ describe("story clustering performance (5k articles / 48 h, SQLite)", () => {
     timings.referenceCpuMsAll = full.refs.map((x) => Math.round(x)).join("/");
     timings.incrementalTickRatioAll = full.samples.map((x, i) => (x / full.refs[i]).toFixed(2)).join("/");
     timings.incrementalTickRatio = Number(tickRatio.toFixed(2));
-    timings.tickGrowth4xWindow = Number(growth.toFixed(2));
+    timings.tickGrowthWindow = Number(growth.toFixed(2));
     timings.incrementalAttachedTotal = attached;
     expect(growth).toBeLessThan(TICK_GROWTH_LIMIT);
     expect(tickRatio).toBeLessThan(TICK_RATIO);

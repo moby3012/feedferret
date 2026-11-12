@@ -23,11 +23,16 @@ type Rule = {
   /** Canonical public watch page of a matched video (ingest turns an <iframe> into a link to it); absent = never converted. */
   watch?: (id: string, u: URL) => string;
 };
-const segment = (value?: string) => value && /^[\w-]+$/.test(value) ? value : undefined;
+const segment = (value?: string | null) => value && /^[\w-]+$/.test(value) ? value : undefined;
+// Both placeholders happen to be 11 characters long.
+const youtubeEmbedId = (value?: string) => value && /^[\w-]{11}$/.test(value) && value !== "videoseries" && value !== "live_stream" ? value : undefined;
+/** Twitch player ids: `?video=v123` and `?video=123` are the same video. */
+const twitchPlayerVideo = (value: string | null) => /^v?(\d+)$/.exec(value ?? "")?.[1];
 export const VIDEO_PROVIDERS: Rule[] = [
   { name: "YouTube", hosts: ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtube-nocookie.com"],
-    // `/embed/videoseries?list=…` is a playlist player, not a video id.
-    match: u => segment(u.hostname === "youtu.be" ? u.pathname.split("/")[1] : u.searchParams.get("v") ?? (["shorts", "embed", "live"].includes(u.pathname.split("/")[1]) && u.pathname.split("/")[2] !== "videoseries" ? u.pathname.split("/")[2] : undefined)),
+    // Embed paths carry exactly an 11-character video id: `/embed/videoseries?list=…` and
+    // `/embed/live_stream?channel=…` are players without one.
+    match: u => segment(u.hostname === "youtu.be" ? u.pathname.split("/")[1] : u.searchParams.get("v") ?? (u.pathname.split("/")[1] === "embed" ? youtubeEmbedId(u.pathname.split("/")[2]) : ["shorts", "live"].includes(u.pathname.split("/")[1]) ? u.pathname.split("/")[2] : undefined)),
     embed: id => `https://www.youtube-nocookie.com/embed/${id}`,
     thumbnail: id => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
     watch: id => `https://www.youtube.com/watch?v=${id}` },
@@ -39,8 +44,10 @@ export const VIDEO_PROVIDERS: Rule[] = [
     match: u => segment(u.hostname === "dai.ly" ? u.pathname.split("/")[1] : u.pathname.startsWith("/video/") || u.pathname.startsWith("/embed/video/") ? u.pathname.split("/").at(-1) : undefined),
     embed: id => `https://www.dailymotion.com/embed/video/${id}`,
     watch: id => `https://www.dailymotion.com/video/${id}` },
-  { name: "Twitch", hosts: ["twitch.tv", "www.twitch.tv", "clips.twitch.tv"],
-    match: u => u.hostname === "clips.twitch.tv" ? segment(u.pathname.split("/")[1]) : u.pathname.split("/")[1] === "videos" ? segment(u.pathname.split("/")[2]) : u.pathname.split("/")[2] === "clip" ? segment(u.pathname.split("/")[3]) : undefined,
+  { name: "Twitch", hosts: ["twitch.tv", "www.twitch.tv", "clips.twitch.tv", "player.twitch.tv"],
+    match: u => u.hostname === "player.twitch.tv" ? twitchPlayerVideo(u.searchParams.get("video")) :
+      u.hostname === "clips.twitch.tv" ? segment(u.pathname.split("/")[1] === "embed" ? u.searchParams.get("clip") : u.pathname.split("/")[1]) :
+      u.pathname.split("/")[1] === "videos" ? segment(u.pathname.split("/")[2]) : u.pathname.split("/")[2] === "clip" ? segment(u.pathname.split("/")[3]) : undefined,
     watch: (id, u) => u.hostname === "clips.twitch.tv" || u.pathname.includes("/clip/") ? `https://clips.twitch.tv/${id}` : `https://www.twitch.tv/videos/${id}` },
   { name: "PeerTube", match: u => u.pathname.startsWith("/videos/watch/") ? segment(u.pathname.split("/")[3]) : undefined },
   { name: "Reddit video", hosts: ["v.redd.it"], match: u => segment(u.pathname.split("/")[1]), watch: id => `https://v.redd.it/${id}` },

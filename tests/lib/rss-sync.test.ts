@@ -18,6 +18,8 @@ type FakeArticle = {
   upstreamContentHash?: string | null;
   contentHash: string | null;
   content: string;
+  feedContent?: string | null;
+  fullTextStatus?: string | null;
   excerpt: string | null;
   author: string | null;
   publishedAt: Date;
@@ -228,6 +230,18 @@ describe("upsertArticleBatch", () => {
       await upsertArticleBatch([input({ content: "<p>edited</p>" + withLink.slice(legacy.length), legacyContent: "<p>edited</p>" })]);
       expect(db.article.update).toHaveBeenCalledTimes(1);
       expect(store.find((a) => a.id === existing.id)!.content).toBe("<p>edited</p>" + withLink.slice(legacy.length));
+    });
+
+    it("a full-text row whose feedContent equals the legacy form is not rewritten either", async () => {
+      const { upsertArticleBatch } = await import("../../lib/rss-sync");
+      const existing = seedExisting({
+        userId: "user-1", feedId: "feed-1", dedupeKey: "k1", title: "T", link: "https://example.com/1",
+        content: "<p>extracted full text of the article, much longer than the teaser</p>", feedContent: legacy, fullTextStatus: "ok",
+        excerpt: "extracted full text", publishedAt: new Date(2024, 5, 1), imageUrl: null,
+      });
+      await upsertArticleBatch([input()]);
+      expect(db.article.update).not.toHaveBeenCalled();
+      expect(store.find((a) => a.id === existing.id)).toMatchObject({ feedContent: legacy, content: "<p>extracted full text of the article, much longer than the teaser</p>" });
     });
 
     it("a row that already holds the link form stays untouched on the next sync", async () => {

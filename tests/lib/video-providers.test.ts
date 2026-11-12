@@ -22,19 +22,24 @@ describe("declarative providers", () => {
 });
 describe("watchUrlForEmbed (ingest: iframe src → canonical watch page)", () => {
   it.each([
-    ["https://www.youtube.com/embed/abc123", "YouTube", "https://www.youtube.com/watch?v=abc123"],
-    ["https://www.youtube-nocookie.com/embed/abc123?start=4", "YouTube", "https://www.youtube.com/watch?v=abc123"],
-    ["//www.youtube.com/embed/abc123", "YouTube", "https://www.youtube.com/watch?v=abc123"],
-    ["http://youtube.com/embed/abc123", "YouTube", "https://www.youtube.com/watch?v=abc123"],
+    ["https://www.youtube.com/embed/abcdefghijk", "YouTube", "https://www.youtube.com/watch?v=abcdefghijk"],
+    ["https://www.youtube-nocookie.com/embed/abc_123-XYZ?start=4", "YouTube", "https://www.youtube.com/watch?v=abc_123-XYZ"],
+    ["//www.youtube.com/embed/abcdefghijk", "YouTube", "https://www.youtube.com/watch?v=abcdefghijk"],
+    ["http://youtube.com/embed/abcdefghijk", "YouTube", "https://www.youtube.com/watch?v=abcdefghijk"],
     ["https://player.vimeo.com/video/99", "Vimeo", "https://vimeo.com/99"],
     ["https://www.dailymotion.com/embed/video/x1", "Dailymotion", "https://www.dailymotion.com/video/x1"],
     ["https://www.twitch.tv/videos/1234", "Twitch", "https://www.twitch.tv/videos/1234"],
     ["https://clips.twitch.tv/ClipId", "Twitch", "https://clips.twitch.tv/ClipId"],
+    ["https://clips.twitch.tv/embed?clip=ClipId&parent=news.example", "Twitch", "https://clips.twitch.tv/ClipId"],
+    ["https://player.twitch.tv/?video=v1234&parent=news.example", "Twitch", "https://www.twitch.tv/videos/1234"],
+    ["https://player.twitch.tv/?video=1234", "Twitch", "https://www.twitch.tv/videos/1234"],
     ["https://v.redd.it/abc", "Reddit video", "https://v.redd.it/abc"],
   ])("%s", (src, provider, url) => expect(watchUrlForEmbed(src)).toEqual({ provider, url }));
   it.each([
     "https://video.example/videos/watch/abc-123", // PeerTube: any origin, no canonical page we can vouch for
     "https://www.youtube.com/embed/videoseries?list=PL1", "https://www.youtube.com/embed/",
+    "https://www.youtube.com/embed/live_stream?channel=UC1", "https://www.youtube.com/embed/abc", "https://www.youtube.com/embed/abcdefghijkl",
+    "https://clips.twitch.tv/embed", "https://clips.twitch.tv/embed?clip=a/b", "https://player.twitch.tv/?channel=somechannel", "https://player.twitch.tv/?video=abc", "https://player.twitch.tv/",
     "https://youtube.com.evil.example/embed/abc", "https://user:pw@www.youtube.com/embed/abc", "https://www.youtube.com:8443/embed/abc",
     "ftp://www.youtube.com/embed/abc", "javascript:alert(1)", "/embed/abc", "not a url", "",
   ])("rejects %s", (src) => expect(watchUrlForEmbed(src)).toBeUndefined());
@@ -42,9 +47,9 @@ describe("watchUrlForEmbed (ingest: iframe src → canonical watch page)", () =>
 describe("sanitized presentation pipeline", () => {
   const render = (html: string, keyHex = "", base = "https://news.example/article", frontends = {}) => runHtmlTaskInProcess("rewriteMedia", { html, keyHex, base, frontends });
   it("has no active player or thumbnail before consent without proxy", async () => {
-    const html = await render('<iframe src="https://www.youtube.com/embed/abc"></iframe><a href="https://vimeo.com/123">video</a>');
+    const html = await render('<iframe src="https://www.youtube.com/embed/abcdefghijk"></iframe><a href="https://vimeo.com/123">video</a>');
     expect(html).not.toMatch(/<(?:iframe|img|video)/);
-    expect(html).toContain('data-ff-video="https://www.youtube.com/embed/abc"');
+    expect(html).toContain('data-ff-video="https://www.youtube.com/embed/abcdefghijk"');
     expect(html).toContain("Load video");
   });
   it("only shows signed thumbnails and handles link-only articles", async () => {
