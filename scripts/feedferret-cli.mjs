@@ -15,6 +15,11 @@ if (!process.env.DATABASE_URL) process.env.DATABASE_URL = 'file:./prisma/dev.db'
   }
 }
 
+if (process.argv.slice(2).filter((v) => v !== '--')[0] === 'unlock-user') {
+  const { main } = await import('./auth-cli.mjs');
+  process.exit(await main(process.argv.slice(2)));
+}
+
 const { PrismaClient } = await import('@prisma/client');
 const prisma = new PrismaClient();
 const parser = new Parser();
@@ -27,7 +32,7 @@ function arg(name, fallback = undefined) {
   return idx >= 0 ? args[idx + 1] : fallback;
 }
 function usage() {
-  console.log(`FeedFerret CLI\n\nCommands:\n  list-users\n  create-user --email EMAIL --password PASS [--name NAME] [--admin true]\n  sync [--user EMAIL]\n  import-opml --user EMAIL --file subscriptions.opml\n  export-opml --user EMAIL --file subscriptions.opml\n  purge [--user EMAIL]\n  secrets:status [--json]\n`);
+  console.log(`FeedFerret CLI\n\nCommands:\n  list-users\n  create-user --email EMAIL --password PASS [--name NAME] [--admin true]   (also clears a sign-in lockout)\n  unlock-user EMAIL   (clear the per-account sign-in lockout)\n  sync [--user EMAIL]\n  import-opml --user EMAIL --file subscriptions.opml\n  export-opml --user EMAIL --file subscriptions.opml\n  purge [--user EMAIL]\n  secrets:status [--json]\n`);
 }
 
 async function findUser() {
@@ -112,7 +117,7 @@ try {
     const password = arg('password');
     if (!email || !password) throw new Error('Missing --email or --password');
     const hash = await bcrypt.hash(password, 12);
-    await prisma.user.upsert({ where: { email }, update: { password: hash }, create: { email, name: arg('name'), password: hash, role: arg('admin') === 'true' ? 'ADMIN' : 'USER' } });
+    await prisma.user.upsert({ where: { email }, update: { password: hash, failedLoginCount: 0, failedLoginWindowEnd: null, failedApiLoginCount: 0, failedApiLoginWindowEnd: null }, create: { email, name: arg('name'), password: hash, role: arg('admin') === 'true' ? 'ADMIN' : 'USER' } });
     console.log(`User ready: ${email}`);
   } else if (cmd === 'sync') await syncUser(await findUser());
   else if (cmd === 'purge') await purge(await findUser());

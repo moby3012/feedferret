@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
-  user: vi.fn(), token: vi.fn(), log: vi.fn(), compare: vi.fn(), limited: vi.fn(), find: vi.fn(), tx: vi.fn(), raw: vi.fn(),
+  user: vi.fn(), token: vi.fn(), log: vi.fn(), compare: vi.fn(), limited: vi.fn(), find: vi.fn(), tx: vi.fn(), raw: vi.fn(), update: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
-  user: { findUnique: mocks.user }, apiToken: { findFirst: mocks.token },
+  user: { findUnique: mocks.user, updateMany: mocks.update }, apiToken: { findFirst: mocks.token },
   loginAttempt: { create: mocks.log }, feed: { aggregate: async () => ({ _max: { lastFetchedAt: null } }) }, article: { findMany: mocks.find },
   $executeRaw: mocks.raw, $transaction: mocks.tx,
 } }));
@@ -18,6 +18,7 @@ const user = { id: "u1", email: "user@test.com", password: "hash", isActive: tru
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.user.mockResolvedValue(user);
+  mocks.update.mockResolvedValue({ count: 1 });
   mocks.compare.mockResolvedValue(true);
   mocks.limited.mockReturnValue({ success: true });
   mocks.find.mockResolvedValue([]);

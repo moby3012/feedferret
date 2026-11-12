@@ -173,6 +173,8 @@ describe("TOTP with plaintext and v2-sealed secrets", () => {
     await resetTotp(ids.sealedUser);
     expect(await verifyStepUp({ id: ids.sealedUser }, { totp: generateTotpToken(TOTP) })).toEqual({ ok: true });
     state.session = { user: { id: ids.sealedUser } };
+    // The step-up above consumed this step's code (single use); disabling needs a fresh one.
+    await resetTotp(ids.sealedUser);
     await expect(disableTwoFactor(generateTotpToken(TOTP))).resolves.toEqual({ enabled: false });
     // setup confirmation with a sealed pending secret (written by the next release)
     await state.db.user.update({ where: { id: ids.sealedUser }, data: { twoFactorSecret: sealSecret("user.twoFactorSecret", TOTP) } });

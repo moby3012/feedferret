@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Security — sign-in lockout isolated from other rate limiters
+
+- **Per-limiter stores.** `lib/rate-limit.ts` no longer keeps one shared in-memory table: every limiter has its own store and cap, so a flood of distinct keys against one endpoint cannot evict the sign-in lockout. Credential-guessing limiters (`critical`) evict fail-safe: active lockouts are never dropped; when only lockouts remain, new keys are refused until the earliest one expires.
+- **Per-account sign-in lockout in the database** (`User.failedLoginCount` / `failedLoginWindowEnd`, additive migration): 10 attempts per account per 15 minutes across all IPs, atomic under parallel guesses, persistent across restarts and replicas; a password change clears it. Password change and 2FA disable are now throttled too.
+- **IPv6 and fewer keys per attacker.** IPv6 clients are limited per `/64`, IPv4-mapped addresses as IPv4; the sign-in and magic-link IP stores evict their oldest lockout when full instead of refusing everybody; the GReader login no longer creates per-address entries for invented addresses and, when it accepts the main password, charges a second persistent per-account counter.
+- **Recovery.** `node scripts/auth-cli.mjs unlock-user <email>` (also `pnpm cli unlock-user`; `create-user` too) clears a lockout; the login form now says "incorrect … or too many attempts".
+- **Client address.** `TRUSTED_PROXY_COUNT=0` now means "no proxy" (TCP peer is the client). The Docker image records the TCP peer (`scripts/peer-address-preload.cjs`) and believes `X-Forwarded-For` only from private/loopback peers or `TRUSTED_PROXIES`; startup and first-request warnings when `TRUSTED_PROXY_COUNT` is unset; the bundled compose files leave it empty so the warning stays live. Docs: `docs/reverse-proxy.md`, `docs/self-hosting.md`.
+
 ### Changed — API source discovery guidance
 
 - The internal `/api/discover` endpoint now returns `hint: "needs-api-credentials"` with `hintPlatform` instead of `"needs-twitch"`; API variant IDs and translated labels are stored together. REST v1 discovery continues to return only `mode` and `feeds` (no hint fields).
