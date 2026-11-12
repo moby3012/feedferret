@@ -195,6 +195,8 @@
     "emailChanged": "Email changed. Reconnect your Google Reader and Fever clients.",
     "emailChangeFailed": "Could not change the email. Please try again.",
     "emailChangeRateLimited": "Too many attempts. Wait 15 minutes and try again.",
+    "passwordChangeRateLimited": "Too many attempts. Wait 15 minutes and try again.",
+    "twoFactorRateLimited": "Too many attempts. Wait 15 minutes and try again.",
     "invalidEmail": "Enter a valid email address.",
     "emailTaken": "This email address is already in use.",
     "emailChangeNoMail": "This server has no email delivery configured: no confirmation will be sent to the new address and no notice to the old one. Double-check the new address.",
@@ -634,9 +636,9 @@
     "registrationsDisabled": "Registrations are disabled",
     "privateSecureNewsFeed": "Your private, secure news feed.",
     "errors": {
-      "incorrectCredentials": "Incorrect email or password.",
+      "incorrectCredentials": "Incorrect email or password, or too many attempts. Wait a few minutes and try again.",
       "twoFactorRequired": "Two-factor code required.",
-      "passwordOrCodeIncorrect": "Password or authenticator code incorrect.",
+      "passwordOrCodeIncorrect": "Password or authenticator code incorrect, or too many attempts. Wait a few minutes and try again.",
       "magicLinkFailed": "Failed to send magic link.",
       "magicLinkSent": "Magic link sent — check your inbox.",
       "unexpectedError": "An unexpected error occurred.",
@@ -1151,6 +1153,10 @@
     "feedsInCategory": "{count} feeds"
   },
   "common": {
+    "feedDeferredReason": "Will retry later",
+    "feedRefreshDeferred": "Fetch deferred: {reason}",
+    "feedBlockedReason": "Access to this feed blocked (HTTP 403)",
+    "feedHostReason": "Server backoff or minimum fetch spacing",
     "apiSourceAttention": {
       "status": "Needs attention",
       "unconfigured": "Twitch is not set up (or was disabled). An admin must save a Client ID and Client Secret under Admin → Server settings → Twitch. This feed resumes automatically afterwards.",
@@ -1580,7 +1586,11 @@
     "fetch": {
       "updateInterval": "Update interval (minutes)",
       "globalDefault": "Global default",
-      "overrideSync": "Override global sync interval for this feed.",
+      "automatic": "Automatic",
+"cadence": "Automatic (avg. {count} posts/day · grouped)",
+"learning": "Automatic (learning publication cadence)",
+"nextSync": "Next fetch around {time}",
+"overrideSync": "Empty = automatic; inherited intervals are a minimum. Enter minutes to set a fixed interval for this feed.",
       "customUserAgent": "Custom User-Agent",
       "userAgentDefault": "FeedFerret/1.0 (default)",
       "timeout": "Timeout (seconds)",

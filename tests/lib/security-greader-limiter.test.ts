@@ -1,12 +1,12 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ user: vi.fn(), compare: vi.fn(), log: vi.fn() }));
-vi.mock("@/lib/db", () => ({ db: { user: { findUnique: mocks.user }, loginAttempt: { create: mocks.log } } }));
+const mocks = vi.hoisted(() => ({ user: vi.fn(), compare: vi.fn(), log: vi.fn(), update: vi.fn() }));
+vi.mock("@/lib/db", () => ({ db: { user: { findUnique: mocks.user, updateMany: mocks.update }, loginAttempt: { create: mocks.log } } }));
 vi.mock("bcryptjs", () => ({ default: { compare: mocks.compare } }));
 vi.mock("@/lib/markdown-render", () => ({ renderMarkdownToHtml: vi.fn() }));
 import { authenticateGReaderPassword } from "../../lib/greader";
-import { checkRateLimit, RATE_LIMITS } from "../../lib/rate-limit";
+import { checkRateLimit, rateLimitStoreSize, RATE_LIMITS } from "../../lib/rate-limit";
 const user = { id: "u1", password: "hash", isActive: true, twoFactorEnabled: false };
-beforeEach(() => { vi.clearAllMocks(); mocks.user.mockResolvedValue(user); mocks.compare.mockResolvedValue(true); });
+beforeEach(() => { vi.clearAllMocks(); mocks.update.mockResolvedValue({ count: 1 }); mocks.user.mockResolvedValue(user); mocks.compare.mockResolvedValue(true); });
 const request = (ip: string) => new Request("https://example.test", { headers: { "x-forwarded-for": ip } });
 it("successful polling never consumes failed-attempt budgets or writes audit rows", async () => {
   for (let i = 0; i < 25; i++) expect(await authenticateGReaderPassword(request("success-ip"), "success@test.com", "pw")).toEqual(user);
@@ -54,4 +54,36 @@ it("isolates GReader IP failures from web sign-in and blocks across emails", asy
   mocks.compare.mockClear();
   expect(await authenticateGReaderPassword(request("separate"), "other@test.com", "pw")).toBeNull();
   expect(mocks.compare).not.toHaveBeenCalled();
+});
+
+// The main web password is also guessable here, so it is charged to the persistent account budget.
+it("accepting the main password reserves a DB account attempt and refuses before bcrypt once locked", async () => {
+  mocks.update.mockResolvedValue({ count: 0 }); // the atomic reserve finds the account locked
+  mocks.user.mockResolvedValue({ ...user, id: "locked-user" });
+  expect(await authenticateGReaderPassword(request("db-lock-1"), "dblock@test.com", "pw")).toBeNull();
+  expect(mocks.compare).not.toHaveBeenCalled();
+  expect(mocks.log).not.toHaveBeenCalled(); // like every throttled request: no audit row
+  const reserve = mocks.update.mock.calls.find(([arg]) => arg.where?.failedApiLoginCount);
+  expect(reserve?.[0]).toMatchObject({ where: { id: "locked-user", failedApiLoginCount: { lt: 10 } } });
+  expect(mocks.update.mock.calls.some(([arg]) => "failedLoginCount" in (arg.where ?? {}))).toBe(false); // web counter untouched
+});
+it("a separate API password and unknown addresses never touch the DB account budget", async () => {
+  mocks.user.mockResolvedValue({ ...user, id: "api-pw-user", apiPasswordHash: "api-hash" });
+  expect(await authenticateGReaderPassword(request("db-lock-2"), "apipw@test.com", "pw")).not.toBeNull();
+  mocks.user.mockResolvedValue(null);
+  expect(await authenticateGReaderPassword(request("db-lock-3"), "ghost@test.com", "pw")).toBeNull();
+  // (touching the API password's last-used timestamp is the only write allowed)
+  expect(mocks.update.mock.calls.some(([arg]) => JSON.stringify(arg).includes("failed"))).toBe(false);
+});
+it("invented addresses only charge the IP budget (no per-address store entries)", async () => {
+  mocks.user.mockResolvedValue(null);
+  const before = rateLimitStoreSize("greader-email");
+  for (let i = 0; i < 5; i++) await authenticateGReaderPassword(request("invent"), `invented-${i}@test.com`, "pw");
+  expect(rateLimitStoreSize("greader-email")).toBe(before);
+  expect(rateLimitStoreSize("greader-ip")).toBeGreaterThan(0);
+});
+it("a correct main password gives its DB attempt back", async () => {
+  mocks.user.mockResolvedValue({ ...user, id: "refund-db-user" });
+  expect(await authenticateGReaderPassword(request("db-lock-4"), "refunddb@test.com", "pw")).not.toBeNull();
+  expect(mocks.update.mock.calls.some(([arg]) => arg.data?.failedApiLoginCount?.decrement === 1)).toBe(true);
 });

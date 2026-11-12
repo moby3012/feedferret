@@ -21,7 +21,9 @@ import { filterByFullTextConditions } from "./full-text-conditions";
 import { EscalationBudgetExhaustedError, fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
 import { RecentFullTextIndex, RECENT_FULL_TEXT_LIMIT, baselinesDiffer } from "./full-text-duplicates";
 import { decideFullText, leadCoverage } from "./extraction-quality";
-import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
+import { adaptiveInterval, publicationCadence, dueFeedWhere, initialSyncAt, deferredSyncAt } from "./adaptive-refresh";
+import { drainHostQueues } from "./host-sync-queue";
+import { hostSpacingMs, hostSpacingRemainingMs, HostDeferredError, withPoliteHost, recordHostFailure, classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
 import {
     FULL_TEXT_STATE_SELECT,
     MAX_FULL_TEXT_FETCHES_PER_SYNC,
@@ -595,6 +597,9 @@ export interface SyncFeedOptions {
      * articles would only evaluate (and fire) the same rules twice.
      */
     deferAutoReadRules?: boolean;
+    background?: boolean;
+    /** The bulk host queue retries busy feeds in this run, without persisting intermediate waits. */
+    retryBusyHostInRun?: boolean;
     /** Google News link resolution limits (tests / interactive add). */
     googleNews?: ResolveOptions;
 }
@@ -605,13 +610,34 @@ export interface SyncFeedOptions {
 export async function syncFeed(userId: string, feedId: string, options: SyncFeedOptions = {}) {
     const feed = await db.feed.findUnique({
         where: { id: feedId, userId },
-        include: { user: { select: { autoMuteFailingFeedsAfter: true } } },
+        include: { user: { select: { autoMuteFailingFeedsAfter: true, defaultUpdateFrequency: true } }, category: { include: { parent: true } } },
     });
 
     if (!feed) throw new Error("Feed not found");
     // N1: newsletter feeds are filled by inbound mail (lib/inbound-email.ts) and
     // have no fetchable URL — a sync must not fail/auto-mute them.
     if (feed.sourceType === NEWSLETTER_SOURCE_TYPE) return { success: true, count: 0, createdArticleIds: [] };
+
+    const scheduleFrom = async (consecutiveFailureCount: number) => {
+        const items = await db.article.findMany({
+            where: { feedId: feed.id, publishedAt: { lte: new Date() } },
+            orderBy: { publishedAt: "desc" }, take: 40,
+            select: { publishedAt: true, createdAt: true },
+        });
+        const minutes = politeUpdateFrequency({ ...feed, consecutiveFailureCount }, adaptiveInterval(items, feed.updateFrequency, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency)));
+        return { minutes, cadenceMinutes: publicationCadence(items) };
+    };
+
+    // Unscheduled rows that were fetched before (legacy rows, edited/restored/unmuted feeds): a recent fetch
+    // keeps its interval, so adoption never refetches a fresh feed early; the jitter only spreads overdue
+    // ones. Never-fetched feeds (OPML/FreshRSS/GReader imports, API/MCP creates) are due immediately, so
+    // the first reader boot after an import fetches them; their outcome persists a schedule below.
+    if (options.background && feed.nextSyncAt === null && feed.lastFetchedAt) {
+        const jittered = initialSyncAt(feed.id);
+        const fromLastFetch = new Date(feed.lastFetchedAt.getTime() + (await scheduleFrom(feed.consecutiveFailureCount)).minutes * 60_000);
+        await db.feed.updateMany({ where: { id: feed.id, nextSyncAt: null }, data: { nextSyncAt: fromLastFetch > jittered ? fromLastFetch : jittered } });
+        return { success: true, skipped: true, deferred: true, deferredReason: "initial_schedule", count: 0, createdArticleIds: [] };
+    }
 
     // Connector secrets (RSSHub key / changedetection.io token) must not reach
     // stored article links, feed errors, notifications or rule payloads.
@@ -620,7 +646,13 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
     const redact = (text: string) => redactConnectorTextWith(secretRules, text);
 
     try {
-        const remoteFeed = await fetchFeedArticles(feed);
+        const remoteFeed = options.background
+            ? await withPoliteHost(feed.url, () => fetchFeedArticles(feed))
+            : await fetchFeedArticles(feed);
+        const scheduleNext = async () => {
+            const { minutes, cadenceMinutes } = await scheduleFrom(0);
+            return { nextSyncAt: new Date(Date.now() + minutes * 60_000), cadenceMinutes };
+        };
         // G1: Google News keyword feeds — resolve redirect links to publisher
         // URLs (bounded, cached; falls back to the Google link).
         const isGoogleNews = isGoogleNewsFeedUrl(feed.url);
@@ -637,6 +669,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             await db.feed.update({
                 where: { id: feed.id },
                 data: {
+                    ...await scheduleNext(),
                     lastFetchedAt: new Date(),
                     lastStatus: "ok",
                     lastError: null,
@@ -763,7 +796,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
         await db.feed.update({
             where: { id: feed.id },
-            data: feedPatch,
+            data: { ...feedPatch, ...await scheduleNext() },
         });
 
         // Auto full-text extraction — only for new rows, rows whose upstream
@@ -820,6 +853,22 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
         return { success: true, count: articles.length, createdArticleIds };
     } catch (error) {
+        const { status, retryAfterMs } = classifyFetchFailure(error);
+        if (status === 403) {
+            await db.feed.update({ where: { id: feed.id }, data: {
+                nextSyncAt: deferredSyncAt(Math.max(15 * 60_000, Date.now() - (feed.lastStatus === "attention" && feed.lastError === "HTTP 403: feed_blocked" ? feed.failingSince?.getTime() ?? Date.now() : Date.now()), retryAfterMs ?? 0)),
+                failingSince: feed.lastStatus === "attention" && feed.lastError === "HTTP 403: feed_blocked" ? feed.failingSince ?? new Date() : new Date(),
+                lastStatus: "attention", lastError: "HTTP 403: feed_blocked",
+            } });
+            return { success: true, skipped: true, deferred: true, deferredReason: "feed_blocked", count: 0, createdArticleIds: [] };
+        }
+        if (error instanceof HostDeferredError || status === 429 || status === 503 || retryAfterMs !== null) {
+            const waitMs = error instanceof HostDeferredError ? error.waitMs : recordHostFailure(feed.url, error);
+            if (!(options.retryBusyHostInRun && error instanceof HostDeferredError && error.reason === "host_busy")) {
+                await db.feed.update({ where: { id: feed.id }, data: { nextSyncAt: deferredSyncAt(waitMs) } });
+            }
+            return { success: true, skipped: true, deferred: true, retryAfterMs: waitMs, deferredReason: error instanceof HostDeferredError ? error.reason : "host_backoff", count: 0, createdArticleIds: [] };
+        }
         // A saturated (`busy`, incl. a background queue-wait deadline) or missing
         // (`unavailable`) HTML worker pool says nothing about the feed: no failure
         // streak / auto-mute, no lastFetchedAt bump — the next sync retries it.
@@ -855,6 +904,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             where: { id: feed.id },
             data: {
                 lastFetchedAt: new Date(),
+                nextSyncAt: new Date(Date.now() + politeUpdateFrequency({ ...feed, consecutiveFailureCount: failureUpdate.consecutiveFailureCount }, adaptiveInterval([], feed.updateFrequency, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency))) * 60_000),
                 lastStatus: "error",
                 lastError: redact(String(error)).slice(0, 1000),
                 consecutiveFailureCount: failureUpdate.consecutiveFailureCount,
@@ -1287,45 +1337,88 @@ export async function autoTagNewArticles(
  * user waiting on one page (manual full text, previews) is served first.
  * Single-feed syncs (add feed, "refresh this feed") stay interactive.
  */
-export function syncUserFeeds(userId: string) {
-    return runAsBackgroundHtmlWork(() => syncUserFeedsNow(userId));
+export function syncUserFeeds(userId: string, options: { background?: boolean } = {}) {
+    return runAsBackgroundHtmlWork(() => syncUserFeedsNow(userId, options.background ?? false));
 }
 
-async function syncUserFeedsNow(userId: string) {
+type BackgroundFeed = { id: string; userId: string; url: string; autoMuted?: boolean };
+function syncBudgetMs() {
+    const configured = Number(process.env.SYNC_ALL_BUDGET_MS);
+    return Number.isFinite(configured) && configured > 0 ? configured : 240_000;
+}
+type BackgroundResult = { feed: string; success: boolean; skipped?: boolean; deferred?: boolean; deferredReason?: string; count?: number; error?: string; createdArticleIds?: string[] };
+async function syncBackgroundFeedQueues(feeds: BackgroundFeed[], deadline: number, deferAutoReadRules = false) {
+    const secretRules = await getConnectorSecretRules();
+    const publicUrl = (feed: BackgroundFeed) => stripConnectorSecretsWith(secretRules, feed.url);
+    const activeResults = await drainHostQueues<BackgroundFeed, BackgroundResult>(feeds.filter(feed => !feed.autoMuted), {
+        concurrency: getSyncConcurrency(), deadline, spacingMs: hostSpacingMs(), spacingRemaining: hostSpacingRemainingMs,
+        run: async (feed) => {
+            if (feed.autoMuted) return { result: { feed: publicUrl(feed), success: true, skipped: true, count: 0 } };
+            let res: Awaited<ReturnType<typeof syncFeed>>;
+            try {
+                res = await syncFeed(feed.userId, feed.id, { background: true, retryBusyHostInRun: true, deferAutoReadRules });
+            } catch (error) {
+                // One feed (e.g. deleted during the run) must not abort the run and strand the other leftovers.
+                // Programming errors still surface.
+                if (error instanceof TypeError || error instanceof ReferenceError || error instanceof SyntaxError) throw error;
+                logger.error(`[rss-sync] background sync of feed ${feed.id} failed:`, error);
+                return { result: { feed: publicUrl(feed), success: false, error: redactConnectorTextWith(secretRules, error instanceof Error ? error.message : String(error)) } };
+            }
+            const reason = "deferredReason" in res ? res.deferredReason : undefined;
+            const waitMs = "retryAfterMs" in res ? res.retryAfterMs : undefined;
+            // Busy: another run owns the lane, retry this feed. Backoff (429/503/Retry-After, incl. a plain 503
+            // that does not mark discovery/full-text rate-limited): pause this host's lane for the rest of the run.
+            return { result: { feed: publicUrl(feed), ...res }, ...(reason === "host_busy" ? { retryAfterMs: waitMs } : reason === "host_backoff" ? { pauseMs: waitMs } : {}) };
+        },
+        defer: async (feed, waitMs) => {
+            // A lane that frees up right away leaves the feed due as it is: no scheduling write needed.
+            if (waitMs > 1000) await db.feed.updateMany({ where: { id: feed.id }, data: { nextSyncAt: deferredSyncAt(waitMs) } });
+            return { feed: publicUrl(feed), success: true, skipped: true, deferred: true, deferredReason: "sync_budget", count: 0 };
+        },
+    });
+    let index = 0;
+    return feeds.map(feed => feed.autoMuted ? { feed: publicUrl(feed), success: true, skipped: true, count: 0 } : activeResults[index++]);
+}
+
+/**
+ * "Refresh all" (sync action, API v1, MCP) keeps its pre-adaptive rule: a feed is refetched once its configured
+ * interval (Google News floor/backoff included) has passed since the last fetch. A single-feed refresh bypasses it.
+ */
+async function userRefreshDueFeeds(userId: string) {
+    const user = await db.user.findUnique({ where: { id: userId }, select: { defaultUpdateFrequency: true } });
+    const userDefaultUpdateFrequency = user?.defaultUpdateFrequency ?? 60;
+    const feeds = await db.feed.findMany({
+        where: { userId, archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
+        select: {
+            id: true, userId: true, url: true, autoMuted: true, updateFrequency: true, lastFetchedAt: true, consecutiveFailureCount: true,
+            category: { select: { parentId: true, updateFrequency: true, parent: { select: { updateFrequency: true } } } },
+        },
+    });
+    const now = Date.now();
+    return feeds.filter((feed) => {
+        if (feed.autoMuted || !feed.lastFetchedAt) return true;
+        const minutes = politeUpdateFrequency(feed, computeEffectiveUpdateFrequency(feed, userDefaultUpdateFrequency));
+        return (now - feed.lastFetchedAt.getTime()) / 60_000 >= minutes;
+    });
+}
+
+/** The reader-boot request waits on this run: keep it short; leftovers keep staggered schedules for the server run. */
+const USER_BACKGROUND_BUDGET_MS = 30_000;
+
+async function syncUserFeedsNow(userId: string, background: boolean) {
+    const deadline = Date.now() + Math.min(syncBudgetMs(), USER_BACKGROUND_BUDGET_MS);
     await syncDynamicOpmlCategories(userId).catch((e) =>
         logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );
 
-    const user = await db.user.findUnique({
-        where: { id: userId },
-        select: { defaultUpdateFrequency: true },
-    });
-    const userDefaultUpdateFrequency = user?.defaultUpdateFrequency ?? 60;
-
-    const feeds = await db.feed.findMany({
-        // Archived feeds are never fetched in the background (restore re-enables them).
-        where: { userId, archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
-        select: {
-            id: true,
-            userId: true,
-            url: true,
-            updateFrequency: true,
-            lastFetchedAt: true,
-            autoMuted: true,
-            consecutiveFailureCount: true,
-            category: {
-                select: {
-                    parentId: true,
-                    updateFrequency: true,
-                    parent: { select: { updateFrequency: true } },
-                },
-            },
-        },
-    });
+    // Archived feeds are never fetched in bulk (restore re-enables them).
+    const feeds = background
+        ? await db.feed.findMany({ where: { userId, ...dueFeedWhere() }, select: { id: true, userId: true, url: true, autoMuted: true } })
+        : await userRefreshDueFeeds(userId);
 
     // Results reach clients (sync action, API v1, MCP): no connector secrets.
     const secretRules = await getConnectorSecretRules();
-    const results = await mapWithConcurrency(feeds, getSyncConcurrency(), async (rawFeed) => {
+    const results = background ? await syncBackgroundFeedQueues(feeds, deadline, true) : await mapWithConcurrency(feeds, getSyncConcurrency(), async (rawFeed) => {
         const feed = { ...rawFeed, url: stripConnectorSecretsWith(secretRules, rawFeed.url) };
         // F6: an auto-muted feed is deliberately not actively re-fetched
         // by background sync (stop wasting cycles hitting a dead URL) —
@@ -1335,19 +1428,7 @@ async function syncUserFeedsNow(userId: string) {
             return { feed: feed.url, success: true, skipped: true, count: 0 };
         }
 
-        const effectiveUpdateFrequency = politeUpdateFrequency(
-            feed,
-            computeEffectiveUpdateFrequency(feed, userDefaultUpdateFrequency),
-        );
-        const now = new Date();
-        const lastSync = feed.lastFetchedAt || new Date(0);
-        const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
-
-        if (diffMinutes < effectiveUpdateFrequency) {
-            return { feed: feed.url, success: true, skipped: true, count: 0 };
-        }
-
-        const res = await syncFeed(feed.userId, feed.id, { deferAutoReadRules: true });
+        const res = await syncFeed(feed.userId, feed.id, { deferAutoReadRules: true, background });
         return { feed: feed.url, ...res };
     });
 
@@ -1367,63 +1448,19 @@ export function syncAllFeeds() {
 
 async function syncAllFeedsNow() {
     const startedAt = Date.now();
-    const configuredBudget = Number(process.env.SYNC_ALL_BUDGET_MS);
-    const budgetMs = Number.isFinite(configuredBudget) && configuredBudget > 0 ? configuredBudget : 240_000;
-    let deferred = 0;
+    const budgetMs = syncBudgetMs();
     await syncDynamicOpmlCategories().catch((e) =>
         logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );
 
     const feeds = await db.feed.findMany({
-        where: { archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
-        select: {
-            id: true,
-            userId: true,
-            url: true,
-            updateFrequency: true,
-            lastFetchedAt: true,
-            autoMuted: true,
-            consecutiveFailureCount: true,
-            category: {
-                select: {
-                    parentId: true,
-                    updateFrequency: true,
-                    parent: { select: { updateFrequency: true } },
-                },
-            },
-            user: { select: { defaultUpdateFrequency: true } },
-        },
+        where: dueFeedWhere(),
+        orderBy: [{ nextSyncAt: { sort: "asc", nulls: "first" } }, { id: "asc" }],
+        select: { id: true, userId: true, url: true, autoMuted: true },
     });
 
-    // JS sorting keeps null-first ordering identical on SQLite and PostgreSQL.
-    feeds.sort((a, b) => (a.lastFetchedAt?.getTime() ?? -Infinity) - (b.lastFetchedAt?.getTime() ?? -Infinity) || a.id.localeCompare(b.id));
-    const results = await mapWithConcurrency(feeds, getSyncConcurrency(), async (feed) => {
-        // F6: skip auto-muted feeds — see the equivalent comment in
-        // syncUserFeeds.
-        if (feed.autoMuted) {
-            return { feed: feed.url, success: true, skipped: true, count: 0 };
-        }
-
-        const effectiveUpdateFrequency = politeUpdateFrequency(
-            feed,
-            computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency),
-        );
-        const now = new Date();
-        const lastSync = feed.lastFetchedAt || new Date(0);
-        const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
-
-        if (diffMinutes < effectiveUpdateFrequency) {
-            return { feed: feed.url, success: true, skipped: true, count: 0 };
-        }
-
-        if (Date.now() - startedAt >= budgetMs) {
-            deferred++;
-            return { feed: feed.url, success: true, skipped: true, deferred: true, count: 0 };
-        }
-
-        const res = await syncFeed(feed.userId, feed.id);
-        return { feed: feed.url, ...res };
-    });
+    const results = await syncBackgroundFeedQueues(feeds, startedAt + budgetMs);
+    const deferred = results.filter(result => "deferredReason" in result && result.deferredReason === "sync_budget").length;
 
     if (deferred) await writeSystemLog("warn", "sync", "Feed sync budget exhausted; remaining feeds deferred", { deferred, budgetMs });
     return results;

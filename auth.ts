@@ -9,7 +9,8 @@ import { consumeTotpToken } from "@/lib/totp-consume";
 import { sendSignInEmail } from "@/lib/mail";
 
 import { validateAuthSecret } from "@/lib/auth-secret";
-import { getClientIdentifier } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/rate-limit";
+import { reserveLoginAttempt, releaseLoginAttempt } from "@/lib/account-lockout";
 
 const isBuild = process.env.NEXT_PHASE === "phase-production-build";
 
@@ -49,7 +50,7 @@ const config = {
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = credentials.email as string;
-        const ip = getClientIdentifier(req).replace(/^ip:/, "");
+        const ip = getClientIp(req);
         const userAgent = (req as any)?.headers?.get?.("user-agent") ?? null;
 
         const logAttempt = async (success: boolean, userId?: string, failReason?: string) => {
@@ -68,6 +69,11 @@ const config = {
 
         if (!user?.password) { await logAttempt(false, undefined, "no_account"); return null; }
 
+        // Per-account lockout (persisted, across IPs): reserve an attempt before any password or
+        // OTP check; a locked account is refused like a wrong password and writes no audit row
+        // (anonymous traffic must not mean unbounded inserts). Released again on full success.
+        if (!isBuild && !await reserveLoginAttempt(user.id)) return null;
+
         const passwordsMatch = await bcrypt.compare(credentials.password as string, user.password);
         if (!passwordsMatch) { await logAttempt(false, user.id, "password"); return null; }
 
@@ -79,6 +85,7 @@ const config = {
           }
         }
 
+        if (!isBuild) await releaseLoginAttempt(user.id);
         await logAttempt(true, user.id);
         return user as any;
       },

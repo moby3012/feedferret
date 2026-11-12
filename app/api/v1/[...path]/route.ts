@@ -525,10 +525,11 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
       return apiError(error instanceof Error ? error.message : "Invalid proxy", 422);
     }
   }
+  if (data.updateFrequency !== undefined || data.categoryId !== undefined) data.nextSyncAt = null;
   if (typeof body.archived === "boolean") {
     // Archive / restore. Archiving an already archived feed keeps its original archive date.
     if (body.archived) await db.feed.updateMany({ where: { id: feedId, userId: user.id, archivedAt: null }, data: { archivedAt: new Date() } });
-    else data.archivedAt = null;
+    else { data.archivedAt = null; data.nextSyncAt = null; }
   }
   // An archive-only request leaves `data` empty (Prisma matches nothing then): existence is checked instead.
   const matched = Object.keys(data).length

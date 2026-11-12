@@ -844,6 +844,7 @@ export async function updateFeed(feedId: string, data: {
         where: { id: feedId, userId: session.user.id },
         data: {
             ...allowed,
+            ...(data.updateFrequency !== undefined || data.categoryId !== undefined || data.autoMuted === false ? { nextSyncAt: null } : {}),
             ...(data.readerFontSizeOverride !== undefined ? {
                 readerFontSizeOverride: data.readerFontSizeOverride && READER_FONT_SIZES.has(data.readerFontSizeOverride)
                     ? data.readerFontSizeOverride
@@ -866,7 +867,7 @@ export async function updateFeed(feedId: string, data: {
             // F6: a user manually unmuting a feed resets the failure counter and
             // gives it one more chance, rather than resuming right at the
             // threshold (see lib/feed-auto-mute.ts's applyManualUnmute).
-            ...(data.autoMuted === false ? { consecutiveFailureCount: 0, failingSince: null } : {}),
+            ...(data.autoMuted === false ? { consecutiveFailureCount: 0, failingSince: null, lastStatus: null, lastError: null } : {}),
         },
     });
 

@@ -104,8 +104,9 @@ test("re-test: a still-failing feed stays and explains why; a recovered feed is 
   await app.activate(card(page, "Forbidden").getByTestId("broken-retest"));
   await expect(card(page, "Forbidden").getByTestId("broken-notice")).toHaveText("Still failing: Access denied – maybe login or bot protection");
   await expect(card(page, "Forbidden").getByTestId("broken-category")).toHaveText("Access denied – maybe login or bot protection");
-  await expect(card(page, "Forbidden")).toContainText("3 failed attempts in a row");
-  expect(brokenFeedState(forbidden.id)).toMatchObject({ exists: true, consecutiveFailureCount: 3 });
+  // A 403 is visible attention, without incrementing failures or auto-muting.
+  await expect(card(page, "Forbidden")).toContainText("2 failed attempts in a row");
+  expect(brokenFeedState(forbidden.id)).toMatchObject({ exists: true, consecutiveFailureCount: 2 });
   expect(brokenFeedState(flaky.id)).toMatchObject({ autoMuted: true, consecutiveFailureCount: 10 });
 
   await request.get(`${fixture}/broken/heal`);
@@ -127,7 +128,7 @@ test("'Re-test all' walks the list with progress and reports how many recovered"
   await expect(page.getByTestId("broken-bulk-progress")).toHaveCount(0);
   await expect(page.getByTestId("broken-feed")).toHaveCount(1);
   expect(brokenFeedState(flaky.id)).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0 });
-  expect(brokenFeedState(forbidden.id)).toMatchObject({ exists: true, consecutiveFailureCount: 3 });
+  expect(brokenFeedState(forbidden.id)).toMatchObject({ exists: true, consecutiveFailureCount: 2 });
 });
 
 test("unmute gives a muted feed a clean slate and drops it from the list", async ({ app, page }) => {

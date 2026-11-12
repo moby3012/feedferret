@@ -96,7 +96,7 @@ export function classifyFetchFailure(error: unknown): { kind: FetchFailureKind; 
 export function recordHostFailure(url: string, error: unknown, now = Date.now()): number {
     const host = hostOf(url);
     if (!host) return 0;
-    const { kind, retryAfterMs } = classifyFetchFailure(error);
+    const { kind, status, retryAfterMs } = classifyFetchFailure(error);
     if (kind === "permanent") return 0;
     const prior = hosts.get(host);
     const failures = (prior?.failures ?? 0) + 1;
@@ -108,8 +108,8 @@ export function recordHostFailure(url: string, error: unknown, now = Date.now())
     const wait = Math.max(exponential, retryAfter);
     prune(now);
     hosts.delete(host); // re-insert so Map order approximates recency for pruning
-    hosts.set(host, { failures, until: now + wait, rateLimited: kind === "rate_limited" || retryAfterMs !== null });
-    return wait;
+    hosts.set(host, { failures, until: Math.max(prior?.until ?? 0, now + wait), rateLimited: status !== 403 && (kind === "rate_limited" || retryAfterMs !== null) });
+    return Math.max(wait, (prior?.until ?? 0) - now);
 }
 
 /**
@@ -133,6 +133,7 @@ export function recordHostSuccess(url: string) {
 /** Test helper. */
 export function resetHostBackoff() {
     hosts.clear();
+    lanes.clear();
 }
 
 /** Honour an API's explicit quota reset even on a successful final request. */
@@ -141,4 +142,51 @@ export function recordHostRateLimit(url: string, resetAt: number, now = Date.now
     if (!host || !Number.isFinite(resetAt) || resetAt <= now) return;
     prune(now);
     hosts.set(host, { failures: 0, until: Math.max(hosts.get(host)?.until ?? 0, Math.min(resetAt, now + MAX_RETRY_AFTER_MS)), rateLimited: true });
+}
+
+const HOST_BUSY_RETRY_MS = 250;
+// Single-process, non-blocking gate. Busy hosts must never occupy a sync pool worker.
+const lanes = new Map<string, { busy: boolean; next: number }>();
+export class HostDeferredError extends Error {
+    constructor(readonly waitMs: number, readonly reason = "host_backoff") { super("Host fetch deferred"); }
+}
+export async function withPoliteHost<T>(url: string, task: () => Promise<T>): Promise<T> {
+    const host = hostOf(url);
+    if (!host) return task();
+    const backoff = hostRateLimitRemainingMs(url);
+    if (backoff) throw new HostDeferredError(backoff);
+    const spacing = hostSpacingMs();
+    let lane = lanes.get(host);
+    if (!lane) { lane = { busy: false, next: 0 }; lanes.set(host, lane); }
+    if (lane.busy || lane.next > Date.now()) {
+        // Floor while a fetch is in flight, so spacing=0 does not spin the retrying queue.
+        throw new HostDeferredError(Math.max(1, lane.busy ? Math.max(HOST_BUSY_RETRY_MS, spacing) : 0, lane.next - Date.now()), "host_busy");
+    }
+    lane.busy = true;
+    lane.next = Date.now() + spacing;
+    try {
+        const result = await task();
+        if (!hostBackoffRemainingMs(url)) recordHostSuccess(url);
+        return result;
+    } catch (error) {
+        const { status, retryAfterMs } = classifyFetchFailure(error);
+        if (status !== 403 && (status === 429 || status === 503 || retryAfterMs !== null)) {
+            throw new HostDeferredError(recordHostFailure(url, error));
+        }
+        throw error;
+    } finally {
+        lane.busy = false;
+        const saved = lane;
+        setTimeout(() => { if (lanes.get(host) === saved && !saved.busy && saved.next <= Date.now()) lanes.delete(host); }, Math.max(0, lane.next - Date.now())).unref?.();
+    }
+}
+
+export function hostSpacingMs(): number {
+    const configured = Number(process.env.FEED_HOST_SPACING_MS);
+    return Number.isFinite(configured) && configured >= 0 ? configured : 2000;
+}
+export function hostSpacingRemainingMs(url: string): number {
+    const host = hostOf(url);
+    const lane = host ? lanes.get(host) : undefined;
+    return Math.max(hostRateLimitRemainingMs(url), lane ? Math.max(0, lane.next - Date.now()) : 0);
 }

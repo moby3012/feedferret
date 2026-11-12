@@ -75,6 +75,7 @@ Instead of an `.env` file, the variables are entered under *Environment Variable
 | `AUTH_SECRET` | Session key (32+ characters) | `openssl rand -base64 32` |
 | `AUTH_URL` | Public URL of the instance | `https://rss.example.com` |
 | `AUTH_TRUST_HOST` | Must be `true` behind Coolify's Traefik | `true` |
+| `TRUSTED_PROXY_COUNT` | Number of reverse proxies in front of the app. Coolify's Traefik is exactly one: use `1` (`2` if Cloudflare sits in front of Traefik). Per-IP rate limits and the sign-in IP throttle key on the client IP taken from the right-most trusted `X-Forwarded-For` hop; if the value is unset or wrong, FeedFerret logs a warning and clients may be able to spoof their IP. `0` = no proxy (exposed directly). See [reverse proxy](reverse-proxy.md#trusted-proxy-count) | `1` |
 | `POSTGRES_PASSWORD` | DB password (PostgreSQL mode) | random string |
 
 Optional variables (OAuth, email, VAPID) can also be set here — all fields from the *Environment Variables* section further below work identically.
@@ -356,6 +357,7 @@ volumes:
 
 | Problem | Cause | Solution |
 |---|---|---|
+| "Incorrect password or too many attempts" although the password is right | The account is locked for up to 15 minutes after 10 failed sign-ins (also from other IPs) | Wait, sign in with a magic link/OAuth, or clear it: `docker compose exec feedferret node scripts/auth-cli.mjs unlock-user you@example.com` |
 | Login fails / `CSRF` error behind a reverse proxy | `AUTH_TRUST_HOST` not set | Set `AUTH_TRUST_HOST=true` in `.env` |
 | Port 3000 already in use | Another service is using the port | Set `PORT=3001` in `.env` and change `ports:` in your compose file to `"3001:3001"` |
 | `Connection refused` to the database at startup | PostgreSQL not ready yet | Check container logs: `docker compose logs postgres`; the health check should catch this automatically |

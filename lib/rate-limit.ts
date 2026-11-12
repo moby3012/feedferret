@@ -3,39 +3,103 @@
  * Uses sliding window algorithm per identifier (IP, userId, etc.)
  */
 
+import { getClientIpKey } from "@/lib/client-ip";
+export { getClientIp, resetProxyCountWarning, warnIfProxyCountUnset } from "@/lib/client-ip";
+
 interface RateLimitEntry {
   count: number;
   resetAt: number;
+  /** Limit the entry was last checked against (an entry at/over it is an active lockout). */
+  limit: number;
 }
 
-const store = new Map<string, RateLimitEntry>();
+/**
+ * One store per limiter (`config.prefix`), each with its own capacity. A flood of distinct keys
+ * against one limiter (many IPs, attacker-chosen key parts) can therefore only ever evict entries of
+ * that same limiter, never e.g. the sign-in lockout.
+ *
+ * Eviction when a namespace is full (a cheap in-process mitigation, not a cross-instance store):
+ *  - ordinary limiters drop expired entries, then the oldest ones;
+ *  - `critical` limiters (credential guessing: sign-in, step-up, webhook auth failures, …) are
+ *    FAIL-SAFE: expired entries go first, then lightly used entries (below half of their limit), then
+ *    any entry that is not yet locked. What happens when only active lockouts are left depends on
+ *    `overflow`:
+ *      - "refuse" (default): lockouts are never evicted, new keys are refused ("limited") until the
+ *        earliest lockout expires. For limiters without a backstop (internal API key, webhook
+ *        secret, step-ups). Filling the table needs `cap × limit` requests from `cap` distinct keys.
+ *      - "evict-oldest": the oldest lockouts go. For IP-keyed limiters whose accounts are also
+ *        protected elsewhere (sign-in: the per-account DB lockout; magic link: the unlock path must
+ *        never be globally deniable), so one host cannot deny everyone else.
+ */
+type Overflow = "refuse" | "evict-oldest";
 
-// Safety cap so a flood of distinct identifiers (spoofed IPs, etc.) can't grow the
-// store unbounded between the periodic GC passes below.
-const MAX_STORE_ENTRIES = 50_000;
+interface Namespace {
+  entries: Map<string, RateLimitEntry>;
+  cap: number;
+  critical: boolean;
+  overflow: Overflow;
+  /** Critical namespaces only: while now < this, a full scan already found nothing evictable. */
+  saturatedUntil: number;
+}
+
+const namespaces = new Map<string, Namespace>();
+
+// Safety cap per limiter so a flood of distinct identifiers can't grow memory unbounded between
+// the periodic GC passes below.
+export const MAX_STORE_ENTRIES = 50_000;
+/** Share of a full namespace freed per eviction pass, so floods don't trigger a full scan per request. */
+const EVICTION_BATCH_FRACTION = 0.01;
+
+function namespaceFor(config: RateLimitConfig): Namespace {
+  let ns = namespaces.get(config.prefix);
+  if (!ns) {
+    ns = { entries: new Map(), cap: MAX_STORE_ENTRIES, critical: false, overflow: config.overflow ?? "refuse", saturatedUntil: 0 };
+    namespaces.set(config.prefix, ns);
+  }
+  if (config.critical) ns.critical = true;
+  return ns;
+}
 
 // Cleanup stale entries every 5 minutes
-setInterval(() => {
+const gc = setInterval(() => {
   const now = Date.now();
-  for (const [key, entry] of store) {
-    if (entry.resetAt < now) store.delete(key);
+  for (const ns of namespaces.values()) {
+    for (const [key, entry] of ns.entries) {
+      if (entry.resetAt < now) ns.entries.delete(key);
+    }
   }
 }, 5 * 60 * 1000);
+gc.unref?.();
 
-/**
- * Evicts the oldest-inserted entries (Map preserves insertion order) when the store
- * is at capacity, making room for a new key. This is a cheap mitigation, not a
- * replacement for a shared/cross-instance store.
- */
-function evictOldestIfAtCapacity() {
-  if (store.size < MAX_STORE_ENTRIES) return;
-  const excess = store.size - MAX_STORE_ENTRIES + 1;
-  let removed = 0;
-  for (const key of store.keys()) {
-    if (removed >= excess) break;
-    store.delete(key);
-    removed++;
+/** Frees room for one new key. Returns false only for a saturated critical namespace. */
+function makeRoom(ns: Namespace, now: number): boolean {
+  if (ns.entries.size < ns.cap) return true;
+  if (ns.critical && now < ns.saturatedUntil) return false;
+  const target = Math.max(1, Math.floor(ns.cap * EVICTION_BATCH_FRACTION));
+  let freed = 0;
+  const evict = (match: (entry: RateLimitEntry) => boolean) => {
+    for (const [key, entry] of ns.entries) {
+      if (freed >= target) return;
+      if (match(entry)) {
+        ns.entries.delete(key);
+        freed++;
+      }
+    }
+  };
+  evict((entry) => entry.resetAt < now);
+  if (ns.critical) {
+    evict((entry) => entry.count * 2 < entry.limit);
+    evict((entry) => entry.count < entry.limit);
+    if (freed === 0 && ns.overflow === "refuse") {
+      let earliest = Infinity;
+      for (const entry of ns.entries.values()) earliest = Math.min(earliest, entry.resetAt);
+      ns.saturatedUntil = earliest;
+      return false;
+    }
+    if (freed > 0) return true;
   }
+  evict(() => true);
+  return true;
 }
 
 export interface RateLimitConfig {
@@ -43,8 +107,15 @@ export interface RateLimitConfig {
   limit: number;
   /** Window size in seconds */
   windowSecs: number;
-  /** Prefix for the store key (e.g., "discovery-search") */
+  /** Prefix for the store key (e.g., "discovery-search"); also names the limiter's own store. */
   prefix: string;
+  /**
+   * Credential-guessing / abuse-sensitive limiter: its store evicts fail-safe (active lockouts are
+   * never dropped to make room, new keys are refused instead). See `Namespace`.
+   */
+  critical?: boolean;
+  /** Critical limiters only: what to do when the store holds nothing but active lockouts. */
+  overflow?: Overflow;
 }
 
 export interface RateLimitResult {
@@ -54,23 +125,33 @@ export interface RateLimitResult {
   retryAfterSecs?: number;
 }
 
+/** Number of tracked keys in a limiter's store (diagnostics and tests). */
+export function rateLimitStoreSize(prefix: string): number {
+  return namespaces.get(prefix)?.entries.size ?? 0;
+}
+
 export function checkRateLimit(
   identifier: string,
   config: RateLimitConfig
 ): RateLimitResult {
-  const key = `${config.prefix}:${identifier}`;
+  const ns = namespaceFor(config);
   const now = Date.now();
   const windowMs = config.windowSecs * 1000;
 
-  let entry = store.get(key);
+  let entry = ns.entries.get(identifier);
 
   // Window expired or no entry → reset
   if (!entry || entry.resetAt < now) {
-    if (!store.has(key)) evictOldestIfAtCapacity();
-    entry = { count: 0, resetAt: now + windowMs };
-    store.set(key, entry);
+    if (!entry && !makeRoom(ns, now)) {
+      // Fail-safe: no room and every entry is an active lockout → treat the new key as limited.
+      const resetAt = Math.max(ns.saturatedUntil, now + 1000);
+      return { success: false, remaining: 0, resetAt, retryAfterSecs: Math.ceil((resetAt - now) / 1000) };
+    }
+    entry = { count: 0, resetAt: now + windowMs, limit: config.limit };
+    ns.entries.set(identifier, entry);
   }
 
+  entry.limit = config.limit;
   entry.count++;
 
   if (entry.count > config.limit) {
@@ -93,7 +174,7 @@ export function checkRateLimit(
 /** Inspect failed-attempt budgets without consuming a request. */
 export function peekRateLimit(identifier: string, config: RateLimitConfig): RateLimitResult {
   const now = Date.now();
-  const entry = store.get(`${config.prefix}:${identifier}`);
+  const entry = namespaces.get(config.prefix)?.entries.get(identifier);
   const count = entry && entry.resetAt >= now ? entry.count : 0;
   const resetAt = entry && entry.resetAt >= now ? entry.resetAt : now + config.windowSecs * 1000;
   return { success: count < config.limit, remaining: Math.max(0, config.limit - count), resetAt };
@@ -104,7 +185,7 @@ export function peekRateLimit(identifier: string, config: RateLimitConfig): Rate
  * that turned out to be valid). No-op for an expired or missing window.
  */
 export function releaseRateLimit(identifier: string, config: RateLimitConfig): void {
-  const entry = store.get(`${config.prefix}:${identifier}`);
+  const entry = namespaces.get(config.prefix)?.entries.get(identifier);
   if (entry && entry.resetAt >= Date.now() && entry.count > 0) entry.count -= 1;
 }
 
@@ -114,14 +195,15 @@ export function releaseRateLimit(identifier: string, config: RateLimitConfig): v
  */
 export function consumeRateLimit(identifier: string, config: RateLimitConfig, amount: number): void {
   if (!(amount > 0)) return;
-  const key = `${config.prefix}:${identifier}`;
+  const ns = namespaceFor(config);
   const now = Date.now();
-  let entry = store.get(key);
+  let entry = ns.entries.get(identifier);
   if (!entry || entry.resetAt < now) {
-    if (!entry) evictOldestIfAtCapacity();
-    entry = { count: 0, resetAt: now + config.windowSecs * 1000 };
-    store.set(key, entry);
+    if (!entry && !makeRoom(ns, now)) return;
+    entry = { count: 0, resetAt: now + config.windowSecs * 1000, limit: config.limit };
+    ns.entries.set(identifier, entry);
   }
+  entry.limit = config.limit;
   entry.count += Math.trunc(amount);
 }
 
@@ -180,11 +262,16 @@ export const RATE_LIMITS = {
     prefix: "rsshub-route",
   } satisfies RateLimitConfig,
 
-  // Auth: sign-in attempts — 10 per 15 minutes per IP
+  // Auth: sign-in attempts — 10 per 15 minutes per IP. `critical` (here and on the other
+  // credential-guessing limiters): own fail-safe store, see `Namespace`. Spreads of this preset
+  // (GReader/Fever/credentials-status) get their own store via their own prefix.
+  // The per-ACCOUNT sign-in lockout lives in the database: lib/account-lockout.ts.
   authSignIn: {
     limit: 10,
     windowSecs: 15 * 60,
     prefix: "auth-signin",
+    critical: true,
+    overflow: "evict-oldest",
   } satisfies RateLimitConfig,
 
   // Auth: sign-out. Not a credential guess, so it must NEVER draw from the sign-in budget: a refused
@@ -201,6 +288,8 @@ export const RATE_LIMITS = {
     limit: 3,
     windowSecs: 10 * 60,
     prefix: "auth-magic",
+    critical: true,
+    overflow: "evict-oldest",
   } satisfies RateLimitConfig,
 
   // REST API v1 write operations — 60 per minute per user/IP
@@ -229,6 +318,7 @@ export const RATE_LIMITS = {
     limit: 30,
     windowSecs: 60,
     prefix: "internal-api",
+    critical: true,
   } satisfies RateLimitConfig,
 
   // OPML import (UI action, REST v1, MCP): each call parses a document and writes
@@ -358,6 +448,7 @@ export const RATE_LIMITS = {
     limit: 10,
     windowSecs: 5 * 60,
     prefix: "inbound-email-webhook-auth-fail",
+    critical: true,
   } satisfies RateLimitConfig,
 } as const;
 
@@ -378,28 +469,15 @@ export function rateLimitResponse(result: RateLimitResult): Response {
 }
 
 /**
- * Helper to get identifier from request (IP or user ID)
+ * Helper to get identifier from request (IP or user ID). The IP part comes from `lib/client-ip.ts`
+ * (IPv6 collapses to its /64; forwarded headers are only believed from a trusted proxy peer).
  */
 export function getClientIdentifier(
   request: Request,
   userId?: string | null
 ): string {
   if (userId) return `user:${userId}`;
-
-  // Try common proxy headers
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const hops = forwarded.split(",").map(hop => hop.trim());
-    const configured = Number(process.env.TRUSTED_PROXY_COUNT ?? 1);
-    const count = Number.isSafeInteger(configured) && configured >= 1 ? configured : 1;
-    return `ip:${hops[Math.max(0, hops.length - count)] || "unknown"}`;
-  }
-
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) return `ip:${realIp}`;
-
-  // Fallback to unknown (still rate-limited globally)
-  return "ip:unknown";
+  return getClientIpKey(request);
 }
 
 /** Which limiter guards a POST to the Auth.js route (`/api/auth/<action>/…`). */

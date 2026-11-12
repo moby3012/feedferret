@@ -36,13 +36,16 @@ export type BrokenFeedCategory =
 export type BrokenFeedLike = {
   sourceType?: string | null;
   autoMuted?: boolean | null;
+  lastStatus?: string | null;
+  lastError?: string | null;
   consecutiveFailureCount?: number | null;
 };
 
 /** Newsletter feeds have no URL and are never fetched: they can't be "broken". */
 export function isBrokenFeed(feed: BrokenFeedLike): boolean {
   if (feed.sourceType === NEWSLETTER_SOURCE_TYPE) return false;
-  return feed.autoMuted === true || (feed.consecutiveFailureCount ?? 0) > 0;
+  return feed.autoMuted === true || (feed.consecutiveFailureCount ?? 0) > 0
+    || (feed.lastStatus === "attention" && feed.lastError === "HTTP 403: feed_blocked");
 }
 
 export function countBrokenFeeds(feeds: readonly BrokenFeedLike[]): number {

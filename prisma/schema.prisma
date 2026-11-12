@@ -148,6 +148,14 @@ model User {
   // "Defekte Feeds" → inactive group: a feed that still fetches fine but whose newest
   // article is older than this many days counts as inactive (not broken).
   inactiveFeedDays Int @default(180)
+  // Per-account sign-in lockout (lib/account-lockout.ts): attempts reserved in the current
+  // fixed window; the window (and the lockout once the count hits the limit) ends at failedLoginWindowEnd.
+  failedLoginCount     Int       @default(0)
+  failedLoginWindowEnd DateTime?
+  // Same, separate counter for the Google Reader / Fever endpoints when they accept the MAIN password
+  // (lib/greader.ts), so a sync client with a stale password cannot lock the owner out of the web sign-in.
+  failedApiLoginCount     Int       @default(0)
+  failedApiLoginWindowEnd DateTime?
   @@index([digestEnabled])
   @@index([pushEnabled])
 }
@@ -338,6 +346,8 @@ model Feed {
   updateFrequency Int?
   retentionDays   Int?
   keepMinArticles Int?
+  nextSyncAt      DateTime?
+  cadenceMinutes  Float?
   lastFetchedAt   DateTime?
   lastStatus       String?
   lastError        String?
@@ -393,6 +403,7 @@ model Feed {
   @@index([userId])
   @@index([categoryId])
   @@index([userId, archivedAt])
+  @@index([autoMuted, archivedAt, nextSyncAt])
 }
 
 model Article {

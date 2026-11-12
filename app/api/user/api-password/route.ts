@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   let body;
   try { body = JSON.parse(await readGReaderBody(request, 4096)); } catch { return new Response("Invalid JSON", { status: 400 }); }
   if (!body || typeof body !== "object" || Array.isArray(body)) return new Response("Invalid JSON", { status: 400 });
-  const limit = checkRateLimit(user.id, { prefix: "api-password-step-up", limit: 10, windowSecs: 900 });
+  const limit = checkRateLimit(user.id, { prefix: "api-password-step-up", limit: 10, windowSecs: 900, critical: true });
   if (!limit.success) return rateLimitResponse(limit);
   const stepUp = await verifyStepUp(user, { currentPassword: body.currentPassword, totp: body.totp });
   if (!stepUp.ok) {
