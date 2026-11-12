@@ -22,7 +22,7 @@ import { logger } from "@/lib/logger";
 //
 // So: one read-only SELECT of the candidate ids (scope + `isRead = false` +
 // `createdAt <= cutoff`), then short UPDATE … RETURNING statements of
-// bulkReadChunk() ids each, every one its own implicit transaction. Locks live
+// bulkReadChunk() ids each, every one its own transaction. Locks live
 // for one chunk only; RETURNING yields exactly the rows this call changed (the
 // Undo set) even while other writers touch the same rows.
 
@@ -43,40 +43,100 @@ export interface BulkReadResult {
   ids: string[];
   /** False when a later chunk failed: `ids` holds what was changed before the failure. */
   complete: boolean;
+  /** With `complete: false`: the ids of the failed chunk and every chunk after it (not attempted / rolled back). */
+  remaining: string[];
+}
+
+/** Thrown by protocol handlers that have no partial-success semantics: some chunks committed, retry the request. */
+export class PartialBulkWriteError extends Error {
+  constructor(readonly done: number, readonly remaining: number) {
+    super(`Bulk read-state write partially applied (${done} done, ${remaining} left); retry`);
+  }
+}
+
+/** Attempts per chunk when the database picks it as a deadlock / serialization victim (or SQLite stays busy). */
+export const CHUNK_ATTEMPTS = 4;
+
+/** Deadlock (40P01), serialization failure (40001), Prisma's write-conflict code (P2034), SQLite busy. */
+export function isRetryableDbError(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e && depth < 5; depth++) {
+    const err = e as { code?: unknown; message?: unknown; meta?: { code?: unknown; message?: unknown }; cause?: unknown };
+    const codes = [err.code, err.meta?.code].filter((c): c is string => typeof c === "string");
+    if (codes.some((c) => c === "40P01" || c === "40001" || c === "P2034" || c === "SQLITE_BUSY")) return true;
+    const text = [err.message, err.meta?.message].filter((m): m is string => typeof m === "string").join(" ");
+    if (/deadlock detected|could not serialize access|database is locked|SQLITE_BUSY/i.test(text)) return true;
+    e = err.cause;
+  }
+  return false;
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function withRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      if (attempt >= CHUNK_ATTEMPTS || !isRetryableDbError(error)) throw error;
+      logger.warn("[bulk-read] chunk aborted as deadlock / serialization victim; retrying", { attempt });
+      // Jittered backoff so two victims of the same deadlock do not collide again.
+      await sleep(attempt * 25 + Math.floor(Math.random() * 50));
+    }
+  }
 }
 
 /**
  * Flips `isRead` for the user's own `ids` that do not hold the target value
- * yet (`readAt` stamped / cleared), chunked, without touching `updatedAt`.
- * Returns the ids it changed. A failure in the first chunk throws (nothing
- * changed); a later one returns the partial result with `complete: false`.
+ * yet (`readAt` stamped / cleared), chunked in id order, without touching
+ * `updatedAt`. Returns the ids it changed. A chunk the database aborts as a
+ * deadlock / serialization victim is retried (CHUNK_ATTEMPTS, jittered). A
+ * failure in the first chunk throws (nothing changed); a later one returns the
+ * partial result with `complete: false` and the unprocessed ids in `remaining`.
  */
 export async function setReadStateByIds(userId: string, ids: readonly string[], isRead: boolean, now = new Date()): Promise<BulkReadResult> {
-  const unique = [...new Set(ids)];
+  const unique = [...new Set(ids)].sort();
   const changed: string[] = [];
   const size = bulkReadChunk();
   for (let i = 0; i < unique.length; i += size) {
     const chunk = unique.slice(i, i + size);
     try {
-      const rows = await db.$queryRaw<Array<{ id: string }>>(updateChunkSql(userId, chunk, isRead, isRead ? now : null));
+      const rows = await withRetry(() => writeChunk(userId, chunk, isRead, isRead ? now : null));
       for (const row of rows) changed.push(row.id);
     } catch (error) {
       if (i === 0) throw error;
       logger.error("[bulk-read] chunk failed; partial result", { error, done: changed.length, total: unique.length });
-      return { ids: changed, complete: false };
+      return { ids: changed, complete: false, remaining: unique.slice(i) };
     }
   }
-  return { ids: changed, complete: true };
+  return { ids: changed, complete: true, remaining: [] };
 }
 
-function updateChunkSql(userId: string, ids: string[], isRead: boolean, readAt: Date | null): Prisma.Sql {
-  // Same statement for both providers except the id-list binding: one array
-  // parameter on Postgres, one JSON parameter on SQLite (no bound-variable limit).
-  const idMatch =
-    getDatabaseProvider() === "postgresql"
-      ? Prisma.sql`"id" = ANY(${ids}::text[])`
-      : Prisma.sql`"id" IN (SELECT value FROM json_each(${JSON.stringify(ids)}))`;
-  return Prisma.sql`UPDATE "Article" SET "isRead" = ${isRead}, "readAt" = ${readAt} WHERE "userId" = ${userId} AND "isRead" = ${!isRead} AND ${idMatch} RETURNING "id"`;
+/**
+ * One chunk. Postgres: its own transaction that first locks the chunk's rows
+ * in id order (`SELECT … ORDER BY id FOR UPDATE`), then updates them — two
+ * overlapping bulk writes (or a bulk write and a sync touching the same rows)
+ * always queue on the same row first instead of deadlocking on each other.
+ * SQLite has one database-wide write lock (no row locks, no lock-order
+ * deadlocks): a single UPDATE … RETURNING.
+ */
+async function writeChunk(userId: string, ids: string[], isRead: boolean, readAt: Date | null): Promise<Array<{ id: string }>> {
+  if (getDatabaseProvider() === "postgresql") {
+    return db.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Article" WHERE "id" = ANY(${ids}::text[]) AND "userId" = ${userId} ORDER BY "id" FOR UPDATE`);
+      return tx.$queryRaw<Array<{ id: string }>>(
+        Prisma.sql`UPDATE "Article" SET "isRead" = ${isRead}, "readAt" = ${readAt} WHERE "userId" = ${userId} AND "isRead" = ${!isRead} AND "id" = ANY(${ids}::text[]) RETURNING "id"`,
+      );
+    }, { timeout: 30_000, maxWait: 10_000 });
+  }
+  return db.$queryRaw<Array<{ id: string }>>(
+    Prisma.sql`UPDATE "Article" SET "isRead" = ${isRead}, "readAt" = ${readAt} WHERE "userId" = ${userId} AND "isRead" = ${!isRead} AND "id" IN (SELECT value FROM json_each(${JSON.stringify(ids)})) RETURNING "id"`,
+  );
+}
+
+/** For handlers without partial semantics (GReader, Fever, MCP): a partial write becomes a retryable error. */
+export function assertComplete(result: BulkReadResult): BulkReadResult {
+  if (!result.complete) throw new PartialBulkWriteError(result.ids.length, result.remaining.length);
+  return result;
 }
 
 /**
@@ -91,8 +151,8 @@ export async function markWhereRead(userId: string, where: Prisma.ArticleWhereIn
   const scoped: Prisma.ArticleWhereInput = {
     AND: [where, { userId, isRead: false }, ...(options.cutoff ? [{ createdAt: { lte: options.cutoff } }] : [])],
   };
-  const candidates = await db.article.findMany({ where: scoped, select: { id: true } });
-  if (candidates.length === 0) return { ids: [], complete: true };
+  const candidates = await db.article.findMany({ where: scoped, select: { id: true }, orderBy: { id: "asc" } });
+  if (candidates.length === 0) return { ids: [], complete: true, remaining: [] };
   return setReadStateByIds(userId, candidates.map((a) => a.id), true, now);
 }
 

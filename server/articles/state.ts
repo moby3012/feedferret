@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { setReadStateByIds } from "./bulk-read";
+import { setReadStateByIds, type BulkReadResult } from "./bulk-read";
 
 // Batched article state writes (.pm/spec-shell-design.md §2.4): the client's
 // state batcher sends every read / star / read-later toggle of one flush as a
@@ -212,6 +212,6 @@ export function parseMarkIds(input: unknown): { ok: true; ids: string[] } | { ok
  * undo set, via UPDATE … RETURNING). Chunked short statements, `updatedAt`
  * untouched (server/articles/bulk-read.ts).
  */
-export async function markIdsRead(userId: string, ids: string[]): Promise<string[]> {
-  return (await setReadStateByIds(userId, ids, true)).ids;
+export async function markIdsRead(userId: string, ids: string[]): Promise<BulkReadResult> {
+  return setReadStateByIds(userId, ids, true);
 }

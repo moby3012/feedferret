@@ -221,7 +221,7 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
     };
   }, [qc, batcher]);
 
-  const { mutate: undoMutate } = useMutation({
+  const { mutate: undoMutate } = useMutation<Awaited<ReturnType<typeof markArticlesAsUnread>>, Error, { undoToken: string; patched: string[] }>({
     mutationFn: async ({ undoToken }: { undoToken: string; patched: string[] }) => {
       // Queued single toggles must reach the server first, or they would land
       // after the bulk write and leave server and cache disagreeing.
@@ -231,8 +231,17 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: (result, { patched }) => {
       // Large results come back without ids: restore the rows this client flipped, refetch the rest lazily.
-      applyBulkRead(qc, result.idsTruncated ? patched : result.ids, false);
+      applyBulkRead(qc, result.idsTruncated || result.incomplete ? patched : result.ids, false);
       if (result.idsTruncated) markListsStale(qc);
+      if (result.incomplete) {
+        // Partly restored: the server keeps the rest under a fresh token — show the truth and offer to finish.
+        void qc.invalidateQueries({ queryKey: qk.lists });
+        const retryToken = result.retryToken;
+        toast.error(tRef.current.tSidebar("undoIncomplete", { count: result.count }), {
+          duration: 15_000,
+          action: retryToken ? { label: tRef.current.tSidebar("retry"), onClick: () => undoMutate({ undoToken: retryToken, patched }) } : undefined,
+        });
+      }
       invalidateCounts(qc);
     },
     onError: () => {
@@ -278,6 +287,16 @@ export function ArticleActionsProvider({ children }: { children: ReactNode }) {
       // Rows the cache does not hold moved counts too: one reconcile request.
       invalidateCounts(qc);
       const undoToken = result.undoToken;
+      const undo = undoToken ? { label: tRef.current.tSidebar("undo"), onClick: () => undoMutate({ undoToken, patched: [...new Set([...patched, ...ids])] }) } : undefined;
+      if (result.incomplete) {
+        // Partly done: retrying the same request finishes it (same scope + cutoff; done rows are skipped).
+        toast.error(tRef.current.tSidebar("markAllReadIncomplete", { count }), {
+          duration: 15_000,
+          action: { label: tRef.current.tSidebar("retry"), onClick: () => markAllMutate(request.kind === "scope" ? { ...request, patched: [] } : request) },
+          ...(undo ? { cancel: undo } : {}),
+        });
+        return;
+      }
       toast(tRef.current.tSidebar("undoMarkAllReadMessage", { count }), {
         duration: 6000,
         action: undoToken ? { label: tRef.current.tSidebar("undo"), onClick: () => undoMutate({ undoToken, patched: [...new Set([...patched, ...ids])] }) } : undefined,

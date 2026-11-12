@@ -851,6 +851,9 @@
     "undo": "Undo",
     "markAllReadFailed": "Could not mark articles as read. Please try again.",
     "undoFailed": "Could not undo. The undo window may have expired — refresh the page to check.",
+    "markAllReadIncomplete": "{count, plural, one {Only # article was marked as read} other {Only # articles were marked as read}} — partly done. Try again to finish.",
+    "undoIncomplete": "{count, plural, one {Only # article was restored} other {Only # articles were restored}} — partly done. Try again to finish.",
+    "retry": "Try again",
     "signOutConfirmTitle": "Sign out?",
     "signOutConfirmDescription": "You will need to sign in again to read your feeds on this device.",
     "errors": {

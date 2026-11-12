@@ -298,4 +298,47 @@ describe.skipIf(!ENABLED)("bulk mark-read at scale (50 k articles)", () => {
     };
     console.log("concurrency", JSON.stringify(results["concurrency.markAllWithSync"]));
   }, 900_000);
+
+  it("concurrency: two overlapping mark-alls + a sync rewriting rows in reverse id order", async () => {
+    state.user = "ua";
+    const { markAllAsRead } = await import("@/app/actions/feeds");
+    await reset();
+    const cutoff = Date.now();
+    await new Promise((r) => setTimeout(r, 5));
+    // Sync-like writer: transactions that update 50 unread rows of the big feed in DESCENDING id order
+    // (the opposite of the bulk writer's lock order) — the classic deadlock partner.
+    const victims = (await db.article.findMany({ where: { feedId: "big", isRead: false }, select: { id: true }, orderBy: { id: "desc" }, take: 2000 })).map((a: { id: string }) => a.id);
+    let running = true;
+    let syncTx = 0;
+    const syncErrors: string[] = [];
+    const sync = (async () => {
+      for (let i = 0; running; i = (i + 50) % victims.length) {
+        try {
+          await db.$transaction(async (tx: typeof db) => {
+            for (const id of victims.slice(i, i + 50)) await tx.article.updateMany({ where: { id }, data: { title: `sync ${i}`, updatedAt: new Date(now) } });
+          }, { timeout: 30_000 });
+          syncTx++;
+        } catch (e) {
+          syncErrors.push(e instanceof Error ? e.message.slice(0, 120) : String(e));
+        }
+      }
+    })();
+    const warn = vi.spyOn(console, "warn");
+    const t0 = performance.now();
+    const outcomes = await Promise.allSettled([markAllAsRead({ category: "All", cutoff } as never), markAllAsRead({ feedId: "big", cutoff } as never), markAllAsRead({ category: "Category:", categoryId: "cat0", cutoff } as never)]);
+    const ms = performance.now() - t0;
+    running = false;
+    await sync;
+    const counts = outcomes.map((o) => (o.status === "fulfilled" ? (o.value as { count: number; incomplete?: true }) : { error: String((o as PromiseRejectedResult).reason).slice(0, 160) }));
+    const changedTotal = counts.reduce((sum, c) => sum + ("count" in c ? c.count : 0), 0);
+    const left = await db.article.count({ where: { userId: "ua", isRead: false, createdAt: { lte: new Date(cutoff) } } });
+    const chunkRetries = warn.mock.calls.filter((c) => c.some((part: unknown) => typeof part === "string" && part.includes("[bulk-read] chunk aborted"))).length;
+    warn.mockRestore();
+    results["concurrency.overlapping"] = { ms: round(ms), chunkRetries, outcomes: counts, changedTotal, unreadLeftBeforeCutoff: left, syncTx, syncErrors: syncErrors.slice(0, 3), syncErrorCount: syncErrors.length };
+    console.log("overlapping", JSON.stringify(results["concurrency.overlapping"]));
+    expect(outcomes.every((o) => o.status === "fulfilled" && !(o.value as { incomplete?: true }).incomplete)).toBe(true);
+    // RETURNING attributes each row to exactly one of the overlapping calls.
+    expect(changedTotal).toBe(SEEDED_UNREAD_A.count);
+    expect(left).toBe(0);
+  }, 900_000);
 });

@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 import { assertSafeHttpOptionsProxy } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { markWhereRead, parseCutoffMs, setReadStateByIds } from "@/server/articles/bulk-read";
+import { markWhereRead, parseCutoffMs, setReadStateByIds, type BulkReadResult } from "@/server/articles/bulk-read";
 import { readPlainColumn, readPlainColumnOrNull } from "@/lib/secret-box";
 import { HTTP_OPTION_KEEP, mergeHttpOptions } from "@/lib/feed-secrets";
 import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
@@ -286,8 +286,7 @@ async function batchArticles(user: ApiUser, request: Request) {
 
   if (action === "read" || action === "unread") {
     // Read state: no `updatedAt` bump, `readAt` kept for rows already read (server/articles/bulk-read.ts).
-    const result = await setReadStateByIds(user.id, ownedIds, action === "read");
-    return NextResponse.json({ updated: result.ids.length });
+    return bulkReadResponse(await setReadStateByIds(user.id, ownedIds, action === "read"));
   }
   const result = await db.article.updateMany({ where: { id: { in: ownedIds } }, data });
   return NextResponse.json({ updated: result.count });
@@ -311,8 +310,20 @@ async function markAllRead(user: ApiUser, request: Request) {
   const before = typeof body.before === "number" ? body.before : typeof body.before === "string" ? Date.parse(body.before) : undefined;
   const cutoff = parseCutoffMs(before, now.getTime());
   if (cutoff === undefined) return apiError("Invalid before", 400);
-  const result = await markWhereRead(user.id, where, { cutoff: cutoff ?? now, now });
-  return NextResponse.json({ updated: result.ids.length });
+  return bulkReadResponse(await markWhereRead(user.id, where, { cutoff: cutoff ?? now, now }));
+}
+
+/**
+ * `{ updated }` — or, when a chunk failed after others committed, an explicit partial answer:
+ * 503 + Retry-After with `updated` (committed) and `remaining` (not applied). Retrying the same
+ * request is idempotent (rows already in the target state are skipped).
+ */
+function bulkReadResponse(result: BulkReadResult) {
+  if (result.complete) return NextResponse.json({ updated: result.ids.length });
+  return NextResponse.json(
+    { updated: result.ids.length, remaining: result.remaining.length, incomplete: true, error: { message: "Partially applied; retry the request" } },
+    { status: 503, headers: { "retry-after": "1" } },
+  );
 }
 
 async function listFeeds(user: ApiUser) {

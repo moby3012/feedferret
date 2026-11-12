@@ -375,7 +375,12 @@ async function handleMarkAllAsRead(userId: string, form: FormData) {
   // Chunked, set-based, `updatedAt` untouched (server/articles/bulk-read.ts). Without `ts` the
   // request time is the cutoff, so items a concurrent sync inserts stay unread.
   const now = new Date();
-  await markWhereRead(userId, buildStreamWhere(userId, streamId, [], []), { cutoff: cutoff ?? now, now });
+  const result = await markWhereRead(userId, buildStreamWhere(userId, streamId, [], []), { cutoff: cutoff ?? now, now });
+  // GReader has no partial-success answer: some chunks committed, the rest did not → retryable
+  // 5xx. A retry is idempotent (same stream + cutoff; already-read rows are skipped).
+  if (!result.complete) {
+    return new NextResponse("Partially applied; retry", { status: 503, headers: { "content-type": "text/plain; charset=utf-8", "retry-after": "1" } });
+  }
   return okResponse();
 }
 

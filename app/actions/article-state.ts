@@ -34,13 +34,14 @@ export async function applyArticleStateOps(ops: unknown): Promise<StateOpsResult
  * server-side undo token for `markArticlesAsUnread` (same Undo path as
  * mark-all). Ids are capped and user-scoped; foreign ids are ignored.
  */
-export async function markArticleIdsRead(ids: unknown): Promise<{ ids: string[]; undoToken: string | null }> {
+export async function markArticleIdsRead(ids: unknown): Promise<{ ids: string[]; undoToken: string | null; incomplete?: true }> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   const parsed = parseMarkIds(ids);
   if (!parsed.ok) throw new Error(`Invalid ids: ${parsed.error}`);
-  const changed = await markIdsRead(session.user.id, parsed.ids);
-  return { ids: changed, undoToken: changed.length ? createUndoToken(session.user.id, changed) : null };
+  const result = await markIdsRead(session.user.id, parsed.ids);
+  const changed = result.ids;
+  return { ids: changed, undoToken: changed.length ? createUndoToken(session.user.id, changed) : null, ...(result.complete ? {} : { incomplete: true as const }) };
 }
 
 /**
@@ -51,19 +52,20 @@ export async function markArticleIdsRead(ids: unknown): Promise<{ ids: string[];
  * bounded; one undo token for everything it changed. Rate-limited per user
  * (`rangeMark`, N13): above the limit nothing changes and `rateLimited` is set.
  */
-export async function markListRangeRead(input: unknown): Promise<{ ids: string[]; undoToken: string | null; tooLarge?: { limit: number }; rateLimited?: true }> {
+export async function markListRangeRead(input: unknown): Promise<{ ids: string[]; undoToken: string | null; tooLarge?: { limit: number }; rateLimited?: true; incomplete?: true }> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
   const parsed = parseMarkRange(input);
   if (!parsed.ok) throw new Error(`Invalid range: ${parsed.error}`);
   if (!checkRateLimit(`user:${session.user.id}`, RATE_LIMITS.rangeMark).success) return { ids: [], undoToken: null, rateLimited: true };
-  let changed: string[];
+  let result: Awaited<ReturnType<typeof markRangeRead>>;
   try {
-    changed = await markRangeRead(session.user.id, parsed.range);
+    result = await markRangeRead(session.user.id, parsed.range);
   } catch (error) {
     // Above the bound nothing changed; tell the client (production masks thrown messages).
     if (error instanceof RangeTooLargeError) return { ids: [], undoToken: null, tooLarge: { limit: error.limit } };
     throw error;
   }
-  return { ids: changed, undoToken: changed.length ? createUndoToken(session.user.id, changed) : null };
+  const changed = result.ids;
+  return { ids: changed, undoToken: changed.length ? createUndoToken(session.user.id, changed) : null, ...(result.complete ? {} : { incomplete: true as const }) };
 }

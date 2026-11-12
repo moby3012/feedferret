@@ -5,7 +5,7 @@ import { decimalExternalId, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { markWhereRead } from "@/server/articles/bulk-read";
+import { assertComplete, markWhereRead, PartialBulkWriteError } from "@/server/articles/bulk-read";
 import { isLegacyFeverKey } from "@/lib/fever-keys";
 import { hashApiToken } from "@/lib/token";
 import { touchApiPassword } from "@/lib/greader";
@@ -231,7 +231,8 @@ async function handleMark(
         : id?.trim() === "0"
           ? {} // Special group ID 0 = all feeds
           : { feed: { userId, category: { userId, extId: { in: numericIds(id || "") } } } };
-    await markWhereRead(userId, scope, { cutoff, now });
+    // Fever has no partial-success answer: a partial write throws PartialBulkWriteError → 503 (retry is idempotent).
+    assertComplete(await markWhereRead(userId, scope, { cutoff, now }));
   }
 }
 
@@ -351,6 +352,9 @@ async function handle(request: Request) {
     // Emit JSON integer tokens without passing identities through Number.
     return new NextResponse(JSON.stringify(result).replace(/"(id|feed_id|favicon_id|group_id)":"(\d+)"/g, '"$1":$2'), { headers: { "content-type": "application/json" } });
   } catch (error) {
+    if (error instanceof PartialBulkWriteError) {
+      return NextResponse.json({ ...baseResponse(1), error: "Partially applied; retry" }, { status: 503, headers: { "retry-after": "1" } });
+    }
     logger.error("[api/fever]", error);
     return NextResponse.json({ ...baseResponse(1), error: "Internal server error" }, { status: 500 });
   }

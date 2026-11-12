@@ -1187,8 +1187,13 @@ export interface BulkReadActionResult {
     ids: string[];
     idsTruncated?: true;
     undoToken: string | null;
-    /** A chunk failed after others had been written: `count` / Undo cover what changed. */
+    /**
+     * A chunk failed after others had been written: `count` / `undoToken` cover what changed.
+     * Mark-all: re-running the same request finishes it (idempotent: same scope + cutoff).
+     */
     incomplete?: true;
+    /** Undo only, with `incomplete`: a fresh token for the rows this Undo did not restore yet. */
+    retryToken?: string;
 }
 
 function bulkResult(ids: string[], complete: boolean, undoToken: string | null): BulkReadActionResult {
@@ -1244,6 +1249,11 @@ export async function markAllAsRead(scope?: { feedId?: string | null; category?:
  * (random, bound to the signed-in user, valid ~10 minutes) — never article ids
  * from the client. Restores exactly the articles that call changed and that are
  * still read (chunked, `updatedAt` untouched).
+ *
+ * The token is consumed for the rows this call restores: a failure before
+ * anything changed puts it back; a failure after some chunks returns
+ * `incomplete` plus a `retryToken` holding exactly the rows not restored yet,
+ * so a retry finishes the Undo instead of losing it.
  */
 export async function markArticlesAsUnread(undoToken: string): Promise<BulkReadActionResult> {
     const session = await auth();
@@ -1260,7 +1270,9 @@ export async function markArticlesAsUnread(undoToken: string): Promise<BulkReadA
         releaseUndoToken(undoToken, claim);
         throw error;
     }
-    return bulkResult(result.ids, result.complete, null);
+    if (result.complete) return bulkResult(result.ids, true, null);
+    const retryToken = createUndoToken(userId, result.remaining);
+    return { ...bulkResult(result.ids, false, null), ...(retryToken ? { retryToken } : {}) };
 }
 
 // ─── Auto-Read Rules ────────────────────────────────────────────────────────

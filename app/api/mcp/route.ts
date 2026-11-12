@@ -3,7 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { markWhereRead, setReadStateByIds } from "@/server/articles/bulk-read";
+import { assertComplete, markWhereRead, setReadStateByIds } from "@/server/articles/bulk-read";
 import { apiError, clampInt, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
@@ -347,7 +347,8 @@ async function callTool(user: ApiUser, name: string, args: any) {
         if (Object.keys(advancedWhere).length) where.AND = [...(where.AND || []), advancedWhere];
       }
       const now = new Date();
-      const result = await markWhereRead(user.id, where, { cutoff: now, now });
+      // Partial write → tool error with counts (PartialBulkWriteError); re-running is idempotent.
+      const result = assertComplete(await markWhereRead(user.id, where, { cutoff: now, now }));
       return { updated: result.ids.length };
     }
     // Feed management
@@ -436,7 +437,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       else if (action === "star") { data = { isStarred: true }; }
       else if (action === "unstar") { data = { isStarred: false }; }
       if (action === "read" || action === "unread") {
-        const result = await setReadStateByIds(user.id, ownedIds, action === "read");
+        const result = assertComplete(await setReadStateByIds(user.id, ownedIds, action === "read"));
         return { updated: result.ids.length, notFound: ids.length - ownedIds.length };
       }
       const result = await db.article.updateMany({ where: { id: { in: ownedIds } }, data });

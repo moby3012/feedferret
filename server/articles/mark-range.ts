@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { parseListParams, type Scope, type Sort } from "@/features/articles/scope";
 import { keysetWhere } from "./list";
 import { MAX_ID_LENGTH, MAX_MARK_IDS, markIdsRead } from "./state";
-import { setReadStateByIds } from "./bulk-read";
+import { setReadStateByIds, type BulkReadResult } from "./bulk-read";
 import { buildViewScope } from "./view-scope";
 
 // "Alles bis hier als gelesen" (row context menu) as one server-side range of
@@ -75,7 +75,7 @@ export function parseMarkRange(input: unknown): { ok: true; range: MarkRangeInpu
  * endpoint, user-scoped, bounded (MAX_RANGE_IDS), chunked writes; returns
  * exactly the ids this call changed (the undo set, one token for all).
  */
-export async function markRangeRead(userId: string, range: MarkRangeInput): Promise<string[]> {
+export async function markRangeRead(userId: string, range: MarkRangeInput): Promise<BulkReadResult> {
   const { where, keyset } = await buildViewScope(userId, range.scope);
   const direction = range.sort === "old" ? "asc" : "desc";
   const reverse = direction === "desc" ? "asc" : "desc";
@@ -91,7 +91,7 @@ export async function markRangeRead(userId: string, range: MarkRangeInput): Prom
   const to = valuesOf(range.toId);
   if (!from || !to) {
     if (range.extraIds.length > MAX_MARK_IDS) throw new RangeTooLargeError(MAX_MARK_IDS);
-    return range.extraIds.length ? markIdsRead(userId, range.extraIds) : [];
+    return range.extraIds.length ? markIdsRead(userId, range.extraIds) : { ids: [], complete: true, remaining: [] };
   }
 
   where.isRead = false;
@@ -114,5 +114,5 @@ export async function markRangeRead(userId: string, range: MarkRangeInput): Prom
   }
   const candidates = [...new Set([...inRange, ...extra].map((a) => a.id))];
   if (candidates.length > MAX_RANGE_IDS) throw new RangeTooLargeError(MAX_RANGE_IDS);
-  return (await setReadStateByIds(userId, candidates, true)).ids;
+  return setReadStateByIds(userId, candidates, true);
 }
