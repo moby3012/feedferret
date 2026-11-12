@@ -1,4 +1,6 @@
 import { db, getDatabaseProvider } from "./db";
+import pg from "pg";
+import { ensureArticleSearchStorage, isArticleSearchProjectionComplete, postgresSearchIndexStatus, scheduleArticleSearchMaintenance, setPostgresSearchIndexStatus } from "./article-search-storage";
 
 // Audit finding P-11: free-text search (lib/search.ts) uses leading-wildcard
 // `contains` (LIKE '%term%') matching, which can't use a normal B-tree index.
@@ -37,12 +39,36 @@ export type EnsureSearchIndexesOptions = {
      * "none": schema + triggers only, caller drives runSqliteFtsBackfill() (tests).
      */
     backfill?: "background" | "await" | "none";
+    /** Server startup only: schedule projection re-checks/retries (lib/article-search-storage.ts)
+     *  and, on Postgres, retry the index check/build with backoff until it is ready. */
+    maintenance?: boolean;
+    /** Postgres index retry backoff base (default 30 s; tests use a few ms). */
+    retryBaseMs?: number;
+    /** Postgres only: connection for the index builds (default DATABASE_URL). */
+    postgresUrl?: string;
 };
 
 export async function ensureSearchIndexes(options: EnsureSearchIndexesOptions = {}): Promise<void> {
     try {
+        try {
+            await ensureArticleSearchStorage();
+        } finally {
+            // Server startup: keep retrying an incomplete projection and re-check a complete one.
+            if (options.maintenance) {
+                scheduleArticleSearchMaintenance(() => {
+                    if (getDatabaseProvider() !== "postgresql") return;
+                    void ensurePostgresTrigramIndexes(options.postgresUrl ?? process.env.DATABASE_URL)
+                        .catch((err) => console.warn("[search-indexes] index swap after projection repair failed; retrying.", err instanceof Error ? err.message : err))
+                        .finally(() => schedulePostgresIndexRetry(options.postgresUrl ?? process.env.DATABASE_URL, options.retryBaseMs));
+                });
+            }
+        }
         if (getDatabaseProvider() === "postgresql") {
-            await ensurePostgresTrigramIndexes();
+            try {
+                await ensurePostgresTrigramIndexes(options.postgresUrl ?? process.env.DATABASE_URL);
+            } finally {
+                if (options.maintenance) schedulePostgresIndexRetry(options.postgresUrl ?? process.env.DATABASE_URL, options.retryBaseMs);
+            }
         } else {
             await ensureSqliteFts(options.backfill ?? "background");
         }
@@ -54,17 +80,140 @@ export async function ensureSearchIndexes(options: EnsureSearchIndexesOptions = 
     }
 }
 
-async function ensurePostgresTrigramIndexes() {
-    // Requires the pg_trgm extension to be installable by the connecting role
-    // (superuser, or a role granted CREATE on the extension). If it can't be
-    // created, the whole thing is caught by ensureSearchIndexes()'s try/catch.
-    await db.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+// ── Postgres pg_trgm GIN indexes on ArticleSearch ─────────────────────────────
+//
+// Built here, in the background after the server already serves requests, and never in
+// the migration on a populated database: a plain CREATE INDEX holds a SHARE lock on
+// ArticleSearch for the whole build (minutes at 100k+ articles), which blocks every
+// Article insert/content update through the sync trigger. CREATE INDEX CONCURRENTLY
+// lets ingestion continue; search stays correct meanwhile (ILIKE without the index).
+//
+//   * One instance at a time: a session advisory lock on a dedicated connection
+//     (CONCURRENTLY cannot run inside a transaction, so Prisma's pool is not used).
+//   * A killed concurrent build leaves an INVALID index behind (pg_index.indisvalid =
+//     false); it is dropped CONCURRENTLY and rebuilt.
+//   * Only when all five ArticleSearch indexes are valid are the old Article_*_trgm_idx
+//     dropped (CONCURRENTLY). An older image recreates them on rollback; the next start
+//     of this version drops them again.
+//   * PRISMA_PG_TRGM=0, a missing pg_trgm extension that this role cannot create, or no
+//     privilege: nothing is built and search keeps using unindexed ILIKE.
 
-    for (const column of ARTICLE_TEXT_COLUMNS) {
-        const indexName = `Article_${column}_trgm_idx`;
-        await db.$executeRawUnsafe(
-            `CREATE INDEX IF NOT EXISTS "${indexName}" ON "Article" USING GIN ("${column}" gin_trgm_ops)`
-        );
+export { postgresSearchIndexStatus };
+export type { PostgresSearchIndexState, PostgresSearchIndexStatus } from "./article-search-storage";
+const setPgIndexStatus = setPostgresSearchIndexStatus;
+
+// Search reads the projection only while the index state is "ready" (isArticleSearchReady), and the
+// legacy Article indexes may already be gone (previous run). So a "building" (another instance
+// held the lock, projection not yet verified) or "error" (connection loss, statement_timeout…)
+// result must not stick until the next restart: retry with backoff until ready/unavailable.
+const PG_RETRY_KEY = "__feedferret_pg_index_retry__";
+const PG_RETRY_MAX_MS = 15 * 60_000;
+const retryTimers = globalThis as unknown as Record<string, ReturnType<typeof setTimeout> | undefined>;
+export function schedulePostgresIndexRetry(url: string | undefined, baseMs = 30_000, attempt = 0) {
+    if (retryTimers[PG_RETRY_KEY]) clearTimeout(retryTimers[PG_RETRY_KEY]);
+    retryTimers[PG_RETRY_KEY] = undefined;
+    const { state } = postgresSearchIndexStatus();
+    if (state === "ready" || state === "unavailable") return;
+    const timer = setTimeout(() => {
+        retryTimers[PG_RETRY_KEY] = undefined;
+        void ensurePostgresTrigramIndexes(url)
+            .catch((err) => console.warn("[search-indexes] index check failed; retrying with backoff.", err instanceof Error ? err.message : err))
+            .finally(() => schedulePostgresIndexRetry(url, baseMs, attempt + 1));
+    }, Math.min(PG_RETRY_MAX_MS, baseMs * 2 ** attempt));
+    timer.unref?.();
+    retryTimers[PG_RETRY_KEY] = timer;
+}
+
+// Distinct from the schema-migration lock in scripts/db-migrate.mjs.
+const PG_SEARCH_INDEX_LOCK_KEY = "4207513662990112";
+export const LEGACY_ARTICLE_TRGM_INDEXES = ARTICLE_TEXT_COLUMNS.map(column => `Article_${column}_trgm_idx`);
+
+async function ensurePostgresTrigramIndexes(url: string | undefined) {
+    if (process.env.PRISMA_PG_TRGM === "0") {
+        setPgIndexStatus({ state: "unavailable", detail: "PRISMA_PG_TRGM=0" });
+        return;
+    }
+    if (!url) throw new Error("DATABASE_URL is not set");
+    const client = new pg.Client({ connectionString: url });
+    client.on("error", (err) => console.warn("[search-indexes] index connection error", err));
+    await client.connect();
+    try {
+        // Index builds can legitimately run for minutes; a role-level statement_timeout must not abort them.
+        await client.query("SET statement_timeout = 0");
+        const hasExtension = async () => ((await client.query("SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'")).rowCount ?? 0) > 0;
+        if (!(await hasExtension())) {
+            try {
+                await client.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+            } catch (err) {
+                setPgIndexStatus({ state: "unavailable", detail: "pg_trgm extension missing and not installable by this role" });
+                console.warn("[search-indexes] pg_trgm is not available; search uses unindexed ILIKE.", err instanceof Error ? err.message : err);
+                return;
+            }
+        }
+        const validity = async (name: string): Promise<boolean | null> => {
+            const r = await client.query<{ valid: boolean }>(
+                "SELECT i.indisvalid AS valid FROM pg_index i WHERE i.indexrelid = to_regclass($1)", [`"${name}"`]
+            );
+            return r.rows.length ? r.rows[0].valid : null;
+        };
+        const allValid = async () => {
+            for (const column of ARTICLE_TEXT_COLUMNS) if (!(await validity(`ArticleSearch_${column}_trgm_idx`))) return false;
+            return true;
+        };
+        const { rows } = await client.query("SELECT pg_try_advisory_lock($1::bigint) AS ok", [PG_SEARCH_INDEX_LOCK_KEY]);
+        if (!rows[0]?.ok) {
+            // Another instance holds the build lock. Its work may already be done (or it only drops
+            // legacy indexes): if all five are valid and the projection is verified, search can switch.
+            if (isArticleSearchProjectionComplete() && (await allValid())) {
+                setPgIndexStatus({ state: "ready" });
+                return;
+            }
+            setPgIndexStatus({ state: "building", detail: "another instance holds the search index lock" });
+            console.info("[search-indexes] Another instance is building the search indexes; checking again later.");
+            return;
+        }
+        try {
+            for (const column of ARTICLE_TEXT_COLUMNS) {
+                const name = `ArticleSearch_${column}_trgm_idx`;
+                const valid = await validity(name);
+                if (valid) continue;
+                if (valid === false) {
+                    console.warn(`[search-indexes] ${name} is INVALID (interrupted concurrent build); dropping and rebuilding.`);
+                    await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${name}"`);
+                }
+                setPgIndexStatus({ state: "building", detail: name });
+                const started = Date.now();
+                console.info(`[search-indexes] Building ${name} concurrently (search works meanwhile, unindexed)...`);
+                await client.query(`CREATE INDEX CONCURRENTLY IF NOT EXISTS "${name}" ON "ArticleSearch" USING GIN ("${column}" gin_trgm_ops)`);
+                if (!(await validity(name))) throw new Error(`${name} is not valid after CREATE INDEX CONCURRENTLY`);
+                console.info(`[search-indexes] ${name} built in ${((Date.now() - started) / 1000).toFixed(1)} s.`);
+            }
+            if (!isArticleSearchProjectionComplete()) {
+                // Search still runs on the Article columns: keep their indexes until the projection is verified.
+                setPgIndexStatus({ state: "building", detail: "legacy Article indexes kept until the projection is complete" });
+                return;
+            }
+            // All five valid and the projection verified: search may switch now (isArticleSearchReady),
+            // before the legacy indexes go, so it never runs unindexed.
+            setPgIndexStatus({ state: "ready" });
+            try {
+                for (const name of LEGACY_ARTICLE_TRGM_INDEXES) {
+                    if ((await validity(name)) === null) continue;
+                    await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${name}"`);
+                    console.info(`[search-indexes] Dropped legacy ${name} (replaced by the ArticleSearch index).`);
+                }
+            } catch (err) {
+                // Search is already on the indexed projection; a leftover legacy index only costs write time.
+                console.warn("[search-indexes] Could not drop the legacy Article trigram indexes; retried on next start.", err instanceof Error ? err.message : err);
+            }
+        } finally {
+            await client.query("SELECT pg_advisory_unlock($1::bigint)", [PG_SEARCH_INDEX_LOCK_KEY]).catch(() => {});
+        }
+    } catch (err) {
+        setPgIndexStatus({ state: "error", detail: err instanceof Error ? err.message : String(err) });
+        throw err;
+    } finally {
+        await client.end().catch(() => {});
     }
 }
 
@@ -105,10 +254,26 @@ const NOT_PENDING = (rowidExpr: string) =>
     `NOT EXISTS (SELECT 1 FROM article_fts_backfill b WHERE b.id = 1 AND ${rowidExpr} > b.done_rowid AND ${rowidExpr} <= b.upper_rowid)`;
 
 async function ensureSqliteFts(mode: "background" | "await" | "none") {
+    // Upgrade the old Article-backed FTS atomically. It is disposable; the existing
+    // resumable backfill repopulates it while search uses the projection's LIKE path.
+    const oldFts = await db.$queryRawUnsafe<{ sql: string }[]>(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'article_fts'"
+    );
+    if (oldFts.length && !oldFts[0].sql.includes("content='ArticleSearch'")) {
+        await db.$transaction([
+            db.$executeRawUnsafe("DROP TRIGGER IF EXISTS article_fts_ai"),
+            db.$executeRawUnsafe("DROP TRIGGER IF EXISTS article_fts_ad"),
+            db.$executeRawUnsafe("DROP TRIGGER IF EXISTS article_fts_au"),
+            db.$executeRawUnsafe("DROP TABLE article_fts"),
+            db.$executeRawUnsafe("DROP TABLE IF EXISTS article_fts_meta"),
+            db.$executeRawUnsafe("DROP TABLE IF EXISTS article_fts_backfill"),
+        ]);
+        delete (globalThis as unknown as Record<string, unknown>)[FTS_READY_KEY];
+    }
     const indexExisted =
         (await db.$queryRawUnsafe<{ n: number }[]>(`SELECT 1 AS n FROM sqlite_master WHERE type = 'table' AND name = 'article_fts'`)).length > 0;
 
-    // External-content FTS5 table: the actual text stays in "Article"; this
+    // External-content FTS5 table: the actual text stays in "ArticleSearch"; this
     // table only stores the trigram index plus the cuid `id` (unindexed) so
     // matches can be mapped back to Prisma rows.
     await db.$executeRawUnsafe(`
@@ -119,13 +284,13 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
             excerpt,
             author,
             tokenize='trigram',
-            content='Article',
+            content='ArticleSearch',
             content_rowid='rowid'
         )
     `);
 
     // NOTE: for an external-content FTS5 table, a plain (non-MATCH) `SELECT` or
-    // `count(*)` against article_fts is proxied straight to the backing "Article"
+    // `count(*)` against article_fts is proxied straight to the backing "ArticleSearch"
     // table by SQLite — it does NOT reflect whether the trigram shadow index has
     // actually been populated. So completeness is tracked in this tiny marker table.
     await db.$executeRawUnsafe(`
@@ -173,7 +338,7 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
             db.$executeRawUnsafe(`INSERT INTO article_fts(article_fts) VALUES ('delete-all')`),
             db.$executeRawUnsafe(
                 `INSERT INTO article_fts_backfill (id, upper_rowid, done_rowid)
-                 SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "Article"`
+                 SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "ArticleSearch"`
             )
         );
     }
@@ -183,14 +348,14 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
         db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS article_fts_ad`),
         db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS article_fts_au`),
         db.$executeRawUnsafe(`
-            CREATE TRIGGER article_fts_ai AFTER INSERT ON "Article"
+            CREATE TRIGGER article_fts_ai AFTER INSERT ON "ArticleSearch"
             WHEN ${NOT_PENDING("new.rowid")} BEGIN
                 INSERT INTO article_fts(rowid, id, title, content, excerpt, author)
                 VALUES (new.rowid, new.id, new.title, new.content, new.excerpt, new.author);
             END
         `),
         db.$executeRawUnsafe(`
-            CREATE TRIGGER article_fts_ad AFTER DELETE ON "Article"
+            CREATE TRIGGER article_fts_ad AFTER DELETE ON "ArticleSearch"
             WHEN ${NOT_PENDING("old.rowid")} BEGIN
                 INSERT INTO article_fts(article_fts, rowid, id, title, content, excerpt, author)
                 VALUES ('delete', old.rowid, old.id, old.title, old.content, old.excerpt, old.author);
@@ -199,7 +364,7 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
         // Only re-index when an indexed column changes (mark-read, star, aiSummary,
         // updatedAt... must not rewrite the whole trigram row).
         db.$executeRawUnsafe(`
-            CREATE TRIGGER article_fts_au AFTER UPDATE OF title, content, excerpt, author ON "Article"
+            CREATE TRIGGER article_fts_au AFTER UPDATE OF title, content, excerpt, author ON "ArticleSearch"
             WHEN ${NOT_PENDING("old.rowid")} BEGIN
                 INSERT INTO article_fts(article_fts, rowid, id, title, content, excerpt, author)
                 VALUES ('delete', old.rowid, old.id, old.title, old.content, old.excerpt, old.author);
@@ -242,7 +407,7 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
 // ── Boot-time consistency check ──────────────────────────────────────────────
 //
 // FTS5's own `INSERT INTO article_fts(article_fts) VALUES('integrity-check')` reads the
-// whole index and compares it with "Article": ~6 s for 50 k articles, synchronously on the
+// whole index and compares it with "ArticleSearch": ~6 s for 50 k articles, synchronously on the
 // single better-sqlite3 connection (event loop blocked, write lock held). Not acceptable on
 // every boot. Instead two cheap probes that catch the realistic failure modes (rows missing
 // from or left over in the index, an index that no longer matches the content):
@@ -251,7 +416,7 @@ async function ensureSqliteFts(mode: "background" | "await" | "none") {
 //   2. the newest article with a title of >= 3 characters is found by an FTS MATCH on
 //      (a prefix of) its title.
 // On a mismatch the index is reset and rebuilt by the normal chunked background backfill;
-// search uses the LIKE path meanwhile. Only FTS tables are written, never "Article", so
+// search uses the LIKE path meanwhile. Only FTS tables are written, never "ArticleSearch", so
 // Article.updatedAt is untouched.
 
 export type SqliteFtsCheckResult = { ok: true } | { ok: false; reason: string };
@@ -261,7 +426,7 @@ const FTS_PROBE_TITLE_CHARS = 48;
 export async function checkSqliteFtsConsistency(): Promise<SqliteFtsCheckResult> {
     const [indexed, articles] = await db.$transaction([
         db.$queryRawUnsafe<{ n: number | bigint }[]>(`SELECT COUNT(*) AS n FROM article_fts_docsize`),
-        db.$queryRawUnsafe<{ n: number | bigint }[]>(`SELECT COUNT(*) AS n FROM "Article"`),
+        db.$queryRawUnsafe<{ n: number | bigint }[]>(`SELECT COUNT(*) AS n FROM "ArticleSearch"`),
     ]);
     const indexedCount = Number(indexed[0]?.n ?? 0);
     const articleCount = Number(articles[0]?.n ?? 0);
@@ -277,7 +442,7 @@ export async function checkSqliteFtsConsistency(): Promise<SqliteFtsCheckResult>
                     WHERE article_fts MATCH ('"' || replace(substr(a.title, 1, ?), '"', '""') || '"')
                       AND article_fts.rowid = a.rowid
                 ) AS found
-         FROM "Article" a WHERE length(a.title) >= 3 ORDER BY a.rowid DESC LIMIT 1`,
+         FROM "ArticleSearch" a WHERE length(a.title) >= 3 ORDER BY a.rowid DESC LIMIT 1`,
         FTS_PROBE_TITLE_CHARS
     );
     if (probe.length > 0 && !Number(probe[0].found)) {
@@ -314,7 +479,7 @@ export async function checkSqliteFtsAndRepair(
         db.$executeRawUnsafe(`INSERT INTO article_fts(article_fts) VALUES ('delete-all')`),
         db.$executeRawUnsafe(
             `INSERT OR REPLACE INTO article_fts_backfill (id, upper_rowid, done_rowid)
-             SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "Article"`
+             SELECT 1, COALESCE(MAX(rowid), 0), 0 FROM "ArticleSearch"`
         ),
     ]);
     // Clear again after the commit: a search that ran during the reset may have re-cached
@@ -367,7 +532,7 @@ async function backfillLoop(options: { yieldMs?: number; targetChunkMs?: number 
 
             const next = await db.$queryRawUnsafe<{ bound: number | bigint | null }[]>(
                 `SELECT MAX(rowid) AS bound FROM (
-                     SELECT rowid FROM "Article" WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?
+                     SELECT rowid FROM "ArticleSearch" WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?
                  )`,
                 done,
                 upper,
@@ -390,7 +555,7 @@ async function backfillLoop(options: { yieldMs?: number; targetChunkMs?: number 
             await db.$transaction([
                 db.$executeRawUnsafe(
                     `INSERT INTO article_fts(rowid, id, title, content, excerpt, author)
-                     SELECT rowid, id, title, content, excerpt, author FROM "Article"
+                     SELECT rowid, id, title, content, excerpt, author FROM "ArticleSearch"
                      WHERE rowid > ? AND rowid <= ?`,
                     done,
                     bound

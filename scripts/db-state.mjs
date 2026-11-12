@@ -108,6 +108,41 @@ export async function listTables({ provider, url, configDir = join(here, "..", "
   }
 }
 
+/**
+ * Migrations Prisma recorded as started but neither finished nor rolled back (the P3009 state
+ * after a crash/kill mid-migration), each with how often it was already rolled back
+ * (`{ name, rolledBack }`). Empty when there is no history table.
+ */
+export async function unfinishedMigrations({ provider, url, configDir = join(here, "..", "prisma"), client = undefined }) {
+  const p = normalizeProvider(provider);
+  const sql = `SELECT m.migration_name AS migration_name,
+    (SELECT count(*) FROM _prisma_migrations r WHERE r.migration_name = m.migration_name AND r.rolled_back_at IS NOT NULL) AS rolled_back
+    FROM _prisma_migrations m WHERE m.finished_at IS NULL AND m.rolled_back_at IS NULL ORDER BY m.migration_name`;
+  const toRow = (row) => ({ name: row.migration_name, rolledBack: Number(row.rolled_back) });
+  if (p === "sqlite") {
+    const file = sqliteFilePath(url || "file:./dev.db", configDir);
+    if (!existsSync(file)) return [];
+    const Database = (await importPackage("better-sqlite3")).default;
+    const db = new Database(file, { readonly: true, fileMustExist: true });
+    try {
+      if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_prisma_migrations'").get()) return [];
+      return db.prepare(sql).all().map(toRow);
+    } finally {
+      db.close();
+    }
+  }
+  const db = client ?? (await pgClient(url));
+  try {
+    const schema = postgresSchema(url);
+    const { rows: exists } = await db.query("SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = '_prisma_migrations'", [schema]);
+    if (!exists.length) return [];
+    const { rows } = await db.query(sql.replaceAll("FROM _prisma_migrations", `FROM "${schema.replace(/"/g, '""')}"._prisma_migrations`));
+    return rows.map(toRow);
+  } finally {
+    if (!client) await db.end();
+  }
+}
+
 const DEFAULT_LOCK_WAIT_MS = 10 * 60_000;
 /**
  * FEEDFERRET_DB_LOCK_TIMEOUT_MS: positive integer milliseconds, else the default (with a warning).

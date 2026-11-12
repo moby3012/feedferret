@@ -3,11 +3,11 @@
 // ownership, "Article.updatedAt is never touched", and every place an archived feed must disappear
 // (background sync, shell feed list, unread counts, aggregate list scopes) or stay reachable (own feed
 // view, search).
+import { pushSqliteTestDatabase } from "../helpers/sqlite-test-db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
@@ -87,10 +87,7 @@ const names = (list: Array<{ name: string }>) => list.map((f) => f.name).sort();
 
 beforeAll(async () => {
   const url = `file:${join(dir, "test.db")}`;
-  execFileSync("pnpm", ["exec", "prisma", "db", "push", "--schema", "prisma/schema.generated.prisma"], {
-    env: { ...process.env, DATABASE_PROVIDER: "sqlite", DATABASE_URL: url },
-    stdio: "pipe",
-  });
+  pushSqliteTestDatabase(url);
   h.db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url }) });
   alice = (await h.db.user.create({ data: { email: "alice@test", name: "Alice" } })).id;
   bob = (await h.db.user.create({ data: { email: "bob@test", name: "Bob" } })).id;

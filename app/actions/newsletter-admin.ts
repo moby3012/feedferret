@@ -38,6 +38,7 @@ import {
   type ImapErrorCode,
   type ImapSourceSettings,
 } from "@/lib/inbound-email-poller";
+import { articleTextWhere } from "@/lib/article-search-storage";
 
 const KEEP = "__keep__";
 const HOST_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$|^\[?[0-9a-f:.]+\]?$/i;
@@ -363,7 +364,7 @@ export async function checkNewsletterTestMail(input: unknown): Promise<{ arrived
   // Webhook ways push; only a mailbox has to be polled.
   if (source.kind === "imap" && !source.paused) await pollInboundSourceNow(source.id).catch(() => null);
   const article = await db.article.findFirst({
-    where: { userId: session.user.id, title: { contains: marker }, createdAt: { gte: new Date(sinceDate.getTime() - 15 * 60_000) } },
+    where: { userId: session.user.id, ...articleTextWhere({ title: { contains: marker } }), createdAt: { gte: new Date(sinceDate.getTime() - 15 * 60_000) } },
     orderBy: { createdAt: "asc" },
     select: { createdAt: true },
   });

@@ -226,7 +226,7 @@ start_and_wait_healthy() {
 #   postgres: name + oid of each pg_trgm index;  sqlite: name + root page of each FTS table.
 search_index_fingerprint() {
   if [ "$MODE" = "postgres" ]; then
-    db_query "SELECT c.relname || ':' || c.oid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname LIKE 'Article_%_trgm_idx' ORDER BY 1"
+    db_query "SELECT c.relname || ':' || c.oid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname LIKE 'ArticleSearch\_%\_trgm\_idx' AND i.indisvalid ORDER BY 1"
   else
     db_query "SELECT name || ':' || rootpage FROM sqlite_master WHERE name LIKE 'article_fts%' AND type IN ('table', 'trigger') ORDER BY name"
   fi
@@ -239,8 +239,9 @@ wait_for_search_indexes() {
   deadline=$(( $(date +%s) + 60 ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
     if [ "$MODE" = "postgres" ]; then
-      n=$(db_query "SELECT count(*) FROM pg_indexes WHERE indexname LIKE 'Article_%_trgm_idx'" 2>/dev/null || echo 0)
-      [ "$n" = "5" ] && return 0
+      # 5 valid ArticleSearch indexes and no legacy Article ones ('_' escaped: it is a LIKE wildcard).
+      n=$(db_query "SELECT count(*) FILTER (WHERE c.relname LIKE 'ArticleSearch\_%\_trgm\_idx' AND i.indisvalid) || ':' || count(*) FILTER (WHERE c.relname LIKE 'Article\_%\_trgm\_idx') FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid" 2>/dev/null || echo 0)
+      [ "$n" = "5:0" ] && return 0
     else
       n=$(db_query "SELECT count(*) FROM article_fts_meta WHERE backfilled_at IS NOT NULL" 2>/dev/null || echo 0)
       [ "$n" = "1" ] && return 0

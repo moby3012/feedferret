@@ -16,6 +16,7 @@ vi.mock("../../lib/search-indexes", () => ({
   isSqliteFtsReady: vi.fn(async () => true),
 }));
 import { isSqliteFtsReady } from "../../lib/search-indexes";
+import { markArticleSearchVerifiedForTests } from "../../lib/article-search-storage";
 
 const USER = "user-1";
 
@@ -25,6 +26,8 @@ const USER = "user-1";
 // Individual tests below override this with mockResolvedValue(Once) to
 // exercise the FTS-hit path instead.
 beforeEach(() => {
+  // Production state after the startup self-check: text predicates go through the projection.
+  markArticleSearchVerifiedForTests();
   (isSqliteFtsReady as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(true);
   (db.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockReset();
   (db.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
@@ -216,7 +219,10 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
     const result = await buildAdvancedSearchWhere(USER, "database") as any;
 
     const [condition] = result.AND;
-    expect(condition.OR[0]).toEqual({ title: { contains: "database" } });
+    expect(condition.OR[0]).toEqual({ search: { is: { OR: [
+      { title: { contains: "database" } }, { content: { contains: "database" } },
+      { excerpt: { contains: "database" } }, { author: { contains: "database" } },
+    ] } } });
     expect(JSON.stringify(result)).not.toContain('"in"');
   });
 
@@ -248,7 +254,10 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
     (isSqliteFtsReady as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(false);
     const result = await buildAdvancedSearchWhere(USER, "openclaw") as any;
     expect(queryRawUnsafeMock).not.toHaveBeenCalled();
-    expect(result.AND[0].OR[0]).toEqual({ title: { contains: "openclaw" } });
+    expect(result.AND[0].OR[0]).toEqual({ search: { is: { OR: [
+      { title: { contains: "openclaw" } }, { content: { contains: "openclaw" } },
+      { excerpt: { contains: "openclaw" } }, { author: { contains: "openclaw" } },
+    ] } } });
   });
 
   it("falls back to the full LIKE-based OR list when the FTS query throws (e.g. article_fts missing)", async () => {
@@ -258,10 +267,12 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
 
     const [condition] = result.AND;
     expect(condition.OR).toEqual([
+      { search: { is: { OR: [
       { title: { contains: "openclaw" } },
       { content: { contains: "openclaw" } },
       { excerpt: { contains: "openclaw" } },
       { author: { contains: "openclaw" } },
+      ] } } },
       { link: { contains: "openclaw" } },
       { feed: { name: { contains: "openclaw" } } },
       { labels: { some: { label: { name: { contains: "openclaw" }, userId: USER } } } },
@@ -274,10 +285,12 @@ describe("buildAdvancedSearchWhere SQLite FTS routing", () => {
     expect(queryRawUnsafeMock).not.toHaveBeenCalled();
     const [condition] = result.AND;
     expect(condition.OR).toEqual([
+      { search: { is: { OR: [
       { title: { contains: "ab" } },
       { content: { contains: "ab" } },
       { excerpt: { contains: "ab" } },
       { author: { contains: "ab" } },
+      ] } } },
       { link: { contains: "ab" } },
       { feed: { name: { contains: "ab" } } },
       { labels: { some: { label: { name: { contains: "ab" }, userId: USER } } } },
@@ -393,19 +406,19 @@ describe("K3 enrichment operators", () => {
 
   it("-entity:X keeps articles without entities (NULL)", async () => {
     expect(await buildAdvancedSearchWhere(USER, "-entity:EZB")).toEqual({
-      AND: [{ OR: [{ entities: null }, { NOT: { entities: { contains: '"EZB"' } } }] }],
+      AND: [{ search: { is: { OR: [{ entities: null }, { NOT: { entities: { contains: '"EZB"' } } }] } } }],
     });
   });
 
   it("entity:<name> matches the quoted JSON element, quoted or not", async () => {
-    const expected = { AND: [{ entities: { contains: '"OpenAI"' } }] };
+    const expected = { AND: [{ search: { is: { entities: { contains: '"OpenAI"' } } } }] };
     expect(await buildAdvancedSearchWhere(USER, "entity:OpenAI")).toEqual(expected);
     expect(await buildAdvancedSearchWhere(USER, 'entity:"OpenAI"')).toEqual(expected);
   });
 
   it("entity with spaces stays one token", async () => {
     expect(await buildAdvancedSearchWhere(USER, 'entity:"Angela Merkel"')).toEqual({
-      AND: [{ entities: { contains: '"Angela Merkel"' } }],
+      AND: [{ search: { is: { entities: { contains: '"Angela Merkel"' } } } }],
     });
     expect(tokenizeSearch('-entity:"Angela Merkel" foo author:\'Jane Doe\'')).toEqual([
       "-entity:Angela Merkel",
@@ -415,7 +428,7 @@ describe("K3 enrichment operators", () => {
   });
 
   it("entity strips quotes/backslashes from the value and ignores an empty one", async () => {
-    expect(await buildAdvancedSearchWhere(USER, 'entity:a\\"b')).toEqual({ AND: [{ entities: { contains: '"ab"' } }] });
+    expect(await buildAdvancedSearchWhere(USER, 'entity:a\\"b')).toEqual({ AND: [{ search: { is: { entities: { contains: '"ab"' } } } }] });
     // empty value after stripping → falls through as free text, never an unbounded match
     const where = (await buildAdvancedSearchWhere(USER, 'entity:""')) as { AND?: unknown[] };
     expect(JSON.stringify(where)).not.toContain('"entities"');
@@ -424,5 +437,37 @@ describe("K3 enrichment operators", () => {
   it("unknown is: values still fall through as free text", async () => {
     const where = await buildAdvancedSearchWhere(USER, "is:bogus");
     expect(JSON.stringify(where)).not.toContain("isSponsored");
+  });
+});
+
+// ── Projection not (yet) verified ───────────────────────────────────────────
+
+describe("before the ArticleSearch projection is verified complete", () => {
+  beforeEach(() => {
+    (globalThis as Record<string, unknown>).__feedferret_article_search_projection__ = { state: "backfilling", missing: 3 };
+  });
+
+  it("runs free-text, field, entity and negated predicates on the Article columns and skips FTS", async () => {
+    const where = await buildAdvancedSearchWhere(USER, 'needle title:Alpha -author:Jane entity:EZB -entity:"Angela Merkel" -content:x');
+    expect(JSON.stringify(where)).not.toContain('"search"');
+    expect(db.$queryRawUnsafe).not.toHaveBeenCalled(); // article_fts indexes the projection
+    expect(where).toEqual({ AND: [
+      { title: { contains: "Alpha" } },
+      { NOT: { author: { contains: "Jane" } } },
+      { entities: { contains: '"EZB"' } },
+      { OR: [{ entities: null }, { NOT: { entities: { contains: '"Angela Merkel"' } } }] },
+      { NOT: { OR: [{ content: { contains: "x" } }, { excerpt: { contains: "x" } }] } },
+      { OR: [
+        { OR: [{ title: { contains: "needle" } }, { content: { contains: "needle" } }, { excerpt: { contains: "needle" } }, { author: { contains: "needle" } }] },
+        { link: { contains: "needle" } },
+        { feed: { name: { contains: "needle" } } },
+        { labels: { some: { label: { name: { contains: "needle" }, userId: USER } } } },
+      ] },
+    ] });
+  });
+
+  it("switches to the projection as soon as it is verified", async () => {
+    markArticleSearchVerifiedForTests();
+    expect(await buildAdvancedSearchWhere(USER, "title:Alpha")).toEqual({ AND: [{ search: { is: { title: { contains: "Alpha" } } } }] });
   });
 });

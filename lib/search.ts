@@ -1,5 +1,6 @@
 import { db, getDatabaseProvider } from "./db";
 import { isSqliteFtsReady } from "./search-indexes";
+import { isArticleSearchReady } from "./article-search-storage";
 
 // PostgreSQL's LIKE is case-sensitive; Prisma supports mode:'insensitive' (ILIKE) there.
 // SQLite's LIKE is already case-insensitive for ASCII and does NOT support mode:'insensitive'.
@@ -12,7 +13,7 @@ function ci(value: string) {
 
 // ── SQLite FTS5 acceleration for free-text terms (see lib/search-indexes.ts) ──
 //
-// On Postgres we change nothing here: pg_trgm GIN indexes make the existing
+// On Postgres, pg_trgm GIN indexes on ArticleSearch accelerate
 // ILIKE '%term%' queries fast with no query-logic change, so the free-text
 // loop below always uses the plain LIKE/ILIKE branch for that provider.
 //
@@ -79,10 +80,11 @@ async function ftsMatchIds(userId: string, term: string, cap: number): Promise<s
     if (Array.from(term).length < MIN_FTS_TERM_LENGTH) return null;
 
     try {
-        if (!(await isSqliteFtsReady())) return null;
+        // article_fts indexes ArticleSearch: only trustworthy once the projection is verified complete.
+        if (!isArticleSearchReady() || !(await isSqliteFtsReady())) return null;
         const rows = await db.$queryRawUnsafe<{ id: string }[]>(
-            `SELECT a.id AS id FROM "Article" a
-             WHERE a.userId = ? AND a.rowid IN (SELECT rowid FROM article_fts WHERE article_fts MATCH ?)
+            `SELECT a.id AS id FROM "ArticleSearch" s JOIN "Article" a ON a.id = s.id
+             WHERE a.userId = ? AND s.rowid IN (SELECT rowid FROM article_fts WHERE article_fts MATCH ?)
              LIMIT ?`,
             userId,
             buildFtsMatchQuery(term),
@@ -111,10 +113,12 @@ async function buildFreeTextCondition(userId: string, term: string, ftsCap: numb
 
     return {
         OR: [
-            { title: ci(term) },
-            { content: ci(term) },
-            { excerpt: ci(term) },
-            { author: ci(term) },
+            { search: { is: { OR: [
+                { title: ci(term) },
+                { content: ci(term) },
+                { excerpt: ci(term) },
+                { author: ci(term) },
+            ] } } },
             { link: ci(term) },
             { feed: { name: ci(term) } },
             { labels: { some: { label: { name: ci(term), userId } } } },
@@ -167,6 +171,7 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
         if (!value) continue;
 
         let condition: any | null = null;
+        let searchText = false;
         // Nullable tri-state flags: `NOT (col = true)` is NULL (= excluded) for
         // unknown rows in SQL, so their negation is spelled out explicitly.
         let negatedCondition: any | null = null;
@@ -185,8 +190,10 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
         } else if (hasField) {
             if (["author", "by"].includes(key)) {
                 condition = { author: ci(value) };
+                searchText = true;
             } else if (["intitle", "title"].includes(key)) {
                 condition = { title: ci(value) };
+                searchText = true;
             } else if (["intext", "text", "content"].includes(key)) {
                 condition = {
                     OR: [
@@ -194,6 +201,7 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
                         { excerpt: ci(value) },
                     ],
                 };
+                searchText = true;
             } else if (["inurl", "url", "link"].includes(key)) {
                 condition = { link: ci(value) };
             } else if (["feed", "f"].includes(key)) {
@@ -253,6 +261,7 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
                 // occur in stored entities (sanitized at write time).
                 const entity = value.replace(/["\\]/g, "").trim();
                 if (entity) {
+                    searchText = true;
                     condition = { entities: ci(`"${entity}"`) };
                     // Articles without enrichment have entities = NULL and must survive `-entity:X`.
                     negatedCondition = { OR: [{ entities: null }, { NOT: condition }] };
@@ -274,7 +283,9 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
             continue;
         }
 
-        and.push(negated ? (negatedCondition ?? { NOT: condition }) : condition);
+        const predicate = negated ? (negatedCondition ?? { NOT: condition }) : condition;
+        // Keep NOT inside the relation: SQL NULL author/content semantics must stay identical.
+        and.push(searchText ? { search: { is: predicate } } : predicate);
     }
 
     const freeTextConditions = await Promise.all(
@@ -285,7 +296,28 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
     return and.length ? { AND: and } : {};
 }
 
+/**
+ * Text predicates are written against the ArticleSearch projection (`{ search: { is: … } }`).
+ * Until the startup self-check has verified the projection is complete (an upgrade whose copy
+ * was deferred, an interrupted backfill, a db-push database), the same predicates run against
+ * the identical Article columns instead, so search never silently misses articles. The two
+ * forms are result-equivalent (tests/lib/article-search-storage.test.ts), including NULL
+ * semantics of negations, because negation always sits inside the relation.
+ */
+function toArticleColumns(where: unknown): any {
+    if (Array.isArray(where)) return where.map(toArticleColumns);
+    if (!where || typeof where !== "object" || where instanceof Date) return where;
+    const object = where as Record<string, any>;
+    if (object.search && typeof object.search === "object" && "is" in object.search) return toArticleColumns(object.search.is);
+    return Object.fromEntries(Object.entries(object).map(([key, value]) => [key, toArticleColumns(value)]));
+}
+
 export async function buildAdvancedSearchWhere(userId: string, query?: string) {
+    const where = await buildProjectionSearchWhere(userId, query);
+    return isArticleSearchReady() ? where : toArticleColumns(where);
+}
+
+async function buildProjectionSearchWhere(userId: string, query?: string): Promise<object> {
     if (!query?.trim()) return {};
 
     const allTokens = tokenizeSearch(query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH)).slice(0, MAX_SEARCH_TOKENS);

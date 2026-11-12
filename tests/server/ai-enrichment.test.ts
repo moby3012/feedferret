@@ -61,7 +61,7 @@ async function mkArticle(id: string, title: string, content: string, extra: Reco
 
 beforeAll(async () => {
   const url = `file:${join(dir, "test.db")}`;
-  execFileSync("pnpm", ["exec", "prisma", "db", "push", "--schema", "prisma/schema.generated.prisma"], {
+  execFileSync("pnpm", ["exec", "prisma", "migrate", "deploy", "--schema", "prisma/schema.generated.prisma"], {
     env: { ...process.env, DATABASE_PROVIDER: "sqlite", DATABASE_URL: url },
     stdio: "pipe",
   });

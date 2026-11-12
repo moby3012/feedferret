@@ -36,7 +36,7 @@ const at = (min: number) => new Date(T0 + min * 60_000);
 
 beforeAll(async () => {
   const url = `file:${join(dir, "test.db")}`;
-  execFileSync("node_modules/.bin/prisma", ["db", "push", "--schema", "prisma/schema.generated.prisma"], { env: { ...process.env, DATABASE_URL: url }, stdio: "pipe" });
+  execFileSync("node_modules/.bin/prisma", ["migrate", "deploy", "--schema", "prisma/schema.generated.prisma"], { env: { ...process.env, DATABASE_URL: url }, stdio: "pipe" });
   const client = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: url.slice("file:".length) }), log: [{ emit: "event", level: "query" }] });
   client.$on("query", () => {
     h.statements++;

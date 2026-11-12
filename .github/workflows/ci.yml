@@ -235,3 +235,12 @@ jobs:
         run: node scripts/test-migrations.mjs ${{ matrix.provider }}
         env:
           MIGRATION_TEST_ADMIN_URL: postgresql://postgres:migration-test-only@localhost:5432/postgres
+      - name: Search projection on real Postgres (equivalence, deferred copy, deadlock orders)
+        if: matrix.provider == 'postgresql'
+        run: |
+          node -e "const pg=require('pg');const c=new pg.Client({connectionString:'postgresql://postgres:migration-test-only@localhost:5432/postgres'});c.connect().then(()=>c.query('CREATE DATABASE search_projection_test')).then(()=>c.end())"
+          DATABASE_PROVIDER=postgresql pnpm prisma:generate
+          pnpm exec vitest run tests/lib/article-search-storage.test.ts
+        env:
+          DATABASE_PROVIDER: postgresql
+          SEARCH_TEST_PG_URL: postgresql://postgres:migration-test-only@localhost:5432/search_projection_test
