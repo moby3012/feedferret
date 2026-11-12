@@ -8,6 +8,7 @@ export async function drainHostQueues<T extends { url: string }, R>(
         run: (item: T) => Promise<{ result: R; retryAfterMs?: number; pauseMs?: number }>;
         spacingRemaining: (url: string) => number;
         spacingMs: number;
+        /** Leftovers when the budget ends; waitMs is when this host's lane (plus its queue position) frees up. */
         defer: (item: T, waitMs: number) => Promise<R>;
     },
 ): Promise<R[]> {
@@ -21,17 +22,17 @@ export async function drainHostQueues<T extends { url: string }, R>(
         if (!lane) { lane = { entries: [], readyAt: 0, active: false }; grouped.set(host, lane); }
         lane.entries.push({ item, index });
     });
-    const lanes = [...grouped.values()];
+    let lanes = [...grouped.values()];
     const results = new Array<R>(items.length);
     const running = new Set<Promise<void>>();
     let cursor = 0;
     let failure: unknown;
-    while (lanes.some(lane => lane.entries.length) || running.size) {
+    while (lanes.length || running.size) {
         const now = Date.now();
         if (now < options.deadline && !failure) {
             for (let scanned = 0; scanned < lanes.length && running.size < options.concurrency; scanned++) {
-                const lane = lanes[cursor];
-                cursor = (cursor + 1) % lanes.length;
+                cursor %= lanes.length;
+                const lane = lanes[cursor++];
                 if (lane.active || !lane.entries.length || lane.readyAt > now) continue;
                 const entry = lane.entries[0];
                 lane.active = true;
@@ -55,8 +56,9 @@ export async function drainHostQueues<T extends { url: string }, R>(
             await Promise.all(running);
             break;
         }
-        const readyTimes = lanes.filter(lane => !lane.active && lane.entries.length).map(lane => lane.readyAt);
-        const next = Math.min(...readyTimes);
+        // Drained hosts leave the rotation.
+        lanes = lanes.filter(lane => lane.active || lane.entries.length);
+        const next = lanes.reduce((min, lane) => lane.active ? min : Math.min(min, lane.readyAt), Infinity);
         // No useful retry before the deadline: persist leftovers immediately, rather than wait out a quota.
         if (!running.size && next >= options.deadline) break;
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -69,10 +71,11 @@ export async function drainHostQueues<T extends { url: string }, R>(
         if (timer) clearTimeout(timer);
     }
     if (failure) throw failure;
-    for (const lane of lanes) {
-        for (const [offset, entry] of lane.entries.entries()) {
-            results[entry.index] = await options.defer(entry.item, Math.max(1, lane.readyAt - Date.now()) + offset * options.spacingMs);
-        }
+    const leftovers = lanes.flatMap(lane => lane.entries.map((entry, offset) => ({ entry, waitMs: Math.max(1, lane.readyAt - Date.now()) + offset * options.spacingMs })));
+    for (let start = 0; start < leftovers.length; start += 20) {
+        await Promise.all(leftovers.slice(start, start + 20).map(async ({ entry, waitMs }) => {
+            results[entry.index] = await options.defer(entry.item, waitMs);
+        }));
     }
     return results;
 }

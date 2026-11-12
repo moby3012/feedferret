@@ -144,6 +144,7 @@ export function recordHostRateLimit(url: string, resetAt: number, now = Date.now
     hosts.set(host, { failures: 0, until: Math.max(hosts.get(host)?.until ?? 0, Math.min(resetAt, now + MAX_RETRY_AFTER_MS)), rateLimited: true });
 }
 
+const HOST_BUSY_RETRY_MS = 250;
 // Single-process, non-blocking gate. Busy hosts must never occupy a sync pool worker.
 const lanes = new Map<string, { busy: boolean; next: number }>();
 export class HostDeferredError extends Error {
@@ -158,7 +159,8 @@ export async function withPoliteHost<T>(url: string, task: () => Promise<T>): Pr
     let lane = lanes.get(host);
     if (!lane) { lane = { busy: false, next: 0 }; lanes.set(host, lane); }
     if (lane.busy || lane.next > Date.now()) {
-        throw new HostDeferredError(Math.max(1, lane.busy ? spacing : 0, lane.next - Date.now()), "host_busy");
+        // Floor while a fetch is in flight, so spacing=0 does not spin the retrying queue.
+        throw new HostDeferredError(Math.max(1, lane.busy ? Math.max(HOST_BUSY_RETRY_MS, spacing) : 0, lane.next - Date.now()), "host_busy");
     }
     lane.busy = true;
     lane.next = Date.now() + spacing;

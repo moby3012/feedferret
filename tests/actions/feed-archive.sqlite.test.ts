@@ -43,6 +43,7 @@ import {
 import { updateGlobalSettings } from "../../app/actions/settings";
 import { addFeed } from "../../app/actions/feeds";
 import { syncAllFeeds, syncUserFeeds } from "../../lib/rss-sync";
+import { importOpmlXml } from "../../lib/import/opml-import";
 import { getCounts, loadFeeds, loadArchivedFeeds, loadReadingPreferences } from "../../server/bootstrap";
 import { buildViewScope } from "../../server/articles/view-scope";
 
@@ -358,6 +359,30 @@ describe("archived feeds leave the reader but keep their articles", () => {
     const feed = await makeFeed(alice, { lastStatus: "attention", lastError: "HTTP 403: feed_blocked", consecutiveFailureCount: 0, autoMuted: false });
     const broken = await getBrokenFeeds();
     expect(broken.find(row => row.id === feed.id)).toMatchObject({ kind: "blocked", consecutiveFailureCount: 0, autoMuted: false });
+  });
+
+  it("user Refresh all refetches only feeds whose configured interval has passed (as before adaptive refresh)", async () => {
+    const fresh = await makeFeed(alice, { name: "fresh", lastFetchedAt: new Date(), nextSyncAt: null });
+    const overdue = await makeFeed(alice, { name: "overdue", lastFetchedAt: daysAgo(1), nextSyncAt: new Date(Date.now() + DAY) });
+    const never = await makeFeed(alice, { name: "never", lastFetchedAt: null, nextSyncAt: null });
+    h.syncedUrls.length = 0;
+    await syncUserFeeds(alice);
+    expect(h.syncedUrls.sort()).toEqual([overdue.url, never.url].sort());
+    expect(h.syncedUrls).not.toContain(fresh.url);
+  });
+
+  it("feeds created by an OPML import are fetched by the first reader-boot sync (no stagger wait)", async () => {
+    const xml = `<?xml version="1.0"?><opml version="2.0"><head><title>t</title></head><body>${[1, 2, 3]
+      .map((i) => `<outline type="rss" text="Imported ${i}" xmlUrl="https://imported${i}.example/feed.xml"/>`).join("")}</body></opml>`;
+    await importOpmlXml(alice, xml);
+    const imported = await h.db.feed.findMany({ where: { userId: alice, url: { startsWith: "https://imported" } } });
+    expect(imported).toHaveLength(3);
+    expect(imported.every((feed) => feed.nextSyncAt === null && feed.lastFetchedAt === null)).toBe(true);
+    h.syncedUrls.length = 0;
+    await syncUserFeeds(alice, { background: true });
+    expect(h.syncedUrls.filter((url) => url.startsWith("https://imported")).sort()).toEqual(imported.map((feed) => feed.url).sort());
+    const after = await h.db.feed.findMany({ where: { id: { in: imported.map((feed) => feed.id) } } });
+    expect(after.every((feed) => feed.nextSyncAt instanceof Date && feed.nextSyncAt.getTime() > Date.now())).toBe(true);
   });
 
   it("a deployment with many NULL schedules persists staggered Prisma Dates before fetching", async () => {

@@ -42,6 +42,7 @@ it("parses Retry-After seconds and HTTP dates", () => {
     expect(parseRetryAfterMs(new Date(now - 60000).toUTCString(), now)).toBe(0);
 });
 it("defers busy and spaced hosts immediately without parking a worker", async () => {
+    vi.stubEnv("FEED_HOST_SPACING_MS", "2000");
     vi.useFakeTimers(); vi.setSystemTime(now);
     let release!: () => void;
     const task = vi.fn();
@@ -56,6 +57,14 @@ it("defers busy and spaced hosts immediately without parking a worker", async ()
     await withPoliteHost("https://spacing.example/d", async () => { task(); });
     expect(task).toHaveBeenCalledOnce();
     expect(other).toHaveBeenCalledOnce();
+});
+it("with spacing disabled, a busy host still asks for a short retry floor instead of a spin", async () => {
+    vi.stubEnv("FEED_HOST_SPACING_MS", "0");
+    let release!: () => void;
+    const first = withPoliteHost("https://nospacing.example/a", async () => { await new Promise<void>(resolve => { release = resolve; }); });
+    await expect(withPoliteHost("https://nospacing.example/b", async () => "x")).rejects.toMatchObject({ reason: "host_busy", waitMs: 250 });
+    release(); await first;
+    await expect(withPoliteHost("https://nospacing.example/c", async () => "ok")).resolves.toBe("ok");
 });
 it("does not let a full-text 403 backoff block feed fetches", async () => {
     recordHostFailure("https://pages.example/article", new HttpStatusError(403, "denied"));

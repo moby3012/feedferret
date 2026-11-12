@@ -102,6 +102,9 @@ export default defineConfig({
         NEXTAUTH_URL: BASE_URL,
         AUTH_TRUST_HOST: "true",
         DISABLE_BACKGROUND_SYNC: "true",
+        // Every fixture feed lives on 127.0.0.1, i.e. one host lane: no politeness spacing in e2e,
+        // so boot syncs stay fast and deterministic. Spacing is covered by unit tests (set explicitly).
+        FEED_HOST_SPACING_MS: "0",
         // K2: the deterministic fake AI provider (lib/ai/fake.ts). Only honoured
         // with this flag AND the per-run harness token matching the marker file
         // the seed writes next to the disposable DB — never in a deployment.
