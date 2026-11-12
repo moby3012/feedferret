@@ -112,27 +112,27 @@ export async function updateExportSettings(data: {
   if (data.clearWallabagClientSecret) {
     updateData.exportWallabagClientSecret = null;
   } else if (data.wallabagClientSecret) {
-    updateData.exportWallabagClientSecret = encryptIfValue(data.wallabagClientSecret);
+    updateData.exportWallabagClientSecret = encryptIfValue(data.wallabagClientSecret, "user.exportWallabagClientSecret");
   }
 
   if (data.clearWallabagPassword) {
     updateData.exportWallabagPassword = null;
   } else if (data.wallabagPassword) {
-    updateData.exportWallabagPassword = encryptIfValue(data.wallabagPassword);
+    updateData.exportWallabagPassword = encryptIfValue(data.wallabagPassword, "user.exportWallabagPassword");
   }
 
   if ("readeckUrl" in data) updateData.exportReadeckUrl = data.readeckUrl?.trim() || null;
   if (data.clearReadeckApiKey) {
     updateData.exportReadeckApiKey = null;
   } else if (data.readeckApiKey) {
-    updateData.exportReadeckApiKey = encryptIfValue(data.readeckApiKey);
+    updateData.exportReadeckApiKey = encryptIfValue(data.readeckApiKey, "user.exportReadeckApiKey");
   }
 
   if ("linkwardenUrl" in data) updateData.exportLinkwardenUrl = data.linkwardenUrl?.trim() || null;
   if (data.clearLinkwardenApiKey) {
     updateData.exportLinkwardenApiKey = null;
   } else if (data.linkwardenApiKey) {
-    updateData.exportLinkwardenApiKey = encryptIfValue(data.linkwardenApiKey);
+    updateData.exportLinkwardenApiKey = encryptIfValue(data.linkwardenApiKey, "user.exportLinkwardenApiKey");
   }
 
   await db.user.update({ where: { id: session.user.id }, data: updateData });

@@ -18,6 +18,8 @@ type FakeArticle = {
   upstreamContentHash?: string | null;
   contentHash: string | null;
   content: string;
+  feedContent?: string | null;
+  fullTextStatus?: string | null;
   excerpt: string | null;
   author: string | null;
   publishedAt: Date;
@@ -164,6 +166,7 @@ type ArticleSyncInput = {
   upstreamContentHash?: string | null;
   contentHash: string | null;
   content: string;
+  legacyContent?: string;
   excerpt: string;
   author: string | null;
   publishedAt: Date;
@@ -205,6 +208,56 @@ describe("upsertArticleBatch", () => {
     expect(db.article.update).not.toHaveBeenCalled();
     await upsertArticleBatch([makeInput({ upstreamContentHash: "upstream-v2", content: "publisher update" })]);
     expect(store[0].content).toBe("publisher update");
+  });
+
+  describe("embed links (iframe → link at ingest)", () => {
+    const legacy = "<p>intro</p>";
+    const withLink = '<p>intro</p><a href="https://www.youtube.com/watch?v=abc123">https://www.youtube.com/watch?v=abc123</a>';
+    const row = (content: string) => seedExisting({ userId: "user-1", feedId: "feed-1", dedupeKey: "k1", title: "T", link: "https://example.com/1", content, excerpt: "intro", publishedAt: new Date(2024, 5, 1), imageUrl: null });
+    const input = (over: Record<string, unknown> = {}) => makeInput({ dedupeKey: "k1", title: "T", link: "https://example.com/1", content: withLink, legacyContent: legacy, excerpt: "intro", publishedAt: new Date(2024, 5, 1), imageUrl: null, ...over });
+
+    it("an unchanged item stored before the feature is not rewritten (no updatedAt bump) and keeps its stored body", async () => {
+      const { upsertArticleBatch } = await import("../../lib/rss-sync");
+      const existing = row(legacy);
+      await upsertArticleBatch([input()]);
+      expect(db.article.update).not.toHaveBeenCalled();
+      expect(store.find((a) => a.id === existing.id)!.content).toBe(legacy);
+    });
+
+    it("a genuine upstream change of such an item stores the new body with the embed link", async () => {
+      const { upsertArticleBatch } = await import("../../lib/rss-sync");
+      const existing = row(legacy);
+      await upsertArticleBatch([input({ content: "<p>edited</p>" + withLink.slice(legacy.length), legacyContent: "<p>edited</p>" })]);
+      expect(db.article.update).toHaveBeenCalledTimes(1);
+      expect(store.find((a) => a.id === existing.id)!.content).toBe("<p>edited</p>" + withLink.slice(legacy.length));
+    });
+
+    it("a full-text row whose feedContent equals the legacy form is not rewritten either", async () => {
+      const { upsertArticleBatch } = await import("../../lib/rss-sync");
+      const existing = seedExisting({
+        userId: "user-1", feedId: "feed-1", dedupeKey: "k1", title: "T", link: "https://example.com/1",
+        content: "<p>extracted full text of the article, much longer than the teaser</p>", feedContent: legacy, fullTextStatus: "ok",
+        excerpt: "extracted full text", publishedAt: new Date(2024, 5, 1), imageUrl: null,
+      });
+      await upsertArticleBatch([input()]);
+      expect(db.article.update).not.toHaveBeenCalled();
+      expect(store.find((a) => a.id === existing.id)).toMatchObject({ feedContent: legacy, content: "<p>extracted full text of the article, much longer than the teaser</p>" });
+    });
+
+    it("a row that already holds the link form stays untouched on the next sync", async () => {
+      const { upsertArticleBatch } = await import("../../lib/rss-sync");
+      row(withLink);
+      await upsertArticleBatch([input()]);
+      expect(db.article.update).not.toHaveBeenCalled();
+    });
+
+    it("a new item is created with the link and without any legacy field", async () => {
+      const { upsertArticleBatch } = await import("../../lib/rss-sync");
+      const result = await upsertArticleBatch([input()]);
+      expect(result.createdArticleIds).toHaveLength(1);
+      expect(store[0].content).toBe(withLink);
+      expect(store[0]).not.toHaveProperty("legacyContent");
+    });
   });
 
   it("inserts genuinely-new articles and reports them as created", async () => {

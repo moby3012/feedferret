@@ -55,7 +55,7 @@ The database admin setting is preferred — it can be changed without redeployin
 
 | Area | Implementation |
 |---|---|
-| Credentials encryption | Selected API keys, email provider credentials and AI keys use AES-256-GCM derived from `AUTH_SECRET` (v1). The v2 format (per-column HKDF keys, key ids, see "Stored secrets") can already be read for every secret column; TOTP seeds, feed passwords, notification tokens and webhook secrets are still written as plaintext until the next release switches writes to v2 |
+| Credentials encryption | Every stored secret (TOTP seeds, feed Basic-Auth and fetch options, notification tokens, webhook secrets/headers, AI/content/Wallabag keys, mail and connector credentials, IMAP newsletter credentials) is written AES-256-GCM sealed in the v2 format: per-column HKDF keys from `FEEDFERRET_ENCRYPTION_KEY` (fallback `AUTH_SECRET`), key ids, column purpose as AAD. Legacy values are re-sealed at startup and by `secrets:migrate` / `secrets:rotate`; see "Stored secrets" |
 | Password hashing | bcrypt via Auth.js |
 | Sessions | Signed JWT tokens — no server-side session state |
 | CSRF | Next.js Server Actions have built-in CSRF protection |
@@ -287,12 +287,12 @@ When enabled, any admin without 2FA active receives an error on every admin serv
 - Must be at least 32 characters.
 - Used for JWT signing and credential encryption.
 - Never commit to version control.
-- Keep stable across deploys — changing it invalidates all sessions and makes stored encrypted credentials unreadable.
+- Keep stable across deploys — changing it invalidates all sessions and, unless `FEEDFERRET_ENCRYPTION_KEY` is set, makes stored encrypted credentials unreadable.
 - Generate: `openssl rand -base64 32`
 
 **`FEEDFERRET_ENCRYPTION_KEY`** (optional, recommended for production)
 - Master key for secrets stored in the database. Base64 of ≥ 32 random bytes (`openssl rand -base64 32`); production refuses to start with a shorter or non-base64 value.
-- Falls back to `AUTH_SECRET`. Setting it decouples stored secrets from `AUTH_SECRET`, so rotating `AUTH_SECRET` no longer touches them (once values are stored in v2).
+- Falls back to `AUTH_SECRET`. Setting it decouples stored secrets from `AUTH_SECRET`, so rotating `AUTH_SECRET` no longer touches them. See "Setting `FEEDFERRET_ENCRYPTION_KEY`" below for the switch-over, and back it up: losing it means re-entering every stored secret.
 - `FEEDFERRET_ENCRYPTION_KEYS_OLD`: comma-separated, decrypt-only keys (previous `FEEDFERRET_ENCRYPTION_KEY` values or an old `AUTH_SECRET`). A value is used verbatim, so moving it between the variables keeps its key id.
 
 **`POSTGRES_PASSWORD`**
@@ -446,31 +446,154 @@ Formats (`lib/secret-box-core.mjs`):
 
 | Format | Shape | Key |
 |---|---|---|
-| v2 | `ff2.<kid>.<iv>.<ciphertext+tag>` | AES-256-GCM, key = HKDF-SHA256(master, salt `feedferret/v2`, info = column purpose such as `feed.authPassword`); the purpose is also the GCM AAD, so a value cannot be moved to another column. `kid` = first 4 bytes of HKDF(master, info `kid`) |
-| v1 | `iv:tag:ct` (base64) | AES-256-GCM, key = sha256(`AUTH_SECRET`) — API keys, mail credentials, connector tokens |
-| plaintext | — | TOTP seeds, feed Basic-Auth and fetch options, notification tokens, webhook secret/header values |
+| v2 (written) | `ff2.<kid>.<iv>.<ciphertext+tag>` | AES-256-GCM, key = HKDF-SHA256(master, salt `feedferret/v2`, info = column purpose such as `feed.authPassword`); the purpose is also the GCM AAD, so a value cannot be moved to another column. `kid` = first 4 bytes of HKDF(master, info `kid`) |
+| v1 (read only) | `iv:tag:ct` (base64) | AES-256-GCM, key = sha256(`AUTH_SECRET`) — API keys, mail credentials, connector tokens of older releases |
+| plaintext (read only) | — | TOTP seeds, feed Basic-Auth and fetch options, notification tokens, webhook secret/header values of older releases |
 
-Rollout (two releases, so a rollback never locks anyone out):
+The master key is `FEEDFERRET_ENCRYPTION_KEY` when set, otherwise `AUTH_SECRET`.
+Key material is used verbatim, and `FEEDFERRET_ENCRYPTION_KEYS_OLD` is a
+comma-separated list whose entries are trimmed. A master key with leading/trailing
+whitespace or a comma would get a different key id once moved into that list, so
+it is rejected: production refuses to start, the CLI exits with an error (the value
+is never printed). This applies to `FEEDFERRET_ENCRYPTION_KEY`, and to `AUTH_SECRET`
+while it is the master key. Check before upgrading:
+`node -e 'const v=process.env.AUTH_SECRET||"";console.log(v!==v.trim()||v.includes(",")?"BAD":"OK")'`
+inside the running container (prints only OK/BAD).
 
-1. **This release reads v2 everywhere and still writes v1/plaintext.** An image from before this release cannot read `ff2.` values, so nothing writes them yet.
-2. The next release writes v2, re-seals legacy values lazily and in the background, and adds `secrets:rotate`.
+**Writes.** Every write of a secret column is sealed with the current key: the
+setting forms call `sealSecret` / `encryptIfValue(value, purpose)`, and a Prisma
+write extension on the app's database client (`lib/secret-sealing.ts`) seals
+every registry column (`SECRET_COLUMNS`) on create/update/upsert, so no write
+path (REST, MCP, OPML import, repair, newsletter wizard …) can store a secret in
+the clear. Writes fail closed: an envelope-shaped value
+(`ff2.` prefix, or the v1 `iv:tag:ct` shape in a previously-v1 column) is stored
+as-is only when it **decrypts** for that very column with the configured keys (e.g.
+a kept stored value). One that does not — forged input, ciphertext copied from
+another column, or a stored value whose key is missing after a misconfigured
+restart — rejects the whole write (`SecretKeyError`) instead of being re-sealed as
+if it were plaintext (that would silently turn ciphertext into an HMAC key or an
+`Authorization` header and lose the original). Fix the key configuration
+(`FEEDFERRET_ENCRYPTION_KEYS_OLD`) or re-enter the secret. Plaintext — including
+strings with colons in previously-plaintext columns — is sealed. The `ff2.` prefix
+is reserved: a secret that literally starts with `ff2.` cannot be stored.
 
-A value that cannot be decrypted with the configured keys is never used silently: TOTP login fails closed, a feed fetch ends with an error status naming the column (never the value), a notification channel or webhook is skipped, and the column is logged once.
+**AAD scope (accepted limitation).** The AAD — and the HKDF info — is the column
+purpose (`feed.authPassword`), not the row. A ciphertext therefore cannot be moved
+to another column, but it can be copied to the same column of another row by someone
+with direct write access to the database. That attacker could equally write any
+plaintext there; the app never returns stored ciphertext to clients, so a user
+cannot obtain another user's envelope through the app. Row binding would make every
+row copy/restore operation key-dependent and is out of scope. OAuth account tokens
+(`Account.access_token` / `refresh_token` / `id_token`) are never used by the app:
+they are dropped on write and cleared by the re-seal pass.
 
-Check the state at any time (counts per column, format and key id; never prints a value; exit code 2 if anything is undecryptable):
+**Re-seal pass.** At every start the app re-seals, in the background, every value
+that is not v2 under the current key (legacy plaintext, v1, or a key from
+`FEEDFERRET_ENCRYPTION_KEYS_OLD`). Each row is a compare-and-swap on the stored
+string, so a concurrent edit always wins; `updatedAt` is kept. TOTP seeds are also
+re-sealed on the next successful login. Opt out with `FEEDFERRET_SECRET_MIGRATION=0`
+and run the CLI instead (the admin card's "Re-seal now" is disabled then, so a
+controlled rollout cannot be bypassed from the UI). **Startup never fails because of a stored secret**: a row the
+keys cannot open is counted and logged with its column, the first 8 characters of
+its row id and the reason (never the value), written to the system log (category
+`security`) and shown under *Server management → Instance → Stored secrets*.
+
+A value that cannot be decrypted is never used silently: TOTP login fails closed,
+a feed fetch ends with an error status naming the column, a notification channel or
+webhook is skipped, and the column is logged once.
+
+### Setting `FEEDFERRET_ENCRYPTION_KEY` (recommended for production)
+
+Without it, stored secrets depend on `AUTH_SECRET`, and rotating `AUTH_SECRET` (for
+example after a session-key leak) would make them unreadable. To decouple them:
+
+1. **Back up the database first** (`pg_dump -Fc` / copy the SQLite file).
+2. Generate a key: `openssl rand -base64 32`. Store it in your secret manager
+   (Coolify env, `.env`) **and** somewhere safe outside the server.
+3. Set `FEEDFERRET_ENCRYPTION_KEY=<new key>` and
+   `FEEDFERRET_ENCRYPTION_KEYS_OLD=<current AUTH_SECRET>` (values already sealed with
+   the `AUTH_SECRET`-derived key stay readable; GReader tokens and Telegram buttons
+   signed with it keep working).
+4. Restart. The re-seal pass moves every value to the new key. Check with
+   `secrets:status` (no `:old`, `plaintext` or `v1` buckets) or the admin card.
+5. Retire the old key only as described in "Retiring an old key" below — a clean
+   `secrets:status` is necessary but **not sufficient**.
+
+### CLI
+
+All commands run inside the Docker image (`node scripts/secrets-cli.mjs …`) or from a
+source checkout (`pnpm cli secrets:…`), use the same environment as the app, never
+print a secret value, and exit with code 2 if any value cannot be decrypted.
 
 ```bash
-node scripts/secrets-cli.mjs status          # inside the Docker image
-pnpm cli secrets:status                      # from a source checkout
+node scripts/secrets-cli.mjs status [--json]                       # counts per column, format and key id
+node scripts/secrets-cli.mjs migrate [--dry-run] [--batch 500] [--json]  # legacy plaintext / v1 → v2 (current key)
+node scripts/secrets-cli.mjs rotate  [--dry-run] [--batch 500] [--json]  # everything not under the current key → current key
 ```
 
-Key rotation (effective once the next release writes v2):
+`migrate` and `rotate` are idempotent and batched by row id; a row changed by the
+running app between read and write (its secret or its `updatedAt`) is skipped and
+counted as `conflicts` — the next pass picks it up. `migrate` leaves values under an old key alone and reports them
+(`old key (rotate)`); `rotate` re-seals those too.
 
-1. Set the new `FEEDFERRET_ENCRYPTION_KEY` and put the old value (or the old `AUTH_SECRET`) into `FEEDFERRET_ENCRYPTION_KEYS_OLD`.
-2. Restart. `secrets:status` shows values under the old key id as `v2:<kid>:old`.
-3. Once no value uses the old key id, remove it from `FEEDFERRET_ENCRYPTION_KEYS_OLD`.
+### Key rotation
 
-Signed tokens use domain-separated HMAC keys derived from the master key (`greader-token`, `telegram-callback`). This release verifies both the derived and the legacy `AUTH_SECRET` MAC and still issues the legacy one; GReader logins and Telegram buttons keep working across the switch.
+1. Back up the database.
+2. Set the new `FEEDFERRET_ENCRYPTION_KEY` and put the old value (or the old
+   `AUTH_SECRET`, if you never set a key) into `FEEDFERRET_ENCRYPTION_KEYS_OLD`
+   (comma-separated, decrypt-only).
+3. Restart. The re-seal pass moves every value to the new key; `secrets:rotate`
+   forces a pass, `--dry-run` shows the counts first.
+4. Retire the old key only as described in "Retiring an old key" below.
+
+### Retiring an old key
+
+A key in `FEEDFERRET_ENCRYPTION_KEYS_OLD` does two jobs: it decrypts stored values
+sealed with it, **and** it verifies HMAC-signed tokens that live outside the database
+and that the re-seal pass cannot see:
+
+| Artifact | Signed with | Lifetime |
+|---|---|---|
+| GReader / FreshRSS-API client tokens (`Authorization: GoogleLogin auth=…`) | key current at login | until the client logs in again (no expiry) |
+| Telegram "mark read" buttons | key current when sent | 7 days |
+
+So `secrets:status` showing no `:old` bucket only means the **database** no longer
+needs the key. Remove it from `FEEDFERRET_ENCRYPTION_KEYS_OLD` only when all of these
+hold:
+
+1. `secrets:status` exits 0 and shows no `v2:<kid>:old` bucket;
+2. at least 7 days have passed since the key stopped being current (Telegram links
+   signed with it have expired);
+3. every GReader client has re-authenticated since the switch — or you accept that
+   clients still holding an old token get a 401 and must log in again.
+
+Tokens signed with the raw `AUTH_SECRET` by releases before M8 PR 5 are verified as
+long as `AUTH_SECRET` itself is unchanged; to stop accepting them set
+`FEEDFERRET_LEGACY_MAC_UNTIL` (ISO date, e.g. `2027-02-15`, 90 days after this
+release) — clients holding such a token must log in again after that date. An
+unparsable value is ignored (treated as not set, legacy signatures stay accepted)
+and logged once at boot. `secrets:rotate` never tells
+you an old key is safe to remove; it only reports the database side.
+
+### Backups and losing the key
+
+**The key is part of the backup.** A database backup without the matching
+`FEEDFERRET_ENCRYPTION_KEY` (or `AUTH_SECRET`, if no key is set) cannot be used to
+recover stored secrets: there is no way to decrypt them without the key. If the key
+is lost, the data stays intact but every stored secret must be re-entered — TOTP
+users must set up two-factor again (an admin can disable it), feed passwords, fetch
+options, notification tokens, webhook secrets, API keys and mail credentials must be
+saved again. Keep the key in a password manager or secret store separate from the
+database backup, and restore both together.
+
+Rolling back one release is safe: the previous image (M8 PR 4) reads v2 values. Do
+not roll back further than that once v2 values have been written.
+
+Signed tokens use domain-separated HMAC keys derived from the master key
+(`greader-token`, `telegram-callback`) and are issued with the current key.
+Verification also accepts keys in `FEEDFERRET_ENCRYPTION_KEYS_OLD` and the legacy raw
+`AUTH_SECRET` signature older releases issued, until the optional
+`FEEDFERRET_LEGACY_MAC_UNTIL` (ISO date) has passed.
 
 Read surfaces never return stored secrets:
 - Notification channels report `hasTelegramBotToken` / `hasGotifyToken` / `hasNtfyToken` (an empty field keeps the token, "Remove" / `null` clears it). A token that is stored but cannot be decrypted skips the channel instead of sending without it.

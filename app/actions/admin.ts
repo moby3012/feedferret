@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { clearMediaProxySettingsCache } from "@/lib/media-settings";
 import { getConfiguredMailProviders, sendTestSystemEmail, type MailProviderId } from "@/lib/mail";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
+import { getKeyring } from "@/lib/secret-box";
 import { revalidatePath } from "next/cache";
 import { normalizeStarterPacksInput, stringifyStarterPacks } from "@/lib/starter-packs";
 import { getStarterPacksFromSettings } from "@/lib/starter-packs.server";
@@ -174,7 +175,7 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
     if (field in data) {
       const val = String(data[field] || "").trim();
       if (val && val !== "__encrypted__") {
-        next[field] = encryptIfValue(val);
+        next[field] = encryptIfValue(val, `globalSettings.${field}`);
       }
       // If empty, skip — preserve existing encrypted value
     }
@@ -598,4 +599,61 @@ export async function testTwitchConnection(input: { clientId: string; clientSecr
     }
     return { success: false as const, error: "Twitch connection failed. Check credentials or retry after the API rate limit resets." };
   }
+}
+
+// ─── Stored secrets (security audit #2, M8 PR 5) ─────────────────────────
+// Key ids and counts only — never a key, a stored value or a full row id.
+
+export type SecretHealth = {
+  keySource: string;
+  currentKid: string;
+  oldKids: string[];
+  migration: {
+    enabled: boolean;
+    running: boolean;
+    error: string | null;
+    finishedAt: string | null;
+    resealed: number;
+    undecryptable: number;
+    oldKey: number;
+    conflicts: number;
+    problems: Array<{ column: string; id: string; reason: string }>;
+  };
+};
+
+function toSecretHealth(state: ReturnType<typeof import("@/lib/secret-migration").getSecretMigrationState>): SecretHealth {
+  const keyring = getKeyring();
+  const last = state.last;
+  return {
+    keySource: keyring.current.source,
+    currentKid: keyring.current.kid,
+    oldKids: keyring.old.map((k) => k.kid),
+    migration: {
+      enabled: state.enabled,
+      running: state.running,
+      error: state.error,
+      finishedAt: last?.finishedAt ?? null,
+      resealed: last?.totals.resealed ?? 0,
+      undecryptable: last?.totals.undecryptable ?? 0,
+      oldKey: last?.totals.oldKey ?? 0,
+      conflicts: last?.totals.conflicts ?? 0,
+      problems: (last?.problems ?? []).slice(0, 20),
+    },
+  };
+}
+
+export async function getSecretHealth(): Promise<SecretHealth> {
+  await checkAdmin();
+  const { getSecretMigrationState } = await import("@/lib/secret-migration");
+  return toSecretHealth(getSecretMigrationState());
+}
+
+/** Runs the re-seal pass now (same as at boot). Refused while FEEDFERRET_SECRET_MIGRATION=0. */
+export async function runSecretResealNow(): Promise<SecretHealth> {
+  await checkAdmin();
+  const { getSecretMigrationState, runSecretMigration, secretMigrationEnabled } = await import("@/lib/secret-migration");
+  // FEEDFERRET_SECRET_MIGRATION=0 means "operator runs secrets:migrate by hand" (controlled rollout).
+  if (!secretMigrationEnabled()) throw new Error("Re-seal is disabled (FEEDFERRET_SECRET_MIGRATION=0). Use the secrets CLI.");
+  await runSecretMigration();
+  return toSecretHealth(getSecretMigrationState());
 }

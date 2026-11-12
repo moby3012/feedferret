@@ -305,4 +305,40 @@ if ! docker exec "$APP2" node scripts/secrets-cli.mjs status >/dev/null; then
   exit 1
 fi
 log "secrets-cli status runs inside the image"
+if ! docker exec "$APP2" node scripts/secrets-cli.mjs migrate --dry-run >/dev/null; then
+  fail "secrets-cli migrate --dry-run failed inside the image"
+  docker exec "$APP2" node scripts/secrets-cli.mjs migrate --dry-run >&2 || true
+  exit 1
+fi
+log "secrets-cli migrate --dry-run runs inside the image"
+
+# Real re-seal on Postgres (M8 PR 5): a legacy plaintext feed password written
+# after boot (so the app's one-time background pass cannot have touched it) is
+# re-sealed by `secrets-cli migrate`; afterwards `status` exits 0 and the stored
+# value is an ff2. envelope that decrypts to the original password.
+if [ "$MODE" = "postgres" ]; then
+  smoke_pass="smoke:plain-$(head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  db_query "INSERT INTO \"User\" (id, email, \"updatedAt\") VALUES ('smoke-secrets-user', 'smoke-secrets@example.invalid', now());
+            INSERT INTO \"Feed\" (id, url, name, \"userId\", \"authType\", \"authPassword\", \"updatedAt\")
+            VALUES ('smoke-secrets-feed', 'https://example.invalid/feed.xml', 'smoke', 'smoke-secrets-user', 'basic', '${smoke_pass}', now());" >/dev/null
+  migrate_json=$(docker exec "$APP2" node scripts/secrets-cli.mjs migrate --json) || { fail "secrets-cli migrate failed inside the image"; echo "$migrate_json" >&2; exit 1; }
+  resealed=$(docker exec "$APP2" node -e 'const r = JSON.parse(process.argv[1]); console.log(r.columns.find((c) => c.column === "feed.authPassword").resealed)' "$migrate_json")
+  if [ "$resealed" -lt 1 ]; then fail "secrets-cli migrate did not re-seal the plaintext feed password"; echo "$migrate_json" >&2; exit 1; fi
+  if ! docker exec "$APP2" node scripts/secrets-cli.mjs status >/dev/null; then
+    fail "secrets-cli status is not clean after migrate"
+    docker exec "$APP2" node scripts/secrets-cli.mjs status >&2 || true
+    exit 1
+  fi
+  stored=$(db_query "SELECT \"authPassword\" FROM \"Feed\" WHERE id = 'smoke-secrets-feed'")
+  case "$stored" in ff2.*) ;; *) fail "feed password is not ff2.-sealed after migrate"; exit 1 ;; esac
+  # Decrypt inside the image (its AUTH_SECRET); print only whether it matches.
+  match=$(docker exec "$APP2" node --input-type=module -e '
+    const { openSecret } = await import("/app/lib/secret-box-core.mjs");
+    const { value } = openSecret("feed.authPassword", process.argv[1], { legacy: "plaintext" });
+    console.log(value === process.argv[2] ? "match" : "mismatch");
+  ' "$stored" "$smoke_pass" 2>&1 || true)
+  if [ "$match" != "match" ]; then fail "re-sealed feed password does not decrypt to the original ($match)"; exit 1; fi
+  db_query "DELETE FROM \"Feed\" WHERE id = 'smoke-secrets-feed'; DELETE FROM \"User\" WHERE id = 'smoke-secrets-user';" >/dev/null
+  log "secrets-cli migrate re-sealed a plaintext feed password; status clean; value decrypts"
+fi
 log "OK"

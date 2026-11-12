@@ -167,6 +167,13 @@ describe("TOTP with plaintext and v2-sealed secrets", () => {
     // with the old key in _OLD, the same login works again
     process.env.FEEDFERRET_ENCRYPTION_KEYS_OLD = AUTH;
     expect(await consumeTotpToken(ids.sealedUser, stored, generateTotpToken(TOTP))).toBe(true);
+    // M8 PR 5: that login re-sealed the seed with the (new) current key
+    const resealed = (await state.db.user.findUniqueOrThrow({ where: { id: ids.sealedUser } })).twoFactorSecret!;
+    expect(resealed).not.toBe(stored);
+    expect(openSecret("user.twoFactorSecret", resealed, "plaintext")).toMatchObject({ value: TOTP, stale: false });
+    process.env.AUTH_SECRET = AUTH;
+    delete process.env.FEEDFERRET_ENCRYPTION_KEYS_OLD;
+    await state.db.user.update({ where: { id: ids.sealedUser }, data: { twoFactorSecret: stored } });
   });
 
   it("step-up and disable accept a code for a sealed secret", async () => {
@@ -203,7 +210,7 @@ describe("notification channel tokens are write-only", () => {
     ]);
   });
 
-  it("update keeps tokens on omitted / blank / __keep__, clears on null, stores new values in the legacy format", async () => {
+  it("update keeps tokens on omitted / blank / __keep__, clears on null, replaces on a new value", async () => {
     state.session = { user: { id: ids.sealedUser } };
     const before = await state.db.user.findUniqueOrThrow({ where: { id: ids.sealedUser } });
     await updateNotificationChannels({ telegramChatId: "43", telegramBotToken: "", gotifyToken: "__keep__" });
@@ -216,7 +223,7 @@ describe("notification channel tokens are write-only", () => {
     await updateNotificationChannels({ ntfyToken: null, gotifyToken: " new-gotify " });
     row = await state.db.user.findUniqueOrThrow({ where: { id: ids.sealedUser } });
     expect(row.ntfyToken).toBeNull();
-    expect(row.gotifyToken).toBe("new-gotify"); // PR 4 still writes the old (plaintext) format
+    expect(row.gotifyToken).toBe("new-gotify"); // raw test client without the db write extension (sealing: m8-secrets-write.test.ts)
 
     // untrusted input of the wrong type is ignored, never spread into Prisma
     await updateNotificationChannels({ telegramBotToken: 5, evil: "x", telegramEnabled: "yes" } as never);

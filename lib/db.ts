@@ -1,4 +1,5 @@
 import { withExternalIds } from "./external-id-store";
+import { withSecretSealing } from "./secret-sealing";
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -64,11 +65,12 @@ function createAdapter() {
 
 const globalForPrisma = globalThis as unknown as { prisma: ReturnType<typeof createDb> };
 
+// Secret columns are sealed on every write (security audit #2, M8 PR 5).
 const createDb = () =>
-  withExternalIds(new PrismaClient({
+  withSecretSealing(withExternalIds(new PrismaClient({
     adapter: createAdapter(),
     log: ["error"],
-  }));
+  })));
 
 export const db = globalForPrisma.prisma || createDb();
 
