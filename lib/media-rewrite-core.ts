@@ -11,7 +11,15 @@ export function rewriteMediaInProcess({ html, base, keyHex }: MediaRewriteInput)
     body.innerHTML = html;
     const key = Buffer.from(keyHex, "hex");
     const rewrite = (url: string) => signedMediaUrl(url, key, base);
-    for (const el of body.querySelectorAll("img, picture source, video[poster]")) {
+    for (const media of body.querySelectorAll("video, audio")) {
+      media.setAttribute("preload", "none");
+      media.removeAttribute("autoplay");
+      for (const source of media.querySelectorAll("source")) {
+        source.setAttribute("preload", "none");
+        source.removeAttribute("autoplay");
+      }
+    }
+    for (const el of body.querySelectorAll('img, input[type="image" i], picture source, video[poster]')) {
       const attr = el.tagName === "VIDEO" ? "poster" : "src";
       if (el.hasAttribute(attr)) el.setAttribute(attr, rewrite(el.getAttribute(attr)!));
       if (el.hasAttribute("srcset")) {

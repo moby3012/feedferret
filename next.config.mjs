@@ -58,7 +58,7 @@ const nextConfig = {
       // why the enforced header has to stay here. Baked in at build time.
       { source: "/api/:path*", headers: [{ key: "Content-Security-Policy", value: apiCsp }] },
       { source: "/api/media", headers: [
-        { key: "Content-Security-Policy", value: "default-src 'none'" },
+        { key: "Content-Security-Policy", value: "default-src 'none'; sandbox" },
         { key: "Referrer-Policy", value: "no-referrer" },
       ] },
       { source: "/offline.html", headers: [{ key: "Content-Security-Policy", value: offlineCsp }] },

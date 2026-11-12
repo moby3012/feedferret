@@ -64,12 +64,13 @@ async function trimCache(cacheName, max) {
   await Promise.all(keys.slice(0, Math.max(0, keys.length - max)).map((key) => cache.delete(key)));
 }
 
-function cacheable(response) {
+function cacheable(response, allowPrivate = false) {
   return (
     response.ok &&
     response.status === 200 &&
     response.type === "basic" &&
-    !/private|no-store/i.test(response.headers.get("cache-control") || "")
+    !/no-store/i.test(response.headers.get("cache-control") || "") &&
+    (allowPrivate || !/private/i.test(response.headers.get("cache-control") || ""))
   );
 }
 
@@ -84,12 +85,12 @@ async function cacheFirst(event, cacheName, max) {
   return response;
 }
 
-async function staleWhileRevalidate(event, cacheName, max) {
+async function staleWhileRevalidate(event, cacheName, max, allowPrivate = false) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(event.request);
   const network = fetch(event.request)
     .then((response) => {
-      if (cacheable(response)) {
+      if (cacheable(response, allowPrivate)) {
         event.waitUntil(cache.put(event.request, response.clone()).then(() => trimCache(cacheName, max)));
       }
       return response;
@@ -165,7 +166,7 @@ self.addEventListener("fetch", (event) => {
 
   // Signed raster images share the bounded runtime cache, cleared on logout.
   if (url.pathname === "/api/media" && request.destination === "image") {
-    event.respondWith(staleWhileRevalidate(event, RUNTIME_CACHE, RUNTIME_MAX_ENTRIES));
+    event.respondWith(staleWhileRevalidate(event, RUNTIME_CACHE, RUNTIME_MAX_ENTRIES, true));
     return;
   }
 

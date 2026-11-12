@@ -345,7 +345,7 @@
         });
       } catch { return ""; }
     }
-    for (var el of template.content.querySelectorAll("img, picture source, video[poster]")) {
+    for (var el of template.content.querySelectorAll('img, input[type="image" i], picture source, video[poster]')) {
       for (var attr of ["src", "poster"]) {
         if (el.hasAttribute(attr)) el.setAttribute(attr, await embed(el.getAttribute(attr)));
       }
