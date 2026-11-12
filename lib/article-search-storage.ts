@@ -50,6 +50,17 @@ function setStatus(status: ArticleSearchProjectionStatus) { store[STATUS_KEY] = 
 export function articleSearchProjectionStatus(): ArticleSearchProjectionStatus {
     return store[STATUS_KEY] ?? { state: "unknown" };
 }
+/**
+ * True only after this process verified the projection complete (startup self-check, or the
+ * periodic re-check). Until then lib/search.ts runs the same predicates on Article columns.
+ */
+export function isArticleSearchReady(): boolean {
+    return articleSearchProjectionStatus().state === "complete";
+}
+/** Tests only: a freshly pushed, empty database with the triggers installed is complete by definition. */
+export function markArticleSearchVerifiedForTests() {
+    setStatus({ state: "complete", missing: 0 });
+}
 
 const PG_BATCH = 5000;
 const SQLITE_BATCH = 1000;
@@ -68,9 +79,11 @@ const isLockConflict = (err: unknown) => /lock timeout|deadlock|55P03|40P01/i.te
 
 /**
  * Fills missing projection rows in small key-ordered batches (never one long statement).
- * Postgres: each batch briefly holds a SHARE lock on Article (a few ms; writers wait, they cannot
- * deadlock with the copy because no Article writer can be mid-transaction while it runs), with a
- * lock_timeout so a long-running transaction delays the backfill instead of stalling ingestion.
+ * Postgres: each batch briefly holds an EXCLUSIVE lock on Article (a few ms). Plain reads continue;
+ * writers AND row-locking readers (SELECT … FOR UPDATE in bulk mark-read) wait. The lock is only
+ * granted once every transaction that wrote or row-locked Article has finished, so the copy's
+ * FK checks never wait on another transaction's row lock and no cycle (deadlock) is possible.
+ * lock_timeout: a long-running transaction delays the batch (retried) instead of stalling writers.
  * ON CONFLICT DO NOTHING keeps newer rows written by the triggers. Safe to interrupt at any point;
  * a later start resumes via the count check.
  */
@@ -90,7 +103,7 @@ export async function backfillArticleSearch(options: { yieldMs?: number } = {}):
                 try {
                     const [, , count] = await db.$transaction([
                         db.$executeRawUnsafe("SET LOCAL lock_timeout = '5s'"),
-                        db.$executeRawUnsafe('LOCK TABLE "Article" IN SHARE MODE'),
+                        db.$executeRawUnsafe('LOCK TABLE "Article" IN EXCLUSIVE MODE'),
                         db.$executeRawUnsafe(
                             `INSERT INTO "ArticleSearch" ("id", "title", "content", "excerpt", "author", "entities")
                              SELECT a."id", a."title", a."content", a."excerpt", a."author", a."entities" FROM "Article" a
@@ -133,9 +146,10 @@ export async function backfillArticleSearch(options: { yieldMs?: number } = {}):
 /**
  * Startup self-check (both providers). Installs the sync triggers if missing (db-push/dev
  * databases; a no-op catalog probe on migrated ones), then compares Article and ArticleSearch
- * row counts. An incomplete projection (migration backfill deferred by a lock conflict, a
- * restored dump, an interrupted deploy) is filled in batches. Search reads the projection, so
- * a gap would silently hide articles; it is logged and reported in /api/health until fixed.
+ * row counts. An incomplete projection (migration copy deferred by a lock timeout, a restored
+ * dump, an interrupted deploy) is filled in batches. Until the projection is verified complete,
+ * search runs on the Article columns (isArticleSearchReady), so a gap never hides articles; the
+ * state is logged and reported in /api/health.
  */
 export async function ensureArticleSearchStorage(options: { yieldMs?: number } = {}): Promise<ArticleSearchProjectionStatus> {
     const pg = getDatabaseProvider() === "postgresql";
@@ -153,21 +167,50 @@ export async function ensureArticleSearchStorage(options: { yieldMs?: number } =
             setStatus({ state: "complete", missing: 0 });
             return articleSearchProjectionStatus();
         }
-        console.warn(`[search-projection] ArticleSearch is missing ${missing} article(s); search would not find them. Backfilling in the background.`);
+        console.warn(`[search-projection] ArticleSearch is missing ${missing} article(s). Search uses the Article columns until the background backfill completes.`);
         setStatus({ state: "backfilling", missing });
         const inserted = await backfillArticleSearch(options);
         const left = await missingProjectionRows();
         if (left > 0) {
             // Rows deleted/inserted concurrently can only shrink the gap; anything left is unexpected.
             setStatus({ state: "error", missing: left, detail: `backfill inserted ${inserted}, ${left} still missing` });
-            console.error(`[search-projection] ArticleSearch still misses ${left} article(s) after backfill (${inserted} inserted). Next start retries.`);
+            console.error(`[search-projection] ArticleSearch still misses ${left} article(s) after backfill (${inserted} inserted); search stays on the Article columns, retrying.`);
         } else {
             setStatus({ state: "complete", missing: 0, detail: `backfilled ${inserted}` });
-            console.info(`[search-projection] ArticleSearch backfill complete (${inserted} row(s)).`);
+            console.info(`[search-projection] ArticleSearch backfill complete (${inserted} row(s)); search uses the projection.`);
         }
     } catch (err) {
         setStatus({ state: "error", detail: err instanceof Error ? err.message : String(err) });
         throw err;
     }
     return articleSearchProjectionStatus();
+}
+
+// ── Background maintenance (server process only) ─────────────────────────────
+// A failed or incomplete check is retried with exponential backoff (30 s … 15 min), not only on
+// the next restart. A verified projection is re-checked hourly (two counts); a gap found then
+// switches search back to the Article columns and repairs it.
+const RETRY_BASE_MS = 30_000;
+const RETRY_MAX_MS = 15 * 60_000;
+const RECHECK_MS = 60 * 60_000;
+const TIMER_KEY = "__feedferret_article_search_timer__";
+const timers = globalThis as unknown as Record<string, ReturnType<typeof setTimeout> | undefined>;
+
+/** `onReady` runs whenever a check turns an incomplete projection complete (e.g. finish the index swap). */
+export function scheduleArticleSearchMaintenance(onReady?: () => void, attempt = 0) {
+    if (timers[TIMER_KEY]) clearTimeout(timers[TIMER_KEY]);
+    const wasReady = isArticleSearchReady();
+    const delay = wasReady ? RECHECK_MS : Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** attempt);
+    const timer = setTimeout(() => {
+        timers[TIMER_KEY] = undefined;
+        void ensureArticleSearchStorage()
+            .catch((err) => console.warn("[search-projection] check failed; search stays on the Article columns, retrying.", err instanceof Error ? err.message : err))
+            .finally(() => {
+                const ready = isArticleSearchReady();
+                if (ready && !wasReady) onReady?.();
+                scheduleArticleSearchMaintenance(onReady, ready ? 0 : attempt + 1);
+            });
+    }, delay);
+    timer.unref?.();
+    timers[TIMER_KEY] = timer;
 }

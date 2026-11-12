@@ -16,6 +16,7 @@ vi.mock("../../lib/search-indexes", () => ({
   isSqliteFtsReady: vi.fn(async () => true),
 }));
 import { isSqliteFtsReady } from "../../lib/search-indexes";
+import { markArticleSearchVerifiedForTests } from "../../lib/article-search-storage";
 
 const USER = "user-1";
 
@@ -25,6 +26,8 @@ const USER = "user-1";
 // Individual tests below override this with mockResolvedValue(Once) to
 // exercise the FTS-hit path instead.
 beforeEach(() => {
+  // Production state after the startup self-check: text predicates go through the projection.
+  markArticleSearchVerifiedForTests();
   (isSqliteFtsReady as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(true);
   (db.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockReset();
   (db.$queryRawUnsafe as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
@@ -434,5 +437,37 @@ describe("K3 enrichment operators", () => {
   it("unknown is: values still fall through as free text", async () => {
     const where = await buildAdvancedSearchWhere(USER, "is:bogus");
     expect(JSON.stringify(where)).not.toContain("isSponsored");
+  });
+});
+
+// ── Projection not (yet) verified ───────────────────────────────────────────
+
+describe("before the ArticleSearch projection is verified complete", () => {
+  beforeEach(() => {
+    (globalThis as Record<string, unknown>).__feedferret_article_search_projection__ = { state: "backfilling", missing: 3 };
+  });
+
+  it("runs free-text, field, entity and negated predicates on the Article columns and skips FTS", async () => {
+    const where = await buildAdvancedSearchWhere(USER, 'needle title:Alpha -author:Jane entity:EZB -entity:"Angela Merkel" -content:x');
+    expect(JSON.stringify(where)).not.toContain('"search"');
+    expect(db.$queryRawUnsafe).not.toHaveBeenCalled(); // article_fts indexes the projection
+    expect(where).toEqual({ AND: [
+      { title: { contains: "Alpha" } },
+      { NOT: { author: { contains: "Jane" } } },
+      { entities: { contains: '"EZB"' } },
+      { OR: [{ entities: null }, { NOT: { entities: { contains: '"Angela Merkel"' } } }] },
+      { NOT: { OR: [{ content: { contains: "x" } }, { excerpt: { contains: "x" } }] } },
+      { OR: [
+        { OR: [{ title: { contains: "needle" } }, { content: { contains: "needle" } }, { excerpt: { contains: "needle" } }, { author: { contains: "needle" } }] },
+        { link: { contains: "needle" } },
+        { feed: { name: { contains: "needle" } } },
+        { labels: { some: { label: { name: { contains: "needle" }, userId: USER } } } },
+      ] },
+    ] });
+  });
+
+  it("switches to the projection as soon as it is verified", async () => {
+    markArticleSearchVerifiedForTests();
+    expect(await buildAdvancedSearchWhere(USER, "title:Alpha")).toEqual({ AND: [{ search: { is: { title: { contains: "Alpha" } } } }] });
   });
 });

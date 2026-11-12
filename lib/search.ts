@@ -1,5 +1,6 @@
 import { db, getDatabaseProvider } from "./db";
 import { isSqliteFtsReady } from "./search-indexes";
+import { isArticleSearchReady } from "./article-search-storage";
 
 // PostgreSQL's LIKE is case-sensitive; Prisma supports mode:'insensitive' (ILIKE) there.
 // SQLite's LIKE is already case-insensitive for ASCII and does NOT support mode:'insensitive'.
@@ -79,7 +80,8 @@ async function ftsMatchIds(userId: string, term: string, cap: number): Promise<s
     if (Array.from(term).length < MIN_FTS_TERM_LENGTH) return null;
 
     try {
-        if (!(await isSqliteFtsReady())) return null;
+        // article_fts indexes ArticleSearch: only trustworthy once the projection is verified complete.
+        if (!isArticleSearchReady() || !(await isSqliteFtsReady())) return null;
         const rows = await db.$queryRawUnsafe<{ id: string }[]>(
             `SELECT a.id AS id FROM "ArticleSearch" s JOIN "Article" a ON a.id = s.id
              WHERE a.userId = ? AND s.rowid IN (SELECT rowid FROM article_fts WHERE article_fts MATCH ?)
@@ -294,7 +296,28 @@ async function processGroupTokens(userId: string, tokens: string[], ftsCap: numb
     return and.length ? { AND: and } : {};
 }
 
+/**
+ * Text predicates are written against the ArticleSearch projection (`{ search: { is: … } }`).
+ * Until the startup self-check has verified the projection is complete (an upgrade whose copy
+ * was deferred, an interrupted backfill, a db-push database), the same predicates run against
+ * the identical Article columns instead, so search never silently misses articles. The two
+ * forms are result-equivalent (tests/lib/article-search-storage.test.ts), including NULL
+ * semantics of negations, because negation always sits inside the relation.
+ */
+function toArticleColumns(where: unknown): any {
+    if (Array.isArray(where)) return where.map(toArticleColumns);
+    if (!where || typeof where !== "object" || where instanceof Date) return where;
+    const object = where as Record<string, any>;
+    if (object.search && typeof object.search === "object" && "is" in object.search) return toArticleColumns(object.search.is);
+    return Object.fromEntries(Object.entries(object).map(([key, value]) => [key, toArticleColumns(value)]));
+}
+
 export async function buildAdvancedSearchWhere(userId: string, query?: string) {
+    const where = await buildProjectionSearchWhere(userId, query);
+    return isArticleSearchReady() ? where : toArticleColumns(where);
+}
+
+async function buildProjectionSearchWhere(userId: string, query?: string): Promise<object> {
     if (!query?.trim()) return {};
 
     const allTokens = tokenizeSearch(query.trim().slice(0, MAX_SEARCH_QUERY_LENGTH)).slice(0, MAX_SEARCH_TOKENS);

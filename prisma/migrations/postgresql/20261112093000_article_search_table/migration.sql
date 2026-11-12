@@ -51,17 +51,19 @@ DO $$ BEGIN
 END $$;
 COMMIT;
 
--- Phase 2: copy into the (still unindexed) projection under a SHARE lock on Article. Writers
--- wait for the copy (seconds, see docs/performance/article-search-table.md) but can never
--- deadlock with it: every transaction that already wrote Article finishes before the copy starts,
--- so no trigger-written projection row can be in flight. ON CONFLICT DO NOTHING makes a re-run
--- cheap. If the lock is not granted within lock_timeout (a long-running transaction), the copy is
--- deferred instead of failing the deploy: the app's startup self-check
--- (lib/article-search-storage.ts) finds the gap and fills it in small batches.
+-- Phase 2: copy into the (still unindexed) projection under an EXCLUSIVE lock on Article.
+-- Plain reads continue; writers and row-locking readers (SELECT … FOR UPDATE, bulk mark-read)
+-- wait for the copy (seconds, see docs/performance/article-search-table.md). The lock is granted
+-- only after every transaction that wrote or row-locked Article has finished, so neither a
+-- trigger-written projection row nor a foreign row lock can be in flight: the copy's inserts and
+-- FK checks never wait on another transaction, hence no deadlock. ON CONFLICT DO NOTHING makes a
+-- re-run cheap. If the lock is not granted within lock_timeout (a long-running transaction), the
+-- copy is deferred instead of failing the deploy: search keeps using the Article columns until
+-- the app's startup self-check (lib/article-search-storage.ts) has filled and verified it.
 BEGIN;
 SET LOCAL lock_timeout = '15s';
 DO $$ BEGIN
-  LOCK TABLE "Article" IN SHARE MODE;
+  LOCK TABLE "Article" IN EXCLUSIVE MODE;
   INSERT INTO "ArticleSearch" ("id", "title", "content", "excerpt", "author", "entities")
   SELECT "id", "title", "content", "excerpt", "author", "entities" FROM "Article"
   ON CONFLICT ("id") DO NOTHING;
@@ -84,11 +86,13 @@ DO $$ BEGIN
 END $$;
 COMMIT;
 
--- Phase 4 (empty projection only): instant GIN builds. Takes only the ArticleSearch lock.
+-- Phase 4 (empty databases only, same condition as phase 3): instant GIN builds. Reads Article
+-- (ACCESS SHARE), locks only ArticleSearch. A populated database whose copy was deferred gets its
+-- indexes from the app's background CONCURRENTLY build like any other populated database.
 BEGIN;
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
-    IF NOT EXISTS (SELECT 1 FROM "ArticleSearch" LIMIT 1) THEN
+    IF NOT EXISTS (SELECT 1 FROM "Article" LIMIT 1) THEN
       CREATE INDEX IF NOT EXISTS "ArticleSearch_title_trgm_idx" ON "ArticleSearch" USING GIN ("title" gin_trgm_ops);
       CREATE INDEX IF NOT EXISTS "ArticleSearch_content_trgm_idx" ON "ArticleSearch" USING GIN ("content" gin_trgm_ops);
       CREATE INDEX IF NOT EXISTS "ArticleSearch_excerpt_trgm_idx" ON "ArticleSearch" USING GIN ("excerpt" gin_trgm_ops);

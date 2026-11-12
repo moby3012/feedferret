@@ -14,7 +14,8 @@ vi.mock("@/lib/db", () => ({
   get db() { return state.db; },
   getDatabaseProvider: () => process.env.SEARCH_TEST_PG_URL ? "postgresql" : "sqlite",
 }));
-import { articleSearchProjectionStatus, ensureArticleSearchStorage, POSTGRES_SEARCH_TRIGGERS, SQLITE_SEARCH_TRIGGERS } from "@/lib/article-search-storage";
+import { articleSearchProjectionStatus, backfillArticleSearch, ensureArticleSearchStorage, isArticleSearchReady, POSTGRES_SEARCH_TRIGGERS, SQLITE_SEARCH_TRIGGERS } from "@/lib/article-search-storage";
+import pg from "pg";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { ensureSearchIndexes, postgresSearchIndexStatus } from "@/lib/search-indexes";
 import { pureDdlViolations } from "../../scripts/migration-utils.mjs";
@@ -24,6 +25,17 @@ const url = pgUrl ?? `file:${join(dir, "test.db")}`;
 const root = `prisma/migrations/${provider}`;
 const migration = readdirSync(root).find(name => name.endsWith("_article_search_table"))!;
 const oldTime = new Date("2025-01-01T00:00:00Z");
+const queries = [
+  "needle", "ab", "ü", "üni", "Alpha", '"punctuation:"', "needle OR Jane", "Alpha needle",
+  "title:Alpha", "-title:Alpha", 'author:"Jane Doe"', "-author:Jane", "content:needle",
+  "-content:needle", "entity:EZB", "-entity:EZB", 'entity:"Angela Merkel"',
+  "url:needle", "feed:match", "#match", "label:match", "%", "_", 'title:"Other title"',
+  "is:unread content:needle OR is:read", "unknown:needle",
+];
+const expected = new Map<string, string[]>();
+const ids = async (where: object) => (await state.db.article.findMany({
+  where: { AND: [{ userId: "a" }, where] }, orderBy: { id: "asc" }, select: { id: true },
+})).map(row => row.id);
 
 beforeAll(async () => {
   // Real upgrade: apply the preceding history, seed legacy rows, then deploy the new migration.
@@ -96,17 +108,6 @@ it("preserves search results, NULL negation, user isolation, wildcard and field 
     if (object.search) return legacy(object.search.is);
     return Object.fromEntries(Object.entries(object).map(([key, item]) => [key, legacy(item)]));
   }
-  const queries = [
-    "needle", "ab", "ü", "üni", "Alpha", '"punctuation:"', "needle OR Jane", "Alpha needle",
-    "title:Alpha", "-title:Alpha", 'author:"Jane Doe"', "-author:Jane", "content:needle",
-    "-content:needle", "entity:EZB", "-entity:EZB", 'entity:"Angela Merkel"',
-    "url:needle", "feed:match", "#match", "label:match", "%", "_", 'title:"Other title"',
-    "is:unread content:needle OR is:read", "unknown:needle",
-  ];
-  const ids = async (where: object) => (await state.db.article.findMany({
-    where: { AND: [{ userId: "a" }, where] }, orderBy: { id: "asc" }, select: { id: true },
-  })).map(row => row.id);
-  const expected = new Map<string, string[]>();
   for (const query of queries) {
     const where = await buildAdvancedSearchWhere("a", query);
     const old = await ids(legacy(where));
@@ -121,10 +122,95 @@ it("preserves search results, NULL negation, user isolation, wildcard and field 
     await state.db.$executeRawUnsafe("INSERT INTO article_fts_meta VALUES (1, 'old-ready-marker')");
   }
   await ensureSearchIndexes({ backfill: "await", postgresUrl: url });
+  expect(isArticleSearchReady()).toBe(true);
   for (const query of queries) {
     expect(await ids(await buildAdvancedSearchWhere("a", query)), `indexed: ${query}`).toEqual(expected.get(query));
   }
 });
+
+it("serves complete results from the Article columns while the projection is incomplete (deferred copy)", async () => {
+  const db = state.db;
+  // Upgrade whose migration copy was deferred by a lock timeout: projection empty, not yet verified.
+  await db.$executeRawUnsafe('DELETE FROM "ArticleSearch"');
+  (globalThis as Record<string, unknown>).__feedferret_article_search_projection__ = { state: "backfilling", missing: 16 };
+  expect(isArticleSearchReady()).toBe(false);
+  for (const query of queries) {
+    expect(await ids(await buildAdvancedSearchWhere("a", query)), `unverified: ${query}`).toEqual(expected.get(query));
+  }
+  expect(expected.get("needle")!.length).toBeGreaterThan(0);
+  expect(expected.get("-author:Jane")!.length).toBeGreaterThan(0);
+  // The startup check repairs it and only then switches search to the projection.
+  await ensureArticleSearchStorage({ yieldMs: 0 });
+  expect(isArticleSearchReady()).toBe(true);
+  for (const query of queries) {
+    expect(await ids(await buildAdvancedSearchWhere("a", query)), `repaired: ${query}`).toEqual(expected.get(query));
+  }
+});
+
+it.runIf(pgUrl)("copy and backfill never deadlock with a bulk mark-read (SELECT … FOR UPDATE, then UPDATE), in either order", async () => {
+  const sql = readFileSync(join(root, migration, "migration.sql"), "utf8");
+  const phase = sql.slice(sql.indexOf("BEGIN;\nSET LOCAL lock_timeout"), sql.indexOf("COMMIT;", sql.indexOf("BEGIN;\nSET LOCAL lock_timeout")));
+  expect(phase).toContain('LOCK TABLE "Article" IN EXCLUSIVE MODE');
+  const client = async () => { const c = new pg.Client({ connectionString: url }); await c.connect(); return c; };
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const errors: string[] = [];
+  const track = <T,>(p: Promise<T>, who: string) => p.catch((err: { code?: string; message: string }) => { errors.push(`${who}: ${err.code ?? ""} ${err.message}`); });
+  const lockHolders = async (c: pg.Client, mode: string) => (await c.query(
+    `SELECT count(*)::int AS n FROM pg_locks WHERE relation = '"Article"'::regclass AND mode = $1 AND granted`, [mode])).rows[0].n;
+  // bulk-read.ts pattern: row-lock the batch, then update it, in one transaction.
+  const bulkWriter = async (c: pg.Client, beforeUpdate: () => Promise<void>) => {
+    await c.query("BEGIN");
+    await c.query(`SELECT id FROM "Article" WHERE "userId" = 'a' ORDER BY id FOR UPDATE`);
+    await beforeUpdate();
+    await c.query(`UPDATE "Article" SET "isRead" = NOT "isRead" WHERE "userId" = 'a'`);
+    await c.query("COMMIT");
+  };
+  const copies: Record<string, (c: pg.Client) => Promise<unknown>> = {
+    migration: (c) => c.query(phase + "COMMIT;"),
+    app: async () => backfillArticleSearch({ yieldMs: 0 }),
+  };
+  const [w, k, probe] = [await client(), await client(), await client()];
+  try {
+    for (const [name, copy] of Object.entries(copies)) {
+      // Order 1: the writer holds its row locks first; the copy starts, then the writer updates.
+      await state.db.$executeRawUnsafe('DELETE FROM "ArticleSearch"');
+      let copying: Promise<unknown> = Promise.resolve();
+      await track(bulkWriter(w, async () => {
+        copying = track(copy(k), `${name} copy (writer first)`);
+        await sleep(1500); // > deadlock_timeout: a cycle would be detected by now
+      }), `writer (${name} copy second)`);
+      await copying;
+      expect(await state.db.articleSearch.count()).toBe(await state.db.article.count());
+    }
+    // Order 2: the copy runs and holds the EXCLUSIVE lock first (its transaction kept open), then
+    // the writer row-locks and updates. The app batches take the same lock in the same way.
+    await state.db.$executeRawUnsafe('DELETE FROM "ArticleSearch"');
+    await track(k.query(phase), "migration copy (copy first)"); // BEGIN; SET LOCAL; DO … (no COMMIT yet)
+    expect(await lockHolders(probe, "ExclusiveLock")).toBe(1);
+    const writing = track(bulkWriter(w, async () => {}), "writer (copy first)");
+    await sleep(1500);
+    await track(k.query("COMMIT"), "migration copy commit");
+    await writing;
+    expect(await state.db.articleSearch.count()).toBe(await state.db.article.count());
+    expect(errors).toEqual([]);
+
+    // Control: the previous SHARE-mode copy deadlocks with the same writer (proves the test bites).
+    await state.db.$executeRawUnsafe('DELETE FROM "ArticleSearch"');
+    let control: Promise<unknown> = Promise.resolve();
+    await track(bulkWriter(w, async () => {
+      control = track(k.query(phase.replace("IN EXCLUSIVE MODE", "IN SHARE MODE").replace(
+        "EXCEPTION WHEN lock_not_available OR deadlock_detected OR query_canceled", "EXCEPTION WHEN lock_not_available") + "COMMIT;"), "SHARE copy");
+      await sleep(1500);
+    }), "writer vs SHARE copy");
+    await control;
+    await w.query("ROLLBACK").catch(() => {});
+    await k.query("ROLLBACK").catch(() => {});
+    expect(errors.join("\n")).toMatch(/40P01/);
+  } finally {
+    for (const c of [w, k, probe]) await c.end().catch(() => {});
+    await ensureArticleSearchStorage({ yieldMs: 0 });
+  }
+}, 60_000);
 
 it("startup self-check finds and repairs an incomplete projection", async () => {
   const db = state.db;

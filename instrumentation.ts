@@ -28,7 +28,7 @@ export async function register() {
     if (process.env.NEXT_PHASE !== "phase-production-build") {
         void (async () => {
             const { ensureSearchIndexes } = await import("./lib/search-indexes");
-            await ensureSearchIndexes();
+            await ensureSearchIndexes({ maintenance: true });
             // SQLite planner statistics (audit R1): off the boot path, bounded sample.
             const { scheduleStartupSqliteOptimize } = await import("./lib/db-maintenance");
             scheduleStartupSqliteOptimize();

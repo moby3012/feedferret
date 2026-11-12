@@ -8,14 +8,14 @@
 // before 20261112093000_article_search_table, seeds synthetic articles and the legacy Article GIN
 // indexes, then:
 //   1. trials: `prisma migrate deploy` of the search migration while N writers insert/update/
-//      mark-read/delete articles in multi-statement transactions; asserts no deadlock, no
+//      bulk mark-read (SELECT … FOR UPDATE + UPDATE)/delete articles in multi-statement transactions; asserts no deadlock, no
 //      deferred backfill, complete projection, Article indexes untouched.
 //   2. background index swap: the real lib/search-indexes.ts helper (bundled with esbuild) while
 //      the writers keep running; asserts 5 valid ArticleSearch indexes, 0 legacy ones.
-//   3. kill tests: SIGKILL + backend termination in the middle of the migration backfill and in
-//      the middle of a CREATE INDEX CONCURRENTLY; recovery via the documented procedure.
+//   3. kill tests: SIGKILL + backend termination in the middle of the migration copy and in
+//      the middle of a CREATE INDEX CONCURRENTLY; a plain restart must recover (no operator step).
 // Drops the database at the end unless --keep. Needs pg_trgm. Disk: ~5x the Article size.
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
@@ -117,7 +117,10 @@ function startWriters() {
         await c.query(`INSERT INTO "Article" (id, "feedId", "userId", title, link, content, "publishedAt", "updatedAt")
           VALUES ($1, 'bench-feed-1', 'bench-user', 'live title', $2, 'live body text', now(), now())`, [`live-${run}-${w}-${seq}`, `https://example.test/live/${run}/${w}/${seq++}`]);
         await c.query(`UPDATE "Article" SET title = title || ' (upd)' WHERE id = $1`, [pick()]);
-        await c.query(`UPDATE "Article" SET "isRead" = true, "readAt" = now() WHERE id = ANY($1)`, [Array.from({ length: 50 }, pick)]);
+        // Bulk mark-read as in server/articles/bulk-read.ts: row-lock the batch, then update it.
+        const batch = Array.from({ length: 50 }, pick);
+        await c.query(`SELECT id FROM "Article" WHERE id = ANY($1) ORDER BY id FOR UPDATE`, [batch]);
+        await c.query(`UPDATE "Article" SET "isRead" = true, "readAt" = now() WHERE id = ANY($1)`, [batch]);
         if (Math.random() < 0.2) await c.query(`DELETE FROM "Article" WHERE id = $1`, [pick()]);
         await c.query('COMMIT');
         state.ops++;
@@ -235,21 +238,21 @@ async function killMigration() {
   const writers = startWriters();
   const child = migrate();
   const output = collect(child);
-  // The copy phase: the migration backend holds the SHARE lock on Article.
-  const pids = await waitFor(`pid IN (SELECT pid FROM pg_locks WHERE relation = '"Article"'::regclass AND mode = 'ShareLock' AND granted)`);
+  // The copy phase: the migration backend holds the EXCLUSIVE lock on Article.
+  const pids = await waitFor(`pid IN (SELECT pid FROM pg_locks WHERE relation = '"Article"'::regclass AND mode = 'ExclusiveLock' AND granted)`);
   child.kill('SIGKILL'); // the container dies...
   for (const pid of pids) await q('SELECT pg_terminate_backend($1)', [pid], admin); // ...and its connection with it
   await output;
-  const first = await startup();
-  const blocked = first.status !== 0 && /P3009/.test(first.out);
-  const resolveRun = spawnSync(prismaBin, ['migrate', 'resolve', '--rolled-back', SEARCH, '--config', config(true)], { encoding: 'utf8' });
-  const second = await startup();
+  // Restart: startup sees the interrupted (P3009) idempotent migration, marks it rolled back
+  // and runs it again (scripts/db-migrate.mjs), no operator step.
+  const restart = await startup();
+  const autoResolved = /was interrupted \(P3009\)/.test(restart.out);
   await writers.done();
-  const v = await verifyProjection('after kill + resolve --rolled-back + restart');
-  const ok = pids.length > 0 && blocked && resolveRun.status === 0 && second.status === 0 && v.a === v.s && v.triggers === 2;
-  results.kills.push({ phase: 'migration backfill', ok, killedBackends: pids.length, firstStartBlockedP3009: blocked, restartExit: second.status, writerErrors: writers.state.errors, ...v });
+  const v = await verifyProjection('after kill + restart');
+  const ok = pids.length > 0 && autoResolved && restart.status === 0 && v.a === v.s && v.triggers === 2;
+  results.kills.push({ phase: 'migration copy', ok, killedBackends: pids.length, autoResolvedOnRestart: autoResolved, restartExit: restart.status, writerErrors: writers.state.errors, ...v });
   log(`kill during migration: ${ok ? 'OK' : 'FAILED'}`);
-  if (!ok) console.log(first.out, resolveRun.stdout, resolveRun.stderr, second.out, second.blockers);
+  if (!ok) console.log(restart.out, restart.blockers);
 }
 
 async function killIndexBuild(bundle) {

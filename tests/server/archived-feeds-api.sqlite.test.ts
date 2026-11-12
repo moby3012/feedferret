@@ -2,11 +2,11 @@
 // GReader / Fever clients (no subscription list entry, no items, no unread ids, no counts, "mark all"
 // skips them), REST v1 hides them from GET /feeds unless asked (?archived=only|include) and archives /
 // restores through PATCH, MCP does the same through list_feeds / update_feed. Restoring brings everything back.
+import { pushSqliteTestDatabase } from "../helpers/sqlite-test-db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
@@ -48,7 +48,7 @@ const OLD_FEED = "0000000000000000002";
 
 beforeAll(async () => {
   const url = `file:${join(dir, "test.db")}`;
-  execFileSync("node_modules/.bin/prisma", ["db", "push", "--schema", "prisma/schema.generated.prisma"], { env: { ...process.env, DATABASE_URL: url }, stdio: "pipe" });
+  pushSqliteTestDatabase(url);
   h.db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: url.slice("file:".length) }) });
   await h.db.user.create({ data: { id: "alice", email: "alice@example.org", apiFeverKey: hashApiToken(FEVER_KEY), apiPasswordHash: "x" } });
 }, 60_000);

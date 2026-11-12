@@ -1,6 +1,6 @@
 import { db, getDatabaseProvider } from "./db";
 import pg from "pg";
-import { ensureArticleSearchStorage } from "./article-search-storage";
+import { ensureArticleSearchStorage, isArticleSearchReady, scheduleArticleSearchMaintenance } from "./article-search-storage";
 
 // Audit finding P-11: free-text search (lib/search.ts) uses leading-wildcard
 // `contains` (LIKE '%term%') matching, which can't use a normal B-tree index.
@@ -39,13 +39,26 @@ export type EnsureSearchIndexesOptions = {
      * "none": schema + triggers only, caller drives runSqliteFtsBackfill() (tests).
      */
     backfill?: "background" | "await" | "none";
+    /** Server startup only: schedule projection re-checks/retries (lib/article-search-storage.ts). */
+    maintenance?: boolean;
     /** Postgres only: connection for the index builds (default DATABASE_URL). */
     postgresUrl?: string;
 };
 
 export async function ensureSearchIndexes(options: EnsureSearchIndexesOptions = {}): Promise<void> {
     try {
-        await ensureArticleSearchStorage();
+        try {
+            await ensureArticleSearchStorage();
+        } finally {
+            // Server startup: keep retrying an incomplete projection and re-check a complete one.
+            if (options.maintenance) {
+                scheduleArticleSearchMaintenance(() => {
+                    if (getDatabaseProvider() !== "postgresql") return;
+                    void ensurePostgresTrigramIndexes(options.postgresUrl ?? process.env.DATABASE_URL)
+                        .catch((err) => console.warn("[search-indexes] index swap after projection repair failed; retried on next start.", err));
+                });
+            }
+        }
         if (getDatabaseProvider() === "postgresql") {
             await ensurePostgresTrigramIndexes(options.postgresUrl ?? process.env.DATABASE_URL);
         } else {
@@ -139,6 +152,11 @@ async function ensurePostgresTrigramIndexes(url: string | undefined) {
                 await client.query(`CREATE INDEX CONCURRENTLY IF NOT EXISTS "${name}" ON "ArticleSearch" USING GIN ("${column}" gin_trgm_ops)`);
                 if (!(await validity(name))) throw new Error(`${name} is not valid after CREATE INDEX CONCURRENTLY`);
                 console.info(`[search-indexes] ${name} built in ${((Date.now() - started) / 1000).toFixed(1)} s.`);
+            }
+            if (!isArticleSearchReady()) {
+                // Search still runs on the Article columns: keep their indexes until the projection is verified.
+                setPgIndexStatus({ state: "building", detail: "legacy Article indexes kept until the projection is complete" });
+                return;
             }
             for (const name of LEGACY_ARTICLE_TRGM_INDEXES) {
                 if ((await validity(name)) === null) continue;

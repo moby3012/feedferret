@@ -22,8 +22,14 @@ The startup helper provisions the identical triggers only for explicit db-push/d
 databases; migration-managed installations take a cheap catalog probe. It then compares
 the Article and ArticleSearch row counts (the FK makes the projection a subset, so equal
 counts mean complete) and, if rows are missing, fills them in small batches in the
-background, logging it and reporting `search.projection` in /api/health. An incomplete
-projection would otherwise silently hide articles from search.
+background, logging it and reporting `search.projection` in /api/health. **Search uses the
+projection only after this process has verified it complete** (`isArticleSearchReady()`);
+until then lib/search.ts runs the identical predicates on the Article columns (free text,
+fields, entities and negations; result-equivalence is tested), so an incomplete projection
+can never hide articles. A failed or incomplete check is retried with backoff (30 s … 15 min),
+not only on restart; a verified projection is re-checked hourly. The legacy Article trigram
+indexes are dropped only once the projection is verified. db-push test databases use
+tests/helpers/sqlite-test-db.ts (schema + triggers + verified), mirroring production.
 
 SQLite's existing external-content trigram FTS now reads ArticleSearch. The old
 Article-backed FTS is discarded atomically at startup, including stale completion
@@ -41,15 +47,22 @@ on a populated database (that is what made the first version deadlock and run ~1
 Postgres migration (`20261112093000_article_search_table`), each phase its own short transaction:
 1. Table (`IF NOT EXISTS`), FK and triggers in guarded `DO` blocks, `CREATE OR REPLACE FUNCTION`.
    First run: short SHARE ROW EXCLUSIVE lock on Article; a re-run takes no table lock.
-2. Copy into the unindexed projection under `LOCK TABLE "Article" IN SHARE MODE` with
-   `lock_timeout = 15s`. Writers wait for the copy; they cannot deadlock with it, because no
-   Article writer can be mid-transaction (and hold a trigger-written projection row) while it
-   runs. `ON CONFLICT DO NOTHING` makes a re-run cheap. If the lock is not granted in time
+2. Copy into the unindexed projection under `LOCK TABLE "Article" IN EXCLUSIVE MODE` with
+   `lock_timeout = 15s`. Plain reads continue; writers **and row-locking readers** (bulk
+   mark-read's `SELECT … FOR UPDATE`) wait for the copy. The lock is granted only after every
+   transaction that wrote or row-locked Article has finished, so neither a trigger-written
+   projection row nor a foreign row lock can be in flight: the copy's inserts and FK checks
+   never wait on another transaction, hence no cycle. (A SHARE lock, used by an earlier draft,
+   still admits `FOR UPDATE` and deadlocks with bulk mark-read; the PG test keeps that as a
+   control.) `ON CONFLICT DO NOTHING` makes a re-run cheap. If the lock is not granted in time
    (a long-running transaction) the copy is skipped with a WARNING instead of failing the
-   deploy, and the app's startup self-check fills the gap in 5,000-row batches (each batch
-   holds the same SHARE lock for milliseconds, `lock_timeout = 5s`, retried).
+   deploy; search stays on the Article columns until the app's self-check has filled the gap
+   in 5,000-row batches (each batch holds the same EXCLUSIVE lock for milliseconds,
+   `lock_timeout = 5s`, retried) and verified it. Writers can queue behind the waiting lock
+   request for up to the 15 s timeout.
 3. Only if Article is empty (fresh install, Prisma's shadow replay): drop the old
-   `Article_*_trgm_idx`. Only if ArticleSearch is empty: create the new GIN indexes (instant).
+   `Article_*_trgm_idx` and create the new GIN indexes (instant). Both branches key on Article
+   being empty, so a populated database whose copy was deferred never takes them.
    The migration history must produce the schema's index set for the CI drift gate, so this
    small, lock-safe branch remains; populated databases never take it.
 
@@ -79,19 +92,25 @@ blocking index build; do not use it for this upgrade.
 
 `scripts/bench-search-migration.mjs` (results in
 [article-search-migration-results.json](article-search-migration-results.json)), Docker
-Postgres 16 on the dev Mac. Article: 398 MB heap+TOAST, 902 MB with indexes (≈450-word bodies).
-Two writers run multi-statement transactions throughout (insert article, update a title,
-mark 50 read, 20 % delete one) — the pattern that deadlocked the previous version.
+Postgres 16 on the dev Mac. Article: 413 MB heap+TOAST, 901 MB with indexes (≈450-word bodies).
+Two writers run multi-statement transactions throughout: insert an article, update a title,
+bulk mark-read 50 articles as server/articles/bulk-read.ts does (`SELECT … FOR UPDATE`, then
+`UPDATE`), 20 % delete one. That covers both deadlock patterns found in review.
 
 | step | result |
 |---|---|
-| migration (`prisma migrate deploy`), 3 trials | 5.6 s, 4.8 s, 5.6 s; 0 deadlocks, 0 deferred copies, 0 writer errors; projection == Article, 0 content mismatches; Article GIN indexes untouched |
+| migration (`prisma migrate deploy`), 3 trials | 4.6 s, 5.0 s, 6.0 s; 0 deadlocks, 0 deferred copies, 0 writer errors; projection == Article, 0 content mismatches; Article GIN indexes untouched |
 | writer pause during the migration | ≈ the copy phase (a few seconds); writers resume, no errors |
-| background index build (app helper, writers running) | 295 s total: content 178.5 s, excerpt 42.8 s, author 4.1 s, title 3.3 s, entities 0.4 s; 1,376 writer transactions completed meanwhile, 0 errors; then 5 valid ArticleSearch indexes, 0 legacy |
-| projection size | 824 MB incl. 405 MB GIN indexes |
+| background index build (app helper, writers running) | 485.5 s: content 357.5 s, entities 74.5 s, author 17.6 s, excerpt 9.2 s, title 3.3 s; 2,348 writer transactions completed meanwhile, 0 errors; then 5 valid ArticleSearch indexes, 0 legacy. (An earlier run with lighter writers: 295 s. CONCURRENTLY builds also wait for running transactions, so expect variance.) |
+| projection size | 869 MB incl. 414 MB GIN indexes |
 | kill during `CREATE INDEX CONCURRENTLY` (SIGKILL + backend terminated) | INVALID leftover detected on restart, dropped, rebuilt; all 5 valid |
-| kill during the migration copy (SIGKILL + backend terminated) | next start stops with P3009; `migrate resolve --rolled-back` + restart completes; projection complete, triggers present |
-| legacy Article GIN build (what an older image does at start after rollback) | 71.5 s, blocking |
+| kill during the migration copy (SIGKILL + backend terminated) | plain restart: `♻️ … was interrupted (P3009)`, auto `--rolled-back`, re-run completes; projection complete, triggers present |
+| legacy Article GIN build (what an older image does at start after rollback) | 66.8 s, blocking |
+
+The PG test suite (tests/lib/article-search-storage.test.ts with `SEARCH_TEST_PG_URL`) also runs
+the real migration copy and the app backfill against a bulk mark-read writer in both orders
+(writer row-locks first / copy locks first) with no error, plus a control showing the old SHARE
+copy deadlocks (40P01) in the same setup.
 
 The app's HTTP server is up right after the migration (≈5 s plus normal boot), well inside the
 60 s healthcheck start period; the index build no longer delays startup. Real bodies, slower
@@ -106,8 +125,11 @@ total content size (the content index dominates).
 3. Watch `[search-indexes] … built in N s` / `Dropped legacy Article_*` lines, or poll
    `/api/health` until `search.indexes` is `ready` and `search.projection.state` is `complete`.
    Search works meanwhile (slower). Ingestion continues.
-4. If the container is killed during the migration: `prisma migrate resolve --config
-   prisma/startup.config.mjs --rolled-back 20261112093000_article_search_table`, restart.
+4. If the container is killed during the migration: just restart. Prisma records the
+   migration as failed (P3009); because it is listed in `IDEMPOTENT_MIGRATIONS`
+   (scripts/migration-utils.mjs), startup logs `♻️ Migration … was interrupted (P3009)…`,
+   marks it rolled back and runs it again (under the schema lock). Any other failed migration
+   still stops the start for manual recovery (docs/database.md).
    If it is killed during the index build: just restart (INVALID indexes are rebuilt).
 
 SQLite copies text in its migration write transaction (`IF NOT EXISTS`/`ON CONFLICT`, so it is
@@ -132,7 +154,7 @@ All original Article columns remain authoritative for the older binary, and the 
 ArticleSearch in sync while it runs, so a later roll-forward needs no backfill.
 
 Older Postgres images recreate the five Article GIN indexes **at startup, awaited, with a plain
-CREATE INDEX** (71.5 s at 200k above, holding a SHARE lock on Article). That old code cannot be
+CREATE INDEX** (66.8–71.5 s at 200k above, holding a SHARE lock on Article). That old code cannot be
 changed. To avoid the startup delay, pre-build them concurrently while the new image still runs,
 then roll back (the old `CREATE INDEX IF NOT EXISTS` then finds them):
 

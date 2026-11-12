@@ -227,17 +227,20 @@ async function startupUpgradeChecks(legacySchema) {
   expect(currentBefore === await fingerprint(current), 'current-schema legacy changed data');
 
   // 6b. Interrupted search migration (killed container, crash): Prisma records it as failed
-  //     (P3009) and refuses to start. After the documented `migrate resolve --rolled-back`
-  //     the migration re-runs on top of whatever the interrupted run left behind (here the
-  //     worst case: table + triggers installed, projection emptied) and completes.
+  //     (P3009). It is idempotent, so startup marks it rolled back and re-runs it on top of
+  //     whatever the interrupted run left behind (here the worst case: table + triggers
+  //     installed, projection emptied). Any other unfinished migration still stops the start.
   {
     const name = expected.find(n => n.endsWith('_article_search_table'));
+    const other = expected[1];
+    await execute(url, `UPDATE _prisma_migrations SET finished_at = NULL WHERE migration_name = '${other}'`);
+    r = startup(url);
+    expect(r.status !== 0 && /P3009|failed migrations/.test(r.output) && !/♻️/.test(r.output), 'a non-idempotent unfinished migration must still stop the start');
+    await execute(url, `UPDATE _prisma_migrations SET finished_at = started_at WHERE migration_name = '${other}'`);
     await execute(url, `DELETE FROM "ArticleSearch"; UPDATE _prisma_migrations SET finished_at = NULL, logs = 'simulated interruption' WHERE migration_name = '${name}'`);
     r = startup(url);
-    expect(r.status !== 0 && /P3009|failed migrations/.test(r.output), 'a failed search migration must stop the start');
-    run(['migrate', 'resolve', '--rolled-back', name], { DATABASE_URL: url, PRISMA_SCHEMA_OVERRIDE: schema, SHADOW_DATABASE_URL: '' });
-    r = startup(url);
-    expect(r.status === 0 && /Database schema matches prisma\/schema.prisma/.test(r.output), `re-run after --rolled-back exited ${r.status}`);
+    expect(r.status === 0 && new RegExp(`${name} was interrupted \\(P3009\\)`).test(r.output), `interrupted idempotent migration not re-run automatically (exit ${r.status})`);
+    expect(/Database schema matches prisma\/schema.prisma/.test(r.output), 're-run: drift');
     expect(JSON.stringify(await migrationRows(url)) === JSON.stringify(expected), 're-run: wrong history');
     expect(Number((await query(url, 'SELECT count(*) AS n FROM "ArticleSearch"'))[0].n) ===
       Number((await query(url, 'SELECT count(*) AS n FROM "Article"'))[0].n), 're-run did not backfill the projection');

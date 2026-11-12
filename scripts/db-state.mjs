@@ -108,6 +108,37 @@ export async function listTables({ provider, url, configDir = join(here, "..", "
   }
 }
 
+/**
+ * Migrations Prisma recorded as started but neither finished nor rolled back (the P3009 state
+ * after a crash/kill mid-migration). Empty when there is no history table.
+ */
+export async function unfinishedMigrations({ provider, url, configDir = join(here, "..", "prisma"), client = undefined }) {
+  const p = normalizeProvider(provider);
+  const sql = "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL ORDER BY migration_name";
+  if (p === "sqlite") {
+    const file = sqliteFilePath(url || "file:./dev.db", configDir);
+    if (!existsSync(file)) return [];
+    const Database = (await importPackage("better-sqlite3")).default;
+    const db = new Database(file, { readonly: true, fileMustExist: true });
+    try {
+      if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_prisma_migrations'").get()) return [];
+      return db.prepare(sql).all().map((row) => row.migration_name);
+    } finally {
+      db.close();
+    }
+  }
+  const db = client ?? (await pgClient(url));
+  try {
+    const schema = postgresSchema(url);
+    const { rows: exists } = await db.query("SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = '_prisma_migrations'", [schema]);
+    if (!exists.length) return [];
+    const { rows } = await db.query(sql.replace("FROM _prisma_migrations", `FROM "${schema.replace(/"/g, '""')}"._prisma_migrations`));
+    return rows.map((row) => row.migration_name);
+  } finally {
+    if (!client) await db.end();
+  }
+}
+
 const DEFAULT_LOCK_WAIT_MS = 10 * 60_000;
 /**
  * FEEDFERRET_DB_LOCK_TIMEOUT_MS: positive integer milliseconds, else the default (with a warning).

@@ -21,8 +21,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { prepareSchema } from "./prepare-prisma-schema.mjs";
-import { baseline as BASELINE_MIGRATION, isPendingSearchIndexSwap, pureDdlViolations } from "./migration-utils.mjs";
-import { classifyTables, ensurePgTrgm, listTables, lockWaitMs, normalizeProvider, waitForPostgres } from "./db-state.mjs";
+import { baseline as BASELINE_MIGRATION, IDEMPOTENT_MIGRATIONS, isPendingSearchIndexSwap, pureDdlViolations } from "./migration-utils.mjs";
+import { classifyTables, ensurePgTrgm, listTables, lockWaitMs, normalizeProvider, unfinishedMigrations, waitForPostgres } from "./db-state.mjs";
 
 const CONFIG = "prisma/startup.config.mjs";
 // Fixed key for pg_advisory_lock (bytes of "FFMIGRAT"); distinct from Prisma's own migrate lock.
@@ -210,6 +210,20 @@ async function main() {
     }
     log(`🔎 Database state: ${state}`);
     if (state === "legacy") adoptLegacy();
+    if (state === "migrated") {
+      // Interrupted idempotent migration (P3009): re-run it instead of refusing to start. Any other
+      // unfinished migration is left alone, so `migrate deploy` stops as before (manual recovery).
+      // Runs under the schema lock (Postgres), so it is never another instance's in-progress run.
+      // Unreadable history: resolve nothing; `migrate deploy` reports the real state.
+      const unfinished = await unfinishedMigrations({ provider, url, configDir: resolve("prisma"), client: lock ?? undefined })
+        .catch((error) => { log(`⚠️ Could not read the migration history (${error?.message ?? error}); not resolving anything.`); return []; });
+      if (unfinished.length && unfinished.every((name) => IDEMPOTENT_MIGRATIONS.has(name))) {
+        for (const name of unfinished) {
+          log(`♻️ Migration ${name} was interrupted (P3009). It is idempotent: marking it rolled back and running it again.`);
+          if (prisma(["migrate", "resolve", "--rolled-back", name]).status !== 0) fail(`migrate resolve --rolled-back ${name} failed.`);
+        }
+      }
+    }
 
     log("🔄 Applying migrations (prisma migrate deploy)...");
     if (prisma(["migrate", "deploy"]).status !== 0) {

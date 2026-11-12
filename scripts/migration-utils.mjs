@@ -59,6 +59,12 @@ export function assertSafeSql(sql, file) {
   if (/gin_trgm_ops/i.test(withoutGuards)) throw new Error(`${file}: unguarded gin_trgm_ops`);
 }
 
+// Migrations written to be re-run from any interruption point (every statement idempotent).
+// If one is left in Prisma's failed state (P3009: started, never finished, e.g. container killed
+// mid-migration), startup marks it rolled back and lets `migrate deploy` run it again instead of
+// stopping. Only add a migration here after testing a re-run from every phase.
+export const IDEMPOTENT_MIGRATIONS = new Set(['20261112093000_article_search_table']);
+
 // The Postgres trigram index swap (Article_*_trgm_idx -> ArticleSearch_*_trgm_idx) is done by the
 // app in the background with CREATE/DROP INDEX CONCURRENTLY (lib/search-indexes.ts), not by the
 // migration, on populated databases. Until it finishes, the startup drift check sees exactly these

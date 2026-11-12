@@ -228,10 +228,14 @@ logging `prisma migrate deploy failed`. A failed migration can be partially appl
 4. Restart. To get the app up while you investigate, start with `FEEDFERRET_DB_SYNC=skip`, but only
    if the running image works with the old schema.
 
-`20261112093000_article_search_table` is written to be re-run: every statement is idempotent
-(`IF NOT EXISTS`, guarded `DO` blocks, `ON CONFLICT DO NOTHING`). If it was interrupted (killed
-container, lost connection), step 2 is empty: run `--rolled-back` and restart. CI and
-`scripts/bench-search-migration.mjs` test this, including a kill in the middle of the copy.
+Migrations listed in `IDEMPOTENT_MIGRATIONS` (scripts/migration-utils.mjs; currently only
+`20261112093000_article_search_table`) are written to be re-run from any point: every statement
+is idempotent (`IF NOT EXISTS`, guarded `DO` blocks, `ON CONFLICT DO NOTHING`). If one was
+interrupted (killed container, lost connection), startup does steps 1–3 itself: it logs
+`♻️ Migration … was interrupted (P3009)…`, runs `migrate resolve --rolled-back` and lets
+`migrate deploy` run it again, under the schema lock. If any *other* migration is unfinished,
+nothing is resolved automatically. CI and `scripts/bench-search-migration.mjs` test this,
+including a kill in the middle of the copy.
 
 ## Schema changes (developer workflow)
 
