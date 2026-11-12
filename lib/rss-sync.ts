@@ -913,7 +913,9 @@ function duplicateGuard(userId: string, feedId: string) {
         if (!index) {
             index = new RecentFullTextIndex();
             const recent = await db.article.findMany({
-                where: { userId, feedId },
+                // feedId alone lets SQLite use the (feedId, publishedAt…) index;
+                // the feed already belongs to this user.
+                where: { feedId, fullTextStatus: "ok" },
                 orderBy: { publishedAt: "desc" },
                 take: RECENT_FULL_TEXT_LIMIT,
                 select: { id: true, link: true, content: true, contentFormat: true, fullTextStatus: true },
@@ -942,8 +944,12 @@ function duplicateGuard(userId: string, feedId: string) {
             duplicate = true;
             const coverage = leadCoverage(feedBaseline(sibling), body);
             // A verified sibling may be the genuine article; never discard it
-            // because another URL temporarily served its body.
-            if (sibling.fullTextStatus === "ok" && (coverage === null || coverage < 0.3)) await recordFullTextMiss(sibling, "rejected", "duplicate_across_items");
+            // because another URL temporarily served its body. An unverifiable
+            // sibling (short teaser) is only discarded once the same page body
+            // was served for at least three different items — then the page is
+            // generic, not that sibling's article.
+            const generic = coverage === null && matches.length >= 2;
+            if (sibling.fullTextStatus === "ok" && (generic || (coverage !== null && coverage < 0.3))) await recordFullTextMiss(sibling, "rejected", "duplicate_across_items");
         }
         if (duplicate) await recordFullTextMiss(article, "failed", "duplicate_across_items");
         return duplicate;

@@ -559,7 +559,7 @@ async function runWorker(entry: Entry, opt: Options) {
                 for (const link of duplicates) {
                   const previous = sampledCandidates.get(link)!;
                   const coverage = leadCoverage(previous.baseline, previous.html);
-                  if (coverage === null || coverage < 0.3) {
+                  if ((coverage === null && duplicates.length >= 2) || (coverage !== null && coverage < 0.3)) {
                     for (const row of fulltext) if (row.link === maskUrl(link)) { row.verdict = 'fail'; row.reason = 'duplicate_across_items'; }
                   }
                 }

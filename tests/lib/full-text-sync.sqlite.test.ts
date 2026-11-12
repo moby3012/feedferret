@@ -594,15 +594,25 @@ describe("full-text quality guards", () => {
     expect(state.pageFetches).toEqual([]);
   });
 
-  it("rejects a duplicate found in a later sync of the same feed", async () => {
+  it("rejects a duplicate found in a later sync, keeping an unverifiable sibling until the page proves generic", async () => {
     const feed = await autoFeed();
     state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems().slice(0, 1) });
     state.page = async () => fullPage("same");
     await syncFeed(userId, feed.id);
     expect((await rows(feed.id))[0].fullTextStatus).toBe("ok");
+    // One other item served the same body: the short-teaser sibling cannot be
+    // verified either way, so only the candidate fails.
     state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems().slice(0, 2) });
     await syncFeed(userId, feed.id);
-    expect((await rows(feed.id)).map((row) => row.fullTextReason)).toEqual(Array(2).fill("duplicate_across_items"));
+    let current = await rows(feed.id);
+    expect(current[0].fullTextStatus).toBe("ok");
+    expect(current[1].fullTextReason).toBe("duplicate_across_items");
+    // A third item with the same body: the page is generic, the sibling is rolled back.
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems() });
+    await syncFeed(userId, feed.id);
+    current = await rows(feed.id);
+    expect(current[0].fullTextStatus).toBe("rejected");
+    expect(current.map((row) => row.fullTextReason)).toEqual(Array(3).fill("duplicate_across_items"));
   });
 
   it("does not roll back a sibling whose accepted text changed during the fetch", async () => {
