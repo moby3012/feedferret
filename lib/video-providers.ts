@@ -14,23 +14,36 @@ export function validateInstance(value: unknown): string {
   return url.origin;
 }
 type Video = { provider: string; url: string; embed?: string; thumbnail?: string };
-type Rule = { name: string; hosts?: string[]; match: (u: URL) => string | undefined; embed?: (id: string) => string; thumbnail?: (id: string) => string };
+type Rule = {
+  name: string;
+  hosts?: string[];
+  match: (u: URL) => string | undefined;
+  embed?: (id: string) => string;
+  thumbnail?: (id: string) => string;
+  /** Canonical public watch page of a matched video (ingest turns an <iframe> into a link to it); absent = never converted. */
+  watch?: (id: string, u: URL) => string;
+};
 const segment = (value?: string) => value && /^[\w-]+$/.test(value) ? value : undefined;
 export const VIDEO_PROVIDERS: Rule[] = [
   { name: "YouTube", hosts: ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtube-nocookie.com"],
-    match: u => segment(u.hostname === "youtu.be" ? u.pathname.split("/")[1] : u.searchParams.get("v") ?? (["shorts", "embed", "live"].includes(u.pathname.split("/")[1]) ? u.pathname.split("/")[2] : undefined)),
+    // `/embed/videoseries?list=…` is a playlist player, not a video id.
+    match: u => segment(u.hostname === "youtu.be" ? u.pathname.split("/")[1] : u.searchParams.get("v") ?? (["shorts", "embed", "live"].includes(u.pathname.split("/")[1]) && u.pathname.split("/")[2] !== "videoseries" ? u.pathname.split("/")[2] : undefined)),
     embed: id => `https://www.youtube-nocookie.com/embed/${id}`,
-    thumbnail: id => `https://i.ytimg.com/vi/${id}/hqdefault.jpg` },
+    thumbnail: id => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+    watch: id => `https://www.youtube.com/watch?v=${id}` },
   { name: "Vimeo", hosts: ["vimeo.com", "www.vimeo.com", "player.vimeo.com"],
     match: u => /^\d+$/.test(u.pathname.split("/").at(-1) ?? "") ? u.pathname.split("/").at(-1) : undefined,
-    embed: id => `https://player.vimeo.com/video/${id}?dnt=1` },
+    embed: id => `https://player.vimeo.com/video/${id}?dnt=1`,
+    watch: id => `https://vimeo.com/${id}` },
   { name: "Dailymotion", hosts: ["dailymotion.com", "www.dailymotion.com", "dai.ly"],
     match: u => segment(u.hostname === "dai.ly" ? u.pathname.split("/")[1] : u.pathname.startsWith("/video/") || u.pathname.startsWith("/embed/video/") ? u.pathname.split("/").at(-1) : undefined),
-    embed: id => `https://www.dailymotion.com/embed/video/${id}` },
+    embed: id => `https://www.dailymotion.com/embed/video/${id}`,
+    watch: id => `https://www.dailymotion.com/video/${id}` },
   { name: "Twitch", hosts: ["twitch.tv", "www.twitch.tv", "clips.twitch.tv"],
-    match: u => u.hostname === "clips.twitch.tv" ? segment(u.pathname.split("/")[1]) : u.pathname.split("/")[1] === "videos" ? segment(u.pathname.split("/")[2]) : u.pathname.split("/")[2] === "clip" ? segment(u.pathname.split("/")[3]) : undefined },
+    match: u => u.hostname === "clips.twitch.tv" ? segment(u.pathname.split("/")[1]) : u.pathname.split("/")[1] === "videos" ? segment(u.pathname.split("/")[2]) : u.pathname.split("/")[2] === "clip" ? segment(u.pathname.split("/")[3]) : undefined,
+    watch: (id, u) => u.hostname === "clips.twitch.tv" || u.pathname.includes("/clip/") ? `https://clips.twitch.tv/${id}` : `https://www.twitch.tv/videos/${id}` },
   { name: "PeerTube", match: u => u.pathname.startsWith("/videos/watch/") ? segment(u.pathname.split("/")[3]) : undefined },
-  { name: "Reddit video", hosts: ["v.redd.it"], match: u => segment(u.pathname.split("/")[1]) },
+  { name: "Reddit video", hosts: ["v.redd.it"], match: u => segment(u.pathname.split("/")[1]), watch: id => `https://v.redd.it/${id}` },
 ];
 export function videoFor(raw: string, parent?: string): Video | undefined {
   try {
@@ -50,6 +63,28 @@ export function videoFor(raw: string, parent?: string): Video | undefined {
       return { provider: rule.name, url: u.href, embed, thumbnail: rule.thumbnail?.(id) };
     }
   } catch { /* not an absolute public video URL */ }
+}
+/**
+ * Canonical watch URL (and provider) of a known video provider's iframe `src`, for ingest: the stored article
+ * keeps a plain link and the render-time inliner (lib/media-rewrite-core.ts) turns it into a click-to-load
+ * placeholder. Same matcher as `videoFor`, so both stay in step. `//host/…` and `http:` sources are read as https
+ * (every provider serves it); relative or non-http(s) sources, unknown hosts and providers without a canonical
+ * watch page (PeerTube instances cannot be told from an arbitrary https URL) give `undefined`.
+ */
+export function watchUrlForEmbed(src: string): { provider: string; url: string } | undefined {
+  try {
+    let raw = src.trim();
+    if (raw.startsWith("//")) raw = "https:" + raw;
+    else if (/^http:\/\//i.test(raw)) raw = "https:" + raw.slice(5);
+    const video = videoFor(raw);
+    if (!video) return;
+    const u = new URL(video.url);
+    for (const rule of VIDEO_PROVIDERS) {
+      if (rule.name !== video.provider || !rule.watch) continue;
+      const id = rule.match(u);
+      if (id) return { provider: rule.name, url: rule.watch(id, u) };
+    }
+  } catch { /* not an absolute URL */ }
 }
 export function alternativeUrl(raw: string, settings: Frontends): string {
   try {

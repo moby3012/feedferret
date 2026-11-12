@@ -1,22 +1,20 @@
 // K1 perf: clustering cost on a 5k-article / 48 h window (real SQLite file).
-// Budget: an incremental tick of 200 new articles must fit the 400 ms tick
-// budget of the reference machine (a laptop; ≈ 170 ms CPU there), which is
-// ≈ 3× a fixed calibration workload on that machine. The gate is 5× (a
-// regression of 1.6× fails), the engine's 1.2× (typical 0.5×; shared CI runners hit 0.81–0.87).
+// Runs in the "timing" vitest project (*.timing.test.ts: alone, one file at a time), like the ReDoS
+// growth checks, so other suites cannot starve it.
 //
-// Speed-independent by construction: a fixed absolute number is either too
-// tight for a slow CI runner (flaky) or too loose on a fast laptop (a 2×
-// slowdown goes unnoticed). So every measurement is
-//   · CPU time (process.cpuUsage: the work is synchronous in this file's own
-//     process, so a busy machine does not inflate it much),
+// Purpose: catch a quadratic (or window-linear) regression of the clustering tick. The primary gate is
+// therefore GROWTH, not an absolute budget: an incremental tick of 200 new articles is measured against a
+// 1.25k-article window and again against a 5k window (4× larger). The tick is dominated by a fixed
+// per-tick cost plus inverted-index lookups, so it barely grows (measured 1.1–1.4×); a per-pending scan
+// of the window would show ≈ 3–4×, anything quadratic ≈ 16×. Growth is a ratio of two measurements taken
+// in the same process minutes apart, so machine speed cancels out; the earlier "multiple of a calibration
+// workload < 5" gate sat at 3.0–3.3 locally but reached 5.05 on a loaded CI runner and flaked.
+//
+// Every measurement is
+//   · CPU time (process.cpuUsage: the work is synchronous in this file's own process),
 //   · the FLOOR of several samples (interference only ever adds time), and
-//   · expressed as a MULTIPLE of the floor of `referenceCpuMs()`, a fixed
-//     workload of the same kind (JS + the same SQLite path) run in this
-//     process right before each sample.
-// A slower or busier machine slows the reference by the same factor; a
-// regression in the code under test does not. Measured ratios were the same
-// within ±8 % on a quiet machine and with 24 / 60 busy-looping processes
-// competing for 12 cores (tick 2.9–3.3, engine 0.46–0.57).
+//   · the calibrated multiple (floor of `referenceCpuMs()`, a fixed workload of the same kind) is kept
+//     only as a loose sanity bound against a catastrophic constant-factor regression (≥ 8×; typical 2.3–3.3).
 // Wall-clock is checked only on request (quiet machine): STORY_BENCH_STRICT=1
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -45,8 +43,11 @@ const NOW = Date.UTC(2026, 10, 10, 12, 0, 0);
 const H = 3_600_000;
 const WINDOW_ARTICLES = 5_000;
 const NEW_ARTICLES = 200;
-/** Regression gate, as multiples of `referenceCpuMs()` measured right before (see the header). */
-const TICK_RATIO = Number(process.env.STORY_BENCH_TICK_RATIO ?? 5);
+/** Sanity gate (catastrophic constant-factor regression), as a multiple of `referenceCpuMs()` (see the header). */
+const TICK_RATIO = Number(process.env.STORY_BENCH_TICK_RATIO ?? 8);
+/** Main gate: tick CPU against the 5k window ÷ tick CPU against the 1.25k window (4× the data). Measured ≈ 1.1–1.4; window-linear ≈ 3–4; quadratic ≈ 16. */
+const SMALL_WINDOW_ARTICLES = 1_250;
+const TICK_GROWTH_LIMIT = Number(process.env.STORY_BENCH_GROWTH_LIMIT ?? 2.5);
 const ENGINE_RATIO = Number(process.env.STORY_BENCH_ENGINE_RATIO ?? 1.2);
 /** Opt-in: also hold the wall-clock time to the reference machine's budgets (quiet machine only). */
 const STRICT = process.env.STORY_BENCH_STRICT === "1";
@@ -202,62 +203,79 @@ afterAll(async () => {
 });
 
 describe("story clustering performance (5k articles / 48 h, SQLite)", () => {
-  it("backfills a 5k window in bounded rounds, then an incremental tick of 200 fits the 400 ms budget", async () => {
-    const window = buildSeeds(WINDOW_ARTICLES, "w", 0.2, 46, 1);
-    for (let i = 0; i < window.length; i += 1000) await insert(window.slice(i, i + 1000));
+  it("backfills a 5k window in bounded rounds; an incremental tick of 200 does not grow with the window (and fits the 400 ms budget)", async () => {
+    /** Loads `count` more window articles and clusters them in bounded rounds (what drainStoryClustering does). */
+    const backfill = async (count: number, prefix: string) => {
+      const seeds = buildSeeds(count, prefix, 0.2, 46, 1);
+      for (let i = 0; i < seeds.length; i += 1000) await insert(seeds.slice(i, i + 1000));
+      const start = performance.now();
+      let rounds = 0;
+      let maxRound = 0;
+      for (;;) {
+        const t0 = performance.now();
+        const r = await clusterUser(userId, { budgetMs: 400, now: NOW });
+        maxRound = Math.max(maxRound, performance.now() - t0);
+        if (r.processed === 0) break;
+        rounds++;
+      }
+      timings[`${prefix}BackfillTotalMs`] = Math.round(performance.now() - start);
+      timings[`${prefix}BackfillRounds`] = rounds;
+      timings[`${prefix}BackfillMaxRoundMs`] = Math.round(maxRound);
+      expect(await state.db.article.count({ where: { userId, clusteredAt: null } })).toBe(0);
+    };
 
-    // --- first-run backfill: repeated bounded rounds (what drainStoryClustering does)
-    const backfillStart = performance.now();
-    let rounds = 0;
-    let maxRound = 0;
-    for (;;) {
-      const t0 = performance.now();
-      const r = await clusterUser(userId, { budgetMs: 400, now: NOW });
-      maxRound = Math.max(maxRound, performance.now() - t0);
-      if (r.processed === 0) break;
-      rounds++;
-    }
-    timings.backfillTotalMs = Math.round(performance.now() - backfillStart);
-    timings.backfillRounds = rounds;
-    timings.backfillMaxRoundMs = Math.round(maxRound);
-    expect(await state.db.article.count({ where: { userId, clusteredAt: null } })).toBe(0);
+    /** `count` incremental ticks of 200 new articles (≈ 40 % further sources of known stories). */
+    expect(NEW_ARTICLES).toBeLessThanOrEqual(PENDING_BATCH); // one round of the real tick
+    let tickSeq = 0;
+    let attached = 0;
+    const measureTicks = async (count: number) => {
+      const samples: number[] = [];
+      const refs: number[] = [];
+      const walls: number[] = [];
+      for (let k = 0; k < count; k++) {
+        await insert(buildSeeds(NEW_ARTICLES, `n${tickSeq}`, 0.4, 1.5, (tickSeq % 5) * 0.5));
+        tickSeq++;
+        refs.push(await referenceCpuMs());
+        const c0 = cpuMs();
+        const t0 = performance.now();
+        // Generous job budget: a loaded machine must not stop the tick early (processed < batch);
+        // the assertions are on the CPU time the tick needed.
+        const tick = await clusterUser(userId, { budgetMs: JOB_BUDGET_MS, now: NOW });
+        walls.push(performance.now() - t0);
+        samples.push(cpuMs() - c0);
+        expect(tick.processed).toBe(NEW_ARTICLES);
+        expect(tick.morePending).toBe(false);
+        attached += tick.joined + tick.created;
+      }
+      return { samples, refs, walls };
+    };
+
+    // --- small window: backfill, then warm ticks
+    await backfill(SMALL_WINDOW_ARTICLES, "small");
+    const small = await measureTicks(5);
+
+    // --- full 5k window: backfill the rest, then the ticks that count
+    await backfill(WINDOW_ARTICLES - SMALL_WINDOW_ARTICLES - tickSeq * NEW_ARTICLES, "full");
     const clusters = await state.db.storyCluster.count({ where: { userId } });
     const clustered = await state.db.article.count({ where: { userId, clusterId: { not: null } } });
     timings.windowClusters = clusters;
     timings.windowClusteredArticles = clustered;
     expect(clusters).toBeGreaterThan(50);
+    const full = await measureTicks(5);
 
-    // --- incremental ticks: 5 × 200 new articles (≈ 40 % further sources of known stories);
-    // the median resists one noisy sample on a shared machine.
-    expect(NEW_ARTICLES).toBeLessThanOrEqual(PENDING_BATCH); // one round of the real tick
-    const samples: number[] = [];
-    const refs: number[] = [];
-    const walls: number[] = [];
-    let attached = 0;
-    for (let k = 0; k < 5; k++) {
-      await insert(buildSeeds(NEW_ARTICLES, `n${k}`, 0.4, 1.5, k * 0.5));
-      refs.push(await referenceCpuMs());
-      const c0 = cpuMs();
-      const t0 = performance.now();
-      // Generous job budget: a loaded machine must not stop the tick early (processed < batch);
-      // the assertion below is on the CPU time the tick needed.
-      const tick = await clusterUser(userId, { budgetMs: JOB_BUDGET_MS, now: NOW });
-      walls.push(performance.now() - t0);
-      samples.push(cpuMs() - c0);
-      expect(tick.processed).toBe(NEW_ARTICLES);
-      expect(tick.morePending).toBe(false);
-      attached += tick.joined + tick.created;
-    }
-    const ratios = samples.map((x, i) => x / refs[i]);
-    const tickRatio = floor(samples) / floor(refs);
-    timings.incrementalTickCpuMsAll = samples.map((x) => Math.round(x)).join("/");
-    timings.incrementalTickWallMsAll = walls.map((x) => Math.round(x)).join("/");
-    timings.referenceCpuMsAll = refs.map((x) => Math.round(x)).join("/");
-    timings.incrementalTickRatioAll = ratios.map((x) => x.toFixed(2)).join("/");
+    const growth = floor(full.samples) / floor(small.samples);
+    const tickRatio = floor(full.samples) / floor(full.refs);
+    timings.smallTickCpuMsAll = small.samples.map((x) => Math.round(x)).join("/");
+    timings.incrementalTickCpuMsAll = full.samples.map((x) => Math.round(x)).join("/");
+    timings.incrementalTickWallMsAll = full.walls.map((x) => Math.round(x)).join("/");
+    timings.referenceCpuMsAll = full.refs.map((x) => Math.round(x)).join("/");
+    timings.incrementalTickRatioAll = full.samples.map((x, i) => (x / full.refs[i]).toFixed(2)).join("/");
     timings.incrementalTickRatio = Number(tickRatio.toFixed(2));
+    timings.tickGrowth4xWindow = Number(growth.toFixed(2));
     timings.incrementalAttachedTotal = attached;
+    expect(growth).toBeLessThan(TICK_GROWTH_LIMIT);
     expect(tickRatio).toBeLessThan(TICK_RATIO);
-    if (STRICT) expect(median(walls)).toBeLessThan(STRICT_TICK_MS);
+    if (STRICT) expect(median(full.walls)).toBeLessThan(STRICT_TICK_MS);
   }, 120_000);
 
   it("pure engine: 200 pending against a 5k window", async () => {

@@ -72,6 +72,12 @@ export interface ArticleSyncInput {
     upstreamContentHash?: string | null;
     contentHash: string | null;
     content: string;
+    /**
+     * Not persisted. Set when `content` carries embed links the sanitizer used to strip (known video-provider
+     * iframes → plain links, lib/feed-item-sanitize.ts): the body this item sanitized to before that existed.
+     * A stored body equal to it means upstream did not change, so the row is left alone (see upsertArticleBatch).
+     */
+    legacyContent?: string;
     excerpt: string;
     author: string | null;
     publishedAt: Date;
@@ -383,6 +389,14 @@ export async function upsertArticleBatch(
         if (article.upstreamContentHash && !legacyFullTextCandidate &&
             (!existing.upstreamContentHash || existing.upstreamContentHash === article.upstreamContentHash)) {
             article = { ...article, content: existing.feedContent ?? existing.content, excerpt: existing.excerpt ?? "" };
+        }
+        // Embed links (known video iframes → plain links) only ever apply to new rows and to rows whose upstream
+        // content really changed. A stored body that equals what this item sanitized to BEFORE embed links existed
+        // is the same upstream content: compare and keep it as stored, or every item with an iframe would be
+        // rewritten (updatedAt bump, full-text reset) once after the deploy that introduced them. Checked against
+        // `feedContent` when full text replaced the body, as for the change check below.
+        if (article.legacyContent !== undefined && (existing.feedContent ?? existing.content) === article.legacyContent) {
+            article = { ...article, content: article.legacyContent };
         }
         const next = updatableFields(article);
         const linkChanged = existing.link !== next.link;
@@ -737,13 +751,15 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         // remove-selectors (FreshRSS `cssContentFilter`) run in the same worker
         // task, on the feed's own content too — not only on downloaded full text.
         const contentRules = hasFeedContentRules(feed.contentRules) ? feed.contentRules : null;
-        const sanitizedItems: { html: string; excerpt: string; defaultHtml?: string; allowed?: boolean }[] = contentRules
+        // Known video-provider iframes become plain links on the plain path (the render-time inliner then shows
+        // click-to-load placeholders); feeds with content rules keep the default profile (they hash its output).
+        const sanitizedItems: { html: string; excerpt: string; defaultHtml?: string; legacyHtml?: string; allowed?: boolean }[] = contentRules
             ? await applyFeedContentRules(remoteFeed.articles.map((item, index) => ({ title: item.title || "", html: itemContents[index] })), contentRules, feed.fullTextRemoveSelectors)
-            : await sanitizeFeedItemBodies(itemContents, { removeSelectors: feed.fullTextRemoveSelectors });
+            : await sanitizeFeedItemBodies(itemContents, { removeSelectors: feed.fullTextRemoveSelectors, embedLinks: true });
 
         const articles = remoteFeed.articles.map((item, index) => {
             const content = itemContents[index];
-            const { excerpt, html: sanitizedContent } = sanitizedItems[index];
+            const { excerpt, html: sanitizedContent, legacyHtml } = sanitizedItems[index];
 
             const externalId = item.externalId || item.link || null;
             // Google News: identity was fixed in the pre-pass from the raw item
@@ -773,7 +789,8 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             // for title-less items — see resolveItemTitle().
             const title = item.title || UNTITLED;
             const meta = computeArticleMeta({
-                content: sanitizedItems[index].defaultHtml ?? sanitizedContent,
+                // Meta (reading time, media) from the stable form: the added embed link must not change it.
+                content: sanitizedItems[index].defaultHtml ?? legacyHtml ?? sanitizedContent,
                 contentFormat: "html",
                 title,
                 link,
@@ -799,6 +816,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 ...(contentRules ? { upstreamContentHash: createHash("sha256").update(sanitizedItems[index].defaultHtml!).digest("hex") } : {}),
                 contentHash: computeContentHash(link),
                 content: sanitizedContent,
+                ...(legacyHtml !== undefined ? { legacyContent: legacyHtml } : {}),
                 excerpt: excerpt,
                 author: item.author || null,
                 publishedAt: item.publishedAt || new Date(),

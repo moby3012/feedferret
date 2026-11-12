@@ -41,7 +41,7 @@ Groups articles of **different feeds** that cover the same story (per user, last
 
 Score margin on the tuning set: lowest same-story pair 0.567, highest other pair 0.491 (threshold 0.53). The first run of the new hard negatives merged `Zinssenkung`/`Zinserhöhung` and `Börse am Montag … Plus`/`Dienstag … Minus` (2 false merges); the contradiction cap above fixes both without moving any other pair. On tuning + holdout the two ranges overlap slightly (0.476 vs 0.505): the threshold sits above every negative pair, and the one weak positive pair is still linked through a third source. Treat the fixture numbers as a regression net, not as a production precision claim; the acceptance spot check on real data (≥ 5 % clustered, 0 false merges in 50 cards) is still to do on a prod-sized copy.
 
-## Performance (`tests/server/story-bench.test.ts`, SQLite file, Apple M-series, shared machine)
+## Performance (`tests/server/story-bench.timing.test.ts`, SQLite file, Apple M-series, shared machine)
 
 | scenario | result |
 |---|---|

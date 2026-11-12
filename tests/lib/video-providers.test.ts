@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alternativeUrl, validateInstance, videoFor } from "@/lib/video-providers";
+import { alternativeUrl, validateInstance, videoFor, watchUrlForEmbed } from "@/lib/video-providers";
 import { runHtmlTaskInProcess } from "@/lib/html-worker/tasks";
 describe("declarative providers", () => {
   it.each([
@@ -19,6 +19,25 @@ describe("declarative providers", () => {
     expect(alternativeUrl("https://x.com/test/status/1", { mediaTwitterInstance: "https://social.example" })).toBe("https://social.example/test/status/1");
   });
   it.each(["http://video.example", "https://user@video.example", "https://video.example/path", "https://video.example?q=x", "https://127.0.0.1", "https://localhost", null])("rejects invalid settings %s", value => expect(() => validateInstance(value)).toThrow());
+});
+describe("watchUrlForEmbed (ingest: iframe src → canonical watch page)", () => {
+  it.each([
+    ["https://www.youtube.com/embed/abc123", "YouTube", "https://www.youtube.com/watch?v=abc123"],
+    ["https://www.youtube-nocookie.com/embed/abc123?start=4", "YouTube", "https://www.youtube.com/watch?v=abc123"],
+    ["//www.youtube.com/embed/abc123", "YouTube", "https://www.youtube.com/watch?v=abc123"],
+    ["http://youtube.com/embed/abc123", "YouTube", "https://www.youtube.com/watch?v=abc123"],
+    ["https://player.vimeo.com/video/99", "Vimeo", "https://vimeo.com/99"],
+    ["https://www.dailymotion.com/embed/video/x1", "Dailymotion", "https://www.dailymotion.com/video/x1"],
+    ["https://www.twitch.tv/videos/1234", "Twitch", "https://www.twitch.tv/videos/1234"],
+    ["https://clips.twitch.tv/ClipId", "Twitch", "https://clips.twitch.tv/ClipId"],
+    ["https://v.redd.it/abc", "Reddit video", "https://v.redd.it/abc"],
+  ])("%s", (src, provider, url) => expect(watchUrlForEmbed(src)).toEqual({ provider, url }));
+  it.each([
+    "https://video.example/videos/watch/abc-123", // PeerTube: any origin, no canonical page we can vouch for
+    "https://www.youtube.com/embed/videoseries?list=PL1", "https://www.youtube.com/embed/",
+    "https://youtube.com.evil.example/embed/abc", "https://user:pw@www.youtube.com/embed/abc", "https://www.youtube.com:8443/embed/abc",
+    "ftp://www.youtube.com/embed/abc", "javascript:alert(1)", "/embed/abc", "not a url", "",
+  ])("rejects %s", (src) => expect(watchUrlForEmbed(src)).toBeUndefined());
 });
 describe("sanitized presentation pipeline", () => {
   const render = (html: string, keyHex = "", base = "https://news.example/article", frontends = {}) => runHtmlTaskInProcess("rewriteMedia", { html, keyHex, base, frontends });
