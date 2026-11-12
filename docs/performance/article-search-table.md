@@ -50,7 +50,7 @@ semantics, especially -author and -entity.
 The migration only does the fast part; it is idempotent and never builds or drops a GIN index
 on a populated database (that is what made the first version deadlock and run ~130 s at 200k).
 
-Postgres migration (`20261112130000_article_search_table`), each phase its own short transaction:
+Postgres migration (`20261112170000_article_search_table`), each phase its own short transaction:
 1. Table (`IF NOT EXISTS`), `CREATE OR REPLACE FUNCTION`, then FK and triggers in one guarded
    `DO` block. Only the FK/trigger DDL locks Article (SHARE ROW EXCLUSIVE, first run only; a
    re-run takes none). Writers queue behind a pending lock request, so each attempt is bounded by
@@ -154,7 +154,7 @@ total content size (the content index dominates).
    review corpus; 869 MB per 200k with the shorter synthetic bodies here), with a peak of about
    1.5× that during the copy and the index builds (WAL, build temp files). The legacy Article
    indexes are freed only at the end.
-2. Deploy normally. Expected startup log: `Applying migration 20261112130000_article_search_table`,
+2. Deploy normally. Expected startup log: `Applying migration 20261112170000_article_search_table`,
    then `…except the search index swap the app finishes in the background…`. During the
    migration, Article writers (and `SELECT … FOR UPDATE`) wait at most ~2 s at a time in phase 1
    and at most 10 s in phase 2 (lock wait plus copy, bounded by `statement_timeout`; a longer copy
@@ -184,7 +184,7 @@ the pure-DDL adoption allowlist** in migration-utils.mjs: that allowlist means "
 applied WITHOUT executing", which would skip both triggers and backfill. Consequence: every
 legacy db-push database that is already *ahead of* the baseline now stops at startup and needs
 the operator path in docs/database.md (run the idempotent migration SQL, then
-`FEEDFERRET_DB_ADOPT_CONFIRM=20261112130000_article_search_table` once). Databases with
+`FEEDFERRET_DB_ADOPT_CONFIRM=20261112170000_article_search_table` once). Databases with
 `_prisma_migrations` (production) are not affected.
 
 ## Rollback

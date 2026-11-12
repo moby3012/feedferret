@@ -5,7 +5,7 @@
 //     [--articles 200000] [--writers 2] [--trials 3] [--words 450] [--json out.json] [--keep]
 //
 // Creates ONE scratch database (ff_searchmig_bench), applies the history up to the migration
-// before 20261112130000_article_search_table, seeds synthetic articles and the legacy Article GIN
+// before 20261112170000_article_search_table, seeds synthetic articles and the legacy Article GIN
 // indexes, then:
 //   1. trials: `prisma migrate deploy` of the search migration while N writers insert/update/
 //      bulk mark-read (SELECT … FOR UPDATE + UPDATE)/delete articles in multi-statement transactions; asserts no deadlock, no
