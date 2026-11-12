@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
+import { clearMediaProxySettingsCache } from "@/lib/media-settings";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
@@ -206,6 +207,7 @@ const GLOBAL_SETTINGS_TYPES = {
   accentColor: "string",
   secondaryColor: "string",
   hideDuplicates: "boolean",
+  mediaProxyImages: "boolean",
   markReadOnScroll: "boolean",
   markReadOnAdvance: "boolean",
   storyClustering: "boolean",
@@ -231,6 +233,7 @@ export async function updateGlobalSettings(data: {
   accentColor?: string;
   secondaryColor?: string;
   hideDuplicates?: boolean;
+  mediaProxyImages?: boolean;
   markReadOnScroll?: boolean;
   markReadOnAdvance?: boolean;
   storyClustering?: boolean;
@@ -279,6 +282,7 @@ export async function updateGlobalSettings(data: {
     where: { id: session.user.id },
     data: updateData,
   });
+  if ("mediaProxyImages" in updateData) clearMediaProxySettingsCache(session.user.id);
 
   revalidatePath("/");
 }

@@ -63,7 +63,7 @@ function boot(fetchImpl: (req: unknown, init?: { signal?: AbortSignal }) => Prom
     dispatch("fetch", event);
     return responded as Promise<Response> | null;
   };
-  return { dispatch, navigate, badge };
+  return { dispatch, navigate, badge, cache };
 }
 
 beforeEach(() => vi.useFakeTimers());
@@ -178,6 +178,39 @@ describe("service worker navigations", () => {
       throw new TypeError("Failed to fetch");
     });
     expect(await (await sw.navigate("/login"))!.text()).toContain("OFFLINE");
+  });
+
+  it("intercepts signed media images through the runtime cache", async () => {
+    const sw = boot(async () => new Response("pixels", { headers: { "content-type": "image/png" } }));
+    let response: Promise<Response> | undefined;
+    const waits: Promise<unknown>[] = [];
+    sw.dispatch("fetch", {
+      request: { method: "GET", mode: "cors", url: ORIGIN + "/api/media?u=image&s=signed", destination: "image" },
+      respondWith: (value: Promise<Response>) => { response = value; },
+      waitUntil: (value: Promise<unknown>) => waits.push(value),
+    });
+    expect(response).toBeDefined();
+    expect(await (await response!).text()).toBe("pixels");
+    await Promise.all(waits);
+  });
+
+  it.each([["/api/media?u=image&s=signed", true], ["/private.png", false]])("private image cache is restricted to signed media: %s", async (path, cached) => {
+    const sw = boot(async () => {
+      const result = new Response("pixels", { headers: { "content-type": "image/png", "cache-control": "private, max-age=604800, immutable" } });
+      Object.defineProperty(result, "type", { value: "basic" });
+      return result;
+    });
+    const put = vi.spyOn(sw.cache, "put");
+    let response: Promise<Response> | undefined;
+    const waits: Promise<unknown>[] = [];
+    sw.dispatch("fetch", {
+      request: { method: "GET", mode: "cors", url: ORIGIN + path, destination: "image" },
+      respondWith: (value: Promise<Response>) => { response = value; },
+      waitUntil: (value: Promise<unknown>) => waits.push(value),
+    });
+    expect(await (await response!).text()).toBe("pixels");
+    await Promise.all(waits);
+    expect(put).toHaveBeenCalledTimes(cached ? 1 : 0);
   });
 
   it("never intercepts non-GET requests, cross-origin or /api data requests", () => {

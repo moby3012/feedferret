@@ -172,7 +172,9 @@
       "feedsHintReset": "Der Tipp erscheint wieder im Feeds-Tab."
     },
     "sectionsNav": "Bereiche der Einstellungen",
-    "backToSettings": "Einstellungen"
+    "backToSettings": "Einstellungen",
+    "mediaProxyImages": "Bilder über FeedFerret laden (Privatsphäre)",
+    "mediaProxyImagesDescription": "Gilt, wenn der Administrator die optionale Bildweiterleitung erlaubt. Bei „Immer an“ gilt sie für alle."
   },
   "profile": {
     "changePassword": "Passwort ändern",
@@ -1969,7 +1971,12 @@
       "failedToGenerateKeys": "Schlüssel konnten nicht generiert werden",
       "copied": "{label} kopiert",
       "couldNotCopy": "{label} konnte nicht kopiert werden"
-    }
+    },
+    "mediaProxyMode": "Bild-Proxy",
+    "mediaProxyDescription": "Aus: direkte Bilder. Optional: persönliche Einstellung. Immer an: alle Nutzer. Standardmäßig aus.",
+    "mediaProxyOff": "Aus",
+    "mediaProxyOptIn": "Optional",
+    "mediaProxyOn": "Immer an"
   },
   "accessibility": {
     "title": "Barrierefreiheitserklärung",
