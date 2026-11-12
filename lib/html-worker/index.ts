@@ -58,6 +58,7 @@ type Base = {
 
 export type HtmlWorkerRequest = Base &
   (
+    | { task: "telegram"; html: string; url: string; channel: string }
     | { task: "readability"; html: string; url: string }
     | { task: "xpath"; html: string; url: string; config: FeedExtractionConfig; contentType: "text/html" | "text/xml" }
     | { task: "xpathString"; html: string; url: string; expression: string | undefined }
@@ -69,7 +70,9 @@ export type HtmlWorkerRequest = Base &
     | { task: "digest"; html: string; url: string; options?: PageDigestOptions }
   );
 
-export type HtmlWorkerResult<R extends HtmlWorkerRequest> = R extends { task: "readability" }
+export type HtmlWorkerResult<R extends HtmlWorkerRequest> = R extends { task: "telegram" }
+  ? FetchedFeed
+  : R extends { task: "readability" }
   ? ExtractionResult
   : R extends { task: "xpath" }
     ? FetchedFeed
@@ -96,6 +99,9 @@ export async function runInHtmlWorker<R extends HtmlWorkerRequest>(request: R): 
   const r = request as HtmlWorkerRequest;
   let out: unknown;
   switch (r.task) {
+    case "telegram":
+      out = await runHtmlTask("telegram", { html: bound(r.html), url: r.url, channel: r.channel }, opts);
+      break;
     case "readability":
       out = await runHtmlTask("extractReadable", { html: bound(r.html), url: r.url }, opts);
       break;

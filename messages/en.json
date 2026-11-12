@@ -758,6 +758,7 @@
     "topicFeeds": "News & search feeds for this topic — pick one",
     "resolverNoResult": "Nothing found for that. Try the site's address or a feed URL.",
     "hints": {
+      "publicPreviewUnavailable": "This channel has no accessible public web preview. It may be private or no longer exist.",
       "needsRsshub": "Requires RSSHub – configure under Settings › Server",
       "rateLimited": "Try again later",
       "blocked": "This site blocked automated access – try a native feed from the publisher",
