@@ -69,10 +69,13 @@ beforeAll(async () => {
     const { PrismaPg } = await import("@prisma/adapter-pg");
     const pg = (await import("pg")).default;
     const url = process.env.FEEDFERRET_TEST_PG_URL!;
+    // pg_trgm first: the trigram GIN indexes in the schema need its operator classes at `db push` time.
+    const bootstrap = new pg.Pool({ connectionString: url });
+    await bootstrap.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+    await bootstrap.end();
     execFileSync("node", ["scripts/prepare-prisma-schema.mjs"], { env: { ...process.env, DATABASE_PROVIDER: "postgresql" }, stdio: "pipe" });
     execFileSync("node_modules/.bin/prisma", ["db", "push", "--schema", "prisma/schema.generated.prisma", "--accept-data-loss"], { env: { ...process.env, DATABASE_URL: url }, stdio: "pipe" });
     h.db = new PrismaClient({ adapter: new PrismaPg(new pg.Pool({ connectionString: url })) });
-    await h.db.$executeRawUnsafe("CREATE EXTENSION IF NOT EXISTS pg_trgm").catch(() => {});
   } else {
     const url = `file:${join(dir, "test.db")}`;
     execFileSync("node_modules/.bin/prisma", ["db", "push", "--schema", "prisma/schema.generated.prisma"], { env: { ...process.env, DATABASE_URL: url }, stdio: "pipe" });
@@ -182,6 +185,11 @@ describe("Article.updatedAt is the sync clock: user state must not move it", () 
     };
     expect((await call("feedferret.update_article_state", { articleId: a.id, isRead: true, isReadLater: true })).isError).toBeFalsy();
     expect(await stateOf(a.id)).toMatchObject({ isRead: true, isReadLater: true });
+    await expectUpdatedAtKept(a.id);
+
+    // An empty patch writes nothing and reports nothing updated.
+    const empty = await mcpPost(jsonReq("/api/mcp", { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "feedferret.update_article_state", arguments: { articleId: a.id } } }));
+    expect(JSON.parse((await empty.json()).result.content[0].text)).toEqual({ updated: 0 });
     await expectUpdatedAtKept(a.id);
 
     expect((await call("feedferret.batch_update_articles", { ids: [a.id], action: "star" })).isError).toBeFalsy();

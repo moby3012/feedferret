@@ -315,9 +315,12 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (typeof args.isStarred === "boolean") patch.isStarred = args.isStarred;
       if (typeof args.isReadLater === "boolean") patch.isReadLater = args.isReadLater;
       const articleId = String(args.articleId);
+      const groups = userStateGroups([articleId], patch);
+      if (groups.length === 0) return { updated: 0 }; // nothing to update: no write, no count
       const owned = await db.article.findFirst({ where: { id: articleId, userId: user.id }, select: { id: true } });
-      if (owned) await writeUserState(user.id, userStateGroups([articleId], patch)); // raw writes: updatedAt untouched
-      return { updated: owned ? 1 : 0 };
+      if (!owned) return { updated: 0 };
+      await writeUserState(user.id, groups); // raw writes: updatedAt untouched
+      return { updated: 1 };
     }
     case "feedferret.list_feeds":
       return clientFeed(await db.feed.findMany({ where: { userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } }, orderBy: [{ order: "asc" }, { name: "asc" }] }));
