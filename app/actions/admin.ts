@@ -13,6 +13,7 @@ import { renderWithConfigDetailed } from "@/lib/render-sidecar";
 import { validateRsshubRoute } from "@/lib/rsshub";
 import { testChangedetectionConnection as runChangedetectionTest } from "@/lib/changedetection";
 import { logger } from "@/lib/logger";
+import { isApiSourceDeferredError } from "@/lib/api-source-errors";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /** Single source of the admin gate: lib/admin-auth.ts (also used by the newsletter wizard). */
@@ -275,8 +276,11 @@ export async function getGlobalSettings() {
     ? settings.mailProvider
     : "smtp";
 
+  // Process-level "last Twitch credential rejection" for the admin section.
+  const { getTwitchCredentialError } = await import("@/lib/twitch");
   return {
     ...decryptSettingsForDisplay(settings),
+    twitchCredentialError: getTwitchCredentialError(),
     mailProvider: normalizedMailProvider,
     availableMailProviders,
     starterPacks: await getStarterPacksFromSettings(settings.starterPacksJson),
@@ -304,6 +308,12 @@ export async function updateGlobalSettings(data: Record<string, unknown>) {
   if (Object.keys(sanitized).some((key) => key.startsWith("rsshub") || key.startsWith("changedetection"))) {
     const { resetConnectorSecretRulesCache } = await import("@/lib/connector-secrets");
     resetConnectorSecretRulesCache();
+  }
+
+  // New/removed Twitch credentials make a remembered rejection stale.
+  if ("twitchClientId" in sanitized || "twitchClientSecret" in sanitized) {
+    const { clearTwitchCredentialError } = await import("@/lib/twitch");
+    clearTwitchCredentialError();
   }
 
   const session = await auth();
@@ -575,6 +585,10 @@ export async function testTwitchConnection(input: { clientId: string; clientSecr
   } catch (error) {
     const status = (error as { status?: unknown } | null)?.status;
     logger.warn(`[admin] Twitch connection test failed${typeof status === "number" ? ` (HTTP ${status})` : ""}`);
+    if (isApiSourceDeferredError(error) && error.reason === "rate-limited") {
+      const retryAfterSecs = Math.max(1, Math.ceil((error.retryAfterMs ?? 60_000) / 1000));
+      return { success: false as const, rateLimited: true as const, retryAfterSecs, error: `Twitch is rate-limited. Retry in ${retryAfterSecs} s.` };
+    }
     return { success: false as const, error: "Twitch connection failed. Check credentials or retry after the API rate limit resets." };
   }
 }

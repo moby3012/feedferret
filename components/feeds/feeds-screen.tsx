@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { apiSourceAttentionReason } from "@/lib/api-source-errors";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import {
@@ -636,6 +637,7 @@ function FeedRow({
 }) {
   const t = useTranslations("sidebar");
   const tScreen = useTranslations("feedsScreen");
+  const tCommon = useTranslations("common");
   const menu = (point: LongPressPoint, el: HTMLElement) => onMenu({ kind: "feed", feed, point, returnFocus: el });
   const { ref, onKeyDown } = useRowMenu(menu);
   return (
@@ -655,6 +657,11 @@ function FeedRow({
         {feed.lastStatus === "error" && (
           <span title={feed.lastError || t("lastSyncFailed")} className="shrink-0">
             <AlertCircle className="size-4 text-danger" aria-hidden />
+          </span>
+        )}
+        {apiSourceAttentionReason(feed) && (
+          <span title={tCommon(`apiSourceAttention.${apiSourceAttentionReason(feed)}`)} className="shrink-0">
+            <AlertCircle className="size-4 text-warning" aria-hidden />
           </span>
         )}
         {showsCount(countDisplay, "feed") && <UnreadCount count={feed.unread} />}

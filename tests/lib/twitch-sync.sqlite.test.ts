@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
-const state = vi.hoisted(() => ({ db: null as unknown as PrismaClient, tokenStatus: 200, streams: [] as unknown[] }));
+const state = vi.hoisted(() => ({ db: null as unknown as PrismaClient, tokenStatus: 200, tokenThrows: false, streams: [] as unknown[] }));
 vi.mock("@/lib/db", () => ({
   get db() { return state.db; },
   getDatabaseProvider: () => "sqlite",
@@ -19,10 +19,13 @@ vi.mock("@/lib/ssrf", async (importOriginal) => {
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
   return {
     ...actual,
-    safeFetch: vi.fn(async (url: string) =>
+    safeFetch: vi.fn(async (url: string) => {
+      if (state.tokenThrows && url.includes("oauth2/token")) throw new TypeError("fetch failed");
+      return (
       url.includes("oauth2/token") ? json(state.tokenStatus === 200 ? { access_token: "t", expires_in: 3600 } : {}, state.tokenStatus)
         : url.includes("/users?") ? json({ data: [{ id: "42", display_name: "Example" }] })
-          : json({ data: state.streams })),
+          : json({ data: state.streams }));
+    }),
   };
 });
 
@@ -56,6 +59,7 @@ async function configure(enabled: boolean) {
 
 beforeEach(async () => {
   state.tokenStatus = 200;
+  state.tokenThrows = false;
   state.streams = [];
   resetTwitchCaches();
   await state.db.feed.deleteMany({ where: { userId } });
@@ -84,16 +88,27 @@ describe("Twitch feeds through syncFeed", () => {
   });
 
   it.each([
-    ["credentials are not configured", async () => { await configure(false); }],
-    ["credentials are rejected", async () => { state.tokenStatus = 400; }],
-  ])("defers without failure streak or auto-mute when %s", async (_name, arrange) => {
+    ["credentials are not configured", "unconfigured", async () => { await configure(false); }],
+    ["credentials are rejected", "auth", async () => { state.tokenStatus = 400; }],
+  ])("defers without failure streak or auto-mute, but shows a setup hint, when %s", async (_name, reason, arrange) => {
     await arrange();
     const feed = await state.db.feed.create({ data: { userId, name: "Twitch · Example", url: "feedferret://twitch/example/live" } });
     for (let i = 0; i < 3; i++) {
       expect(await syncFeed(userId, feed.id)).toMatchObject({ success: true, skipped: true, deferred: true });
     }
-    expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0, lastStatus: null });
+    const row = await state.db.feed.findUnique({ where: { id: feed.id } });
+    expect(row).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0, lastStatus: "attention", lastError: `api-source:${reason}`, lastFetchedAt: null });
     expect(await state.db.notification.count({ where: { feedId: feed.id } })).toBe(0);
+  });
+
+  it.each([
+    ["the token endpoint answers 5xx", () => { state.tokenStatus = 503; }],
+    ["the token endpoint is unreachable", () => { state.tokenThrows = true; }],
+  ])("defers silently (no attention status) when %s", async (_name, arrange) => {
+    arrange();
+    const feed = await state.db.feed.create({ data: { userId, name: "Twitch · Example", url: "feedferret://twitch/example/live" } });
+    for (let i = 0; i < 3; i++) expect(await syncFeed(userId, feed.id)).toMatchObject({ deferred: true });
+    expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0, lastStatus: null, lastError: null });
   });
 
   it("resumes normally once credentials return", async () => {
@@ -103,6 +118,22 @@ describe("Twitch feeds through syncFeed", () => {
     await configure(true);
     state.streams = [BROADCAST];
     expect(await syncFeed(userId, feed.id)).toMatchObject({ success: true, count: 1 });
-    expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toMatchObject({ autoMuted: false, lastStatus: "ok" });
+    // The attention status is overwritten by the healthy one.
+    expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toMatchObject({ autoMuted: false, lastStatus: "ok", lastError: null });
+  });
+
+  it("a revoked secret turns a healthy feed into attention (not error) and back", async () => {
+    state.streams = [BROADCAST];
+    const feed = await state.db.feed.create({ data: { userId, name: "Twitch · Example", url: "feedferret://twitch/example/live" } });
+    await syncFeed(userId, feed.id);
+    expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toMatchObject({ lastStatus: "ok" });
+    resetTwitchCaches();
+    state.tokenStatus = 401;
+    await syncFeed(userId, feed.id);
+    expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toMatchObject({ lastStatus: "attention", lastError: "api-source:auth", autoMuted: false, consecutiveFailureCount: 0 });
+    resetTwitchCaches();
+    state.tokenStatus = 200;
+    await syncFeed(userId, feed.id);
+    expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toMatchObject({ lastStatus: "ok", lastError: null });
   });
 });

@@ -3,8 +3,8 @@ const mocks = vi.hoisted(() => ({ fetch: vi.fn(), settings: vi.fn(), decrypt: vi
 vi.mock("@/lib/db", () => ({ db: { globalSettings: { findUnique: mocks.settings } } }));
 vi.mock("@/lib/crypto", () => ({ decryptIfValue: mocks.decrypt }));
 vi.mock("@/lib/ssrf", () => ({ safeFetch: mocks.fetch }));
-import { fetchTwitchFeed, twitchRequest, getTwitchCredentials, resetTwitchCaches } from "../../lib/twitch";
-import { isApiSourceDeferredError } from "../../lib/api-source-errors";
+import { fetchTwitchFeed, twitchRequest, getTwitchCredentials, getTwitchCredentialError, resetTwitchCaches } from "../../lib/twitch";
+import { apiSourceAttentionCode, apiSourceAttentionReason, isApiSourceDeferredError } from "../../lib/api-source-errors";
 import { fetchFeedArticles } from "../../lib/feed-fetcher";
 import { hostBackoffRemainingMs, resetHostBackoff } from "../../lib/host-backoff";
 import { canonicalApiSourceUrl, matchApiPlatform, parseApiSourceUrl } from "../../lib/feed-adapters/api-source-url";
@@ -138,6 +138,62 @@ describe("official Twitch API platform source", () => {
     // Other (e.g. just corrected) credentials are not blocked by the failure.
     await twitchRequest("users", {}, { clientId: "bad-mint-fixed", clientSecret: "secret" }).catch(() => undefined);
     expect(mocks.fetch.mock.calls.filter(([url]) => url.includes("oauth2/token"))).toHaveLength(2);
+  });
+  it.each([[400, "auth"], [401, "auth"], [403, "auth"], [429, "rate-limited"]])("classifies a %i from the token endpoint as %s", async (status, reason) => {
+    mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? reply({}, status) : reply({ data: [] }));
+    const error = await twitchRequest("users", {}, { clientId: `classify-${status}`, clientSecret: "secret" }).catch((e) => e);
+    expect(isApiSourceDeferredError(error) && error.reason).toBe(reason);
+    expect(error.status).toBe(status);
+    if (reason === "rate-limited") expect(error.retryAfterMs).toBeGreaterThan(0);
+  });
+  it.each([
+    ["a 500", () => reply({}, 500)],
+    ["a 503", () => reply({}, 503)],
+    ["a network error", () => { throw new TypeError("fetch failed"); }],
+    ["a timeout", () => { throw new DOMException("timed out", "TimeoutError"); }],
+    ["an invalid body", () => reply({ nope: true })],
+  ])("treats %s while minting as transient: no auth wording, no negative cache, no credential error", async (_name, answer) => {
+    mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? answer() : reply({ data: [] }));
+    const creds = { clientId: "transient-mint", clientSecret: "secret" };
+    const errors = [];
+    for (let i = 0; i < 3; i++) errors.push(await twitchRequest("users", {}, creds).catch((e) => e));
+    expect(errors.every((e) => isApiSourceDeferredError(e) && e.reason === "transient")).toBe(true);
+    expect(String(errors[0].message)).not.toMatch(/Client ID|authentication/i);
+    expect(mocks.fetch.mock.calls.filter(([url]) => url.includes("oauth2/token"))).toHaveLength(3);
+    expect(getTwitchCredentialError()).toBeNull();
+  });
+  it("records the last credential rejection (process-level) and clears it after a successful mint", async () => {
+    expect(getTwitchCredentialError()).toBeNull();
+    mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? reply({}, 401) : reply({ data: [] }));
+    await twitchRequest("users", {}, { clientId: "rejected", clientSecret: "secret" }).catch(() => undefined);
+    const recorded = getTwitchCredentialError();
+    expect(recorded?.status).toBe(401);
+    expect(Number.isFinite(Date.parse(recorded!.at))).toBe(true);
+    // Ephemeral admin tests never write it.
+    resetTwitchCaches();
+    await twitchRequest("users", {}, { clientId: "rejected-test", clientSecret: "secret" }, undefined, { ephemeral: true }).catch(() => undefined);
+    expect(getTwitchCredentialError()).toBeNull();
+    mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? reply({}, 401) : reply({ data: [] }));
+    await twitchRequest("users", {}, { clientId: "rejected", clientSecret: "secret" }).catch(() => undefined);
+    expect(getTwitchCredentialError()).not.toBeNull();
+    mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? reply({ access_token: "ok", expires_in: 3600 }) : reply({ data: [] }));
+    await twitchRequest("users", {}, { clientId: "fixed", clientSecret: "secret" });
+    expect(getTwitchCredentialError()).toBeNull();
+  });
+  it("exposes the remaining backoff on a rate-limit deferral", async () => {
+    const creds = { clientId: "retry-after", clientSecret: "secret" };
+    mocks.fetch.mockReset().mockResolvedValueOnce(reply({ access_token: "token", expires_in: 3600 })).mockResolvedValueOnce(reply({}, 429, { "Ratelimit-Reset": String(Math.ceil(Date.now() / 1000) + 120) }));
+    const first = await twitchRequest("users", {}, creds).catch((e) => e);
+    expect(first.retryAfterMs).toBeGreaterThan(100_000);
+    const second = await twitchRequest("users", {}, creds).catch((e) => e);
+    expect(second.retryAfterMs).toBeGreaterThan(100_000);
+  });
+  it("encodes the feed attention status as a code the UI maps back", () => {
+    expect(apiSourceAttentionReason({ lastStatus: "attention", lastError: apiSourceAttentionCode("auth") })).toBe("auth");
+    expect(apiSourceAttentionReason({ lastStatus: "attention", lastError: apiSourceAttentionCode("unconfigured") })).toBe("unconfigured");
+    for (const feed of [{ lastStatus: "error", lastError: "api-source:auth" }, { lastStatus: "attention", lastError: "boom" }, { lastStatus: "ok", lastError: null }, {}]) {
+      expect(apiSourceAttentionReason(feed)).toBeNull();
+    }
   });
   it("ephemeral (connection-test) requests never touch the shared token or failure caches", async () => {
     const creds = { clientId: "ephemeral", clientSecret: "secret" };

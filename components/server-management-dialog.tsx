@@ -250,6 +250,7 @@ export function ServerManagementDialog({
     try {
       const result = await testTwitchConnection({ clientId: settings?.twitchClientId ?? "", clientSecret: settings?.twitchClientSecret ?? "" });
       if (result.success) toast.success(t("sync.twitchTestOk"));
+      else if ("rateLimited" in result && result.rateLimited) toast.error(t("sync.twitchTestRateLimited", { seconds: result.retryAfterSecs }));
       else toast.error(t("sync.twitchTestFailed"));
     } catch { toast.error(t("sync.twitchTestFailed")); }
     finally { setIsSaving(false); }
@@ -1387,6 +1388,14 @@ export function ServerManagementDialog({
                       <SettingsField label={t("sync.twitchClientId")} placeholder="" field="twitchClientId" settings={settings} setSettings={setSettings} />
                       <SettingsField label={t("sync.twitchClientSecret")} placeholder="••••••••" field="twitchClientSecret" settings={settings} setSettings={setSettings} type="password" isSecret />
                       <p className="text-footnote text-muted-foreground">{t("sync.twitchDisableHint")}</p>
+                      {settings?.twitchCredentialError && (
+                        <p data-testid="twitch-credential-error" className="rounded-row bg-warning/10 px-3 py-2 text-footnote text-warning">
+                          {t("sync.twitchCredentialError", {
+                            when: format.dateTime(new Date(settings.twitchCredentialError.at), { dateStyle: "medium", timeStyle: "short" }),
+                            status: settings.twitchCredentialError.status ?? "–",
+                          })}
+                        </p>
+                      )}
                       <div className="flex flex-wrap justify-end gap-2">
                         <Button variant="outline" onClick={handleTestTwitch} disabled={isSaving}>{t("sync.testConnection")}</Button>
                         <Button onClick={handleSaveTwitch} disabled={isSaving}>{t("sync.save")}</Button>

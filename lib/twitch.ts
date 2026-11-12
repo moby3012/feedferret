@@ -22,25 +22,46 @@ let cached: { key: string; token: string; expires: number } | undefined;
 let pending: { key: string; promise: Promise<string> } | undefined;
 // Failed mint → reuse the failure for a minute instead of hammering id.twitch.tv
 // once per feed (and per retry) with credentials that were just rejected.
-const failedMints = new Map<string, { until: number; status?: number }>();
+// Only auth rejections and quota answers are remembered; network errors/5xx are not.
+const failedMints = new Map<string, { until: number; status?: number; reason: "auth" | "rate-limited" }>();
+
+// Process-level: last time the shared credentials were rejected (shown in the admin section).
+let credentialError: { at: number; status?: number } | null = null;
+export function getTwitchCredentialError(): { at: string; status?: number } | null {
+  return credentialError ? { at: new Date(credentialError.at).toISOString(), status: credentialError.status } : null;
+}
+export function clearTwitchCredentialError() { credentialError = null; }
+const AUTH_MESSAGE = "Twitch authentication failed. Check the Client ID and Client Secret.";
+const AUTH_STATUSES = new Set([400, 401, 403]);
 
 const credentialKey = (credentials: TwitchCredentials) => createHash("sha256").update(JSON.stringify(credentials)).digest("hex");
 
 /** Test hook: forget every in-memory token / negative / user-id cache. */
 export function resetTwitchCaches() {
-  cached = undefined; pending = undefined; failedMints.clear(); userIds.clear();
+  cached = undefined; pending = undefined; failedMints.clear(); userIds.clear(); credentialError = null;
 }
 
 async function mintToken(credentials: TwitchCredentials): Promise<{ token: string; expiresInSecs: number }> {
   // Own timeout: a joined single-flight must not depend on the first caller's signal.
-  const response = await safeFetch("https://id.twitch.tv/oauth2/token", {
-    method: "POST", signal: AbortSignal.timeout(TOKEN_MINT_TIMEOUT_MS), headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: credentials.clientId, client_secret: credentials.clientSecret, grant_type: "client_credentials" }).toString(),
-  });
+  let response: Response;
+  try {
+    response = await safeFetch("https://id.twitch.tv/oauth2/token", {
+      method: "POST", signal: AbortSignal.timeout(TOKEN_MINT_TIMEOUT_MS), headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: credentials.clientId, client_secret: credentials.clientSecret, grant_type: "client_credentials" }).toString(),
+    });
+  } catch {
+    throw new ApiSourceDeferredError("transient", "Twitch is temporarily unreachable. Retrying on the next sync.");
+  }
   // Never surface upstream response bodies: OAuth errors can contain secrets.
-  if (!response.ok) { await response.body?.cancel(); throw new ApiSourceDeferredError("auth", "Twitch authentication failed. Check the Client ID and Client Secret.", response.status); }
-  const data = await response.json();
-  if (typeof data.access_token !== "string" || !Number.isFinite(data.expires_in) || data.expires_in <= 0) throw new ApiSourceDeferredError("auth", "Invalid Twitch token response");
+  if (!response.ok) {
+    await response.body?.cancel();
+    const { status } = response;
+    if (AUTH_STATUSES.has(status)) throw new ApiSourceDeferredError("auth", AUTH_MESSAGE, status);
+    if (status === 429) throw new ApiSourceDeferredError("rate-limited", "Twitch rate limit reached. Retry after the API reset.", status, TOKEN_FAILURE_BACKOFF_MS);
+    throw new ApiSourceDeferredError("transient", `Twitch is temporarily unavailable (${status}). Retrying on the next sync.`, status);
+  }
+  const data = await response.json().catch(() => null);
+  if (typeof data?.access_token !== "string" || !Number.isFinite(data.expires_in) || data.expires_in <= 0) throw new ApiSourceDeferredError("transient", "Invalid Twitch token response");
   return { token: data.access_token, expiresInSecs: data.expires_in };
 }
 
@@ -50,18 +71,27 @@ async function accessToken(credentials: TwitchCredentials, ephemeral = false): P
   const key = credentialKey(credentials);
   if (cached?.key === key && cached.expires > Date.now() + 60_000) return cached.token;
   const failed = failedMints.get(key);
-  if (failed && failed.until > Date.now()) throw new ApiSourceDeferredError("auth", "Twitch authentication failed recently. Check the Client ID and Client Secret.", failed.status);
+  if (failed && failed.until > Date.now()) {
+    throw failed.reason === "auth"
+      ? new ApiSourceDeferredError("auth", AUTH_MESSAGE, failed.status)
+      : new ApiSourceDeferredError("rate-limited", "Twitch rate limit reached. Retry after the API reset.", failed.status, failed.until - Date.now());
+  }
   if (pending?.key === key) return pending.promise;
   const promise = (async () => {
     try {
       const { token, expiresInSecs } = await mintToken(credentials);
       cached = { key, token, expires: Date.now() + expiresInSecs * 1000 };
       failedMints.delete(key);
+      credentialError = null;
       return token;
     } catch (error) {
-      if (failedMints.size > 50) failedMints.clear();
-      failedMints.set(key, { until: Date.now() + TOKEN_FAILURE_BACKOFF_MS, status: (error as { status?: number }).status });
-      throw isApiSourceDeferredError(error) ? error : new ApiSourceDeferredError("auth", "Twitch authentication failed. Check the Client ID and Client Secret.");
+      const deferred = isApiSourceDeferredError(error) ? error : new ApiSourceDeferredError("transient", "Twitch is temporarily unreachable. Retrying on the next sync.");
+      if (deferred.reason === "auth" || deferred.reason === "rate-limited") {
+        if (failedMints.size > 50) failedMints.clear();
+        failedMints.set(key, { until: Date.now() + TOKEN_FAILURE_BACKOFF_MS, status: deferred.status, reason: deferred.reason });
+      }
+      if (deferred.reason === "auth") credentialError = { at: Date.now(), status: deferred.status };
+      throw deferred;
     }
   })();
   pending = { key, promise };
@@ -79,7 +109,8 @@ export async function twitchRequest(path: string, params: Record<string, string>
   const url = new URL(`https://api.twitch.tv/helix/${path}`);
   url.search = new URLSearchParams(params).toString();
   for (let attempt = 0; attempt < 2; attempt++) {
-    if (hostBackoffRemainingMs(url.href)) throw new ApiSourceDeferredError("rate-limited", "Twitch rate limit reached. Retry after the API reset.");
+    const backoffMs = hostBackoffRemainingMs(url.href);
+    if (backoffMs) throw new ApiSourceDeferredError("rate-limited", "Twitch rate limit reached. Retry after the API reset.", undefined, backoffMs);
     const token = await accessToken(credentials, options.ephemeral);
     const response = await safeFetch(url.href, { signal, headers: { "Client-ID": credentials.clientId, Authorization: `Bearer ${token}` } });
     const reset = Number(response.headers.get("Ratelimit-Reset"));
@@ -90,14 +121,14 @@ export async function twitchRequest(path: string, params: Record<string, string>
       await response.body?.cancel();
       continue;
     }
-    if (response.status === 429) { await response.body?.cancel(); throw new ApiSourceDeferredError("rate-limited", "Twitch API request failed (429)", 429); }
-    if (response.status === 401) { await response.body?.cancel(); throw new ApiSourceDeferredError("auth", "Twitch authentication failed. Check the Client ID and Client Secret.", 401); }
+    if (response.status === 429) { await response.body?.cancel(); throw new ApiSourceDeferredError("rate-limited", "Twitch API request failed (429)", 429, hostBackoffRemainingMs(url.href) || undefined); }
+    if (response.status === 401) { await response.body?.cancel(); credentialError = options.ephemeral ? credentialError : { at: Date.now(), status: 401 }; throw new ApiSourceDeferredError("auth", AUTH_MESSAGE, 401); }
     if (!response.ok) { await response.body?.cancel(); throw new TwitchApiError(response.status); }
     const data = await response.json();
     if (!Array.isArray(data.data)) throw new Error("Invalid Twitch API response");
     return data.data;
   }
-  throw new ApiSourceDeferredError("auth", "Twitch authentication failed");
+  throw new ApiSourceDeferredError("auth", AUTH_MESSAGE);
 }
 
 // login → user id/display name rarely changes: skip the extra `users` call on

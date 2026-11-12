@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import { useTranslations, useFormatter } from "next-intl";
+import { apiSourceAttentionReason } from "@/lib/api-source-errors";
 import { FreshRssMigration } from "@/components/freshrss-migration";
 import {
   useFeeds,
@@ -1157,6 +1158,11 @@ export function FeedManagement({
                                           {t("feeds.syncError")}
                                         </span>
                                       )}
+                                      {apiSourceAttentionReason(feed) && (
+                                        <span className="text-warning" title={tc(`apiSourceAttention.${apiSourceAttentionReason(feed)}`)}>
+                                          {tc("apiSourceAttention.status")}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -1522,9 +1528,11 @@ export function FeedManagement({
                                 "rounded-full px-2 py-0.5 text-caption font-bold uppercase",
                                 feed.lastStatus === "error"
                                   ? "bg-destructive/10 text-destructive"
-                                  : "bg-success/10 text-success",
+                                  : apiSourceAttentionReason(feed)
+                                    ? "bg-warning/10 text-warning"
+                                    : "bg-success/10 text-success",
                               )}>
-                                {feed.lastStatus || "unknown"}
+                                {apiSourceAttentionReason(feed) ? tc("apiSourceAttention.status") : feed.lastStatus || "unknown"}
                               </span>
                               {feed.autoMuted && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-warning/10 px-2 py-0.5 text-caption font-bold uppercase text-warning">
@@ -1546,9 +1554,14 @@ export function FeedManagement({
                                 {t("health.consecutiveFailures", { count: feed.consecutiveFailureCount })}
                               </p>
                             )}
-                            {feed.lastError && (
+                            {feed.lastError && !apiSourceAttentionReason(feed) && (
                               <p className="mt-3 rounded-panel bg-destructive/10 px-3 py-2 text-footnote text-destructive">
                                 {feed.lastError}
+                              </p>
+                            )}
+                            {apiSourceAttentionReason(feed) && (
+                              <p className="mt-3 rounded-panel bg-warning/10 px-3 py-2 text-footnote text-warning">
+                                {tc(`apiSourceAttention.${apiSourceAttentionReason(feed)}`)}
                               </p>
                             )}
                             <div className="mt-3">

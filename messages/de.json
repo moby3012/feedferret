@@ -1148,6 +1148,11 @@
     "feedsInCategory": "{count} Feeds"
   },
   "common": {
+    "apiSourceAttention": {
+      "status": "Braucht Aufmerksamkeit",
+      "unconfigured": "Twitch ist nicht eingerichtet (oder wurde deaktiviert). Ein Admin muss unter Admin → Server-Einstellungen → Twitch Client ID und Client Secret speichern. Der Feed läuft danach automatisch weiter.",
+      "auth": "Twitch hat die gespeicherten Zugangsdaten abgelehnt (Secret widerrufen oder geändert?). Ein Admin muss sie unter Admin → Server-Einstellungen → Twitch prüfen. Der Feed läuft danach automatisch weiter."
+    },
     "signOutNeedsConnection": "Abmelden erfordert eine Verbindung",
     "signOutFailed": "Abmelden fehlgeschlagen – bitte erneut versuchen",
     "save": "Speichern",
@@ -1842,6 +1847,8 @@
       "changedetectionTest": "Testen",
       "save": "Speichern",
       "testConnection": "Verbindung testen",
+      "twitchCredentialError": "Letzter Zugangsdaten-Fehler: {when} (HTTP {status})",
+      "twitchTestRateLimited": "Twitch ist ratenbegrenzt. Erneut versuchen in {seconds} s.",
       "twitchClientId": "Twitch Client ID",
       "twitchClientSecret": "Twitch Client Secret",
       "twitchGuide": "Erstelle unter dev.twitch.tv/console eine App: OAuth-Redirect http://localhost, Kategorie „Website Integration“. Kopiere Client ID und Client Secret hierher und speichere sie. Twitch liefert Live-Status, Videos und die Top-Clips der letzten 7 Tage.",

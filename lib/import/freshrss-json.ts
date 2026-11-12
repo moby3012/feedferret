@@ -33,10 +33,10 @@ import { buildDedupeKey } from "@/lib/dedupe-key";
 import { computeContentHash } from "@/lib/content-hash";
 import { computeArticleMeta } from "@/lib/article-kind";
 import { sanitizeFeedItemBodies } from "@/lib/feed-item-sanitize-client";
+import { canonicalApiSourceUrl } from "@/lib/feed-adapters/api-source-url";
 
 /** Queue wait for the import's sanitize batches behind a busy background sync (ms). */
 const IMPORT_SANITIZE_QUEUE_WAIT_MS = 10 * 60_000;
-import { canonicalApiSourceUrl } from "@/lib/feed-adapters/api-source-url";
 import { MAX_FEED_URL_LENGTH, MAX_LABEL_NAME, validateFeedUrl } from "@/lib/validation";
 import type { ImportIssue } from "./opml-import";
 

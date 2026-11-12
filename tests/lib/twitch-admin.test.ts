@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(), user: vi.fn(), settings: vi.fn(), upsert: vi.fn(), create: vi.fn(), audit: vi.fn(),
-  encrypt: vi.fn(), decrypt: vi.fn(), credentials: vi.fn(), request: vi.fn(), warn: vi.fn(),
+  encrypt: vi.fn(), decrypt: vi.fn(), credentials: vi.fn(), request: vi.fn(), warn: vi.fn(), credentialError: vi.fn(), clearCredentialError: vi.fn(),
 }));
 vi.mock("@/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/db", () => ({ db: {
@@ -17,7 +17,8 @@ vi.mock("@/lib/rsshub", () => ({ validateRsshubRoute: vi.fn(async () => ({ ok: t
 vi.mock("@/lib/changedetection", () => ({ testChangedetectionConnection: vi.fn() }));
 vi.mock("@/lib/starter-packs.server", () => ({ getStarterPacksFromSettings: vi.fn(async () => []) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("@/lib/twitch", () => ({ getTwitchCredentials: mocks.credentials, twitchRequest: mocks.request }));
+vi.mock("@/lib/twitch", () => ({ getTwitchCredentials: mocks.credentials, twitchRequest: mocks.request, getTwitchCredentialError: mocks.credentialError, clearTwitchCredentialError: mocks.clearCredentialError }));
+import { ApiSourceDeferredError } from "../../lib/api-source-errors";
 import { getGlobalSettings, testRsshubConnection, testTwitchConnection, updateGlobalSettings } from "../../app/actions/admin";
 
 let admin = 0;
@@ -29,6 +30,7 @@ beforeEach(() => {
   mocks.settings.mockResolvedValue(null);
   mocks.encrypt.mockImplementation((value: string) => `enc(${value})`);
   mocks.request.mockResolvedValue([]);
+  mocks.credentialError.mockReturnValue(null);
 });
 
 describe("Twitch admin settings", () => {
@@ -71,6 +73,28 @@ describe("Twitch admin settings", () => {
     expect(logged).not.toContain("typed-secret");
     expect(logged).not.toContain("SENSITIVE");
     expect(JSON.stringify(result)).not.toContain("typed-secret");
+  });
+
+  it("getGlobalSettings surfaces the last credential error; saving new credentials clears it", async () => {
+    const recorded = { at: "2026-11-12T08:00:00.000Z", status: 401 };
+    mocks.credentialError.mockReturnValue(recorded);
+    mocks.settings.mockResolvedValue({ id: "global", twitchClientId: "id", twitchClientSecret: "ciphertext", mailProvider: "smtp", starterPacksJson: null });
+    expect((await getGlobalSettings()).twitchCredentialError).toEqual(recorded);
+    await updateGlobalSettings({ rsshubEnabled: true });
+    expect(mocks.clearCredentialError).not.toHaveBeenCalled();
+    await updateGlobalSettings({ twitchClientSecret: "new-secret" });
+    expect(mocks.clearCredentialError).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a specific rate-limited message with the retry delay", async () => {
+    mocks.request.mockRejectedValue(new ApiSourceDeferredError("rate-limited", "Twitch rate limit reached.", 429, 42_100));
+    const result = await testTwitchConnection({ clientId: "id", clientSecret: "secret" });
+    expect(result).toMatchObject({ success: false, rateLimited: true, retryAfterSecs: 43 });
+    expect((result as { error: string }).error).toContain("43");
+    expect((result as { error: string }).error).not.toContain("Check credentials");
+    // Other deferred reasons keep the generic message.
+    mocks.request.mockRejectedValue(new ApiSourceDeferredError("auth", "x", 401));
+    expect(await testTwitchConnection({ clientId: "id", clientSecret: "secret" })).not.toHaveProperty("rateLimited");
   });
 
   it("rejects missing credentials without any outbound request", async () => {
