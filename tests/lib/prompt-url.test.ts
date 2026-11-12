@@ -43,6 +43,8 @@ describe("prompts never carry credentials from the page", () => {
     const digest = buildPageDigest(html, pageUrl);
     expect(digest).toContain("URL: https://x.example/list?access_token=***&email=***&page=1");
     expect(digest).toContain("utm_source=a&token=***");
-    expect(redactUrlsInPromptText('<a href="/p?page=3&token=x">')).toBe('<a href="/p?page=3&token=***">');
+    // An unquoted secret runs to whitespace, &, #: a quote inside it is part of the secret, so the `">` after it is masked too.
+    expect(redactUrlsInPromptText('<a href="/p?page=3&token=x">')).toBe('<a href="/p?page=3&token=***');
+    expect(redactUrlsInPromptText('<a href="/p?page=3&token=x">')).not.toContain("token=x");
   });
 });

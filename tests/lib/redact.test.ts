@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { redact, redactValue } from "../../lib/redact";
 it("scrubs URL credentials and all sensitive query names", () => {
   for (const key of ["key", "token", "access_key", "api_key", "apikey", "password", "secret", "TOKEN"]) {
@@ -27,4 +27,139 @@ it("preserves special objects, errors and shared DAG nodes while bounding cycles
   const cycle: Record<string, unknown> = {}; cycle.self = cycle;
   expect(redactValue(cycle)).toEqual({ self: "[Circular]" });
   expect(JSON.stringify(redactValue(Array.from({ length: 2000 }, () => shared))).length).toBeLessThan(40000);
+});
+
+describe("secret pairs outside query strings (authorization=…, Authorization: …, bare key=value)", () => {
+  it("masks authorization=… with or without a scheme, in any letter case", () => {
+    expect(redact("GET /x authorization=Bearer abc.def-123&a=1")).toBe("GET /x authorization=Bearer ***&a=1");
+    expect(redact("authorization=xyz")).toBe("authorization=***");
+    expect(redact("AUTHORIZATION=Basic dXNlcjpwYXNz")).toBe("AUTHORIZATION=Basic ***");
+    expect(redact("Proxy-Authorization=Digest a=b")).toBe("Proxy-Authorization=Digest ***");
+  });
+
+  it("masks Authorization headers written as text, keeping the scheme", () => {
+    expect(redact("Authorization: Basic dXNlcjpwYXNz")).toBe("Authorization: Basic ***");
+    expect(redact("headers={\"authorization\":\"x\"} Authorization: Bearer tok")).toBe("headers={\"authorization\":\"***\"} Authorization: Bearer ***");
+    expect(redact("Proxy-Authorization:Bearer  t")).toBe("Proxy-Authorization:Bearer  ***");
+  });
+
+  it("masks access_token, api_key, apikey, token and password pairs in plain text", () => {
+    expect(redact("retry access_token=abc&x=1")).toBe("retry access_token=***&x=1");
+    expect(redact("api_key=AKIA123 next")).toBe("api_key=*** next");
+    expect(redact("apikey=zz")).toBe("apikey=***");
+    expect(redact("token=")).toBe("token=***");
+    expect(redact("db connect password=hunter2 host=db")).toBe("db connect password=*** host=db");
+    expect(redact("https://h.test/feed?password=p%20w#frag")).toBe("https://h.test/feed?password=***#frag");
+  });
+
+  it("ends an unquoted plain value at whitespace, & or #; a comma and a quote inside it belong to the secret", () => {
+    expect(redact("password=ab,cd")).toBe("password=***");
+    expect(redact("token=abc def")).toBe("token=*** def");
+    expect(redact("'token=abc'")).toBe("'token=***");
+    expect(redact("\"secret=abc\"")).toBe("\"secret=***");
+    expect(redact("x=1&password=ab,cd&y=2")).toBe("x=1&password=***&y=2");
+    expect(redact('password=ab"SECRET"')).toBe("password=***");
+    expect(redact("password=ab\\\"SECRET\\\" tail")).not.toContain("SECRET");
+  });
+
+  it("a quote opens a quoted value only as the first character after the separator", () => {
+    expect(redact('password=ab"SECRET" rest')).toBe("password=*** rest");
+    expect(redact('password = "hunter2" rest')).toBe('password = "***" rest');
+    expect(redact('password=x"y"')).not.toMatch(/"y"/);
+  });
+
+  it("masks escaped-JSON keys one and two levels deep, and keeps the structure parseable", () => {
+    const creds = { password: "SECRET-PW-1", Authorization: "Bearer CREDENTIAL-2" };
+    const one = JSON.stringify({ message: JSON.stringify(creds) });
+    const oneOut = redact(one);
+    expect(oneOut).not.toMatch(/SECRET-PW-1|CREDENTIAL-2/);
+    expect(JSON.parse(JSON.parse(oneOut).message)).toEqual({ password: "***", Authorization: "Bearer ***" });
+
+    const two = JSON.stringify({ message: JSON.stringify({ message: JSON.stringify(creds) }) });
+    const twoOut = redact(two);
+    expect(twoOut).not.toMatch(/SECRET-PW-1|CREDENTIAL-2/);
+    expect(JSON.parse(JSON.parse(JSON.parse(twoOut).message).message)).toEqual({ password: "***", Authorization: "Bearer ***" });
+  });
+
+  it("escape-aware: an escaped quote inside an escaped value does not end the secret early", () => {
+    const inner = JSON.stringify({ password: 'pa"ss-SECRET-3' });
+    const out = redact(JSON.stringify({ message: inner }));
+    expect(out).not.toContain("SECRET-3");
+    expect(JSON.parse(JSON.parse(out).message)).toEqual({ password: "***" });
+  });
+
+  it("JSON-keyed unquoted values end at , } ] and keep the delimiter", () => {
+    expect(redact('{"password":123,"user":"bob"}')).toBe('{"password":***,"user":"bob"}');
+    expect(redact('{"token":42}')).toBe('{"token":***}');
+    expect(redact('["x",{"secret":7}]')).toBe('["x",{"secret":***}]');
+  });
+
+  it("masks quoted values whole, keeping the quotes", () => {
+    expect(redact('login password="hunter2" ok')).toBe('login password="***" ok');
+    expect(redact("token='s3 cr3t,x' next")).toBe("token='***' next");
+    expect(redact('password="a\\"hunter2" tail')).toBe('password="***" tail');
+  });
+
+  it("masks JSON properties with quoted keys and values", () => {
+    const json = '{"password":"hunter2","user":"bob","Authorization":"Bearer abc.def","n":1}';
+    const out = redact(json);
+    expect(out).toBe('{"password":"***","user":"bob","Authorization":"Bearer ***","n":1}');
+    expect(out).not.toContain("hunter2");
+    expect(out).not.toContain("abc.def");
+    expect(redact('{"access_token" : "tok123"}')).toBe('{"access_token" : "***"}');
+  });
+
+  it("consumes a whole Digest credential, quoted parameters included", () => {
+    const header = 'Authorization: Digest username="alice", realm="corp", nonce="NONCE123", uri="/x", response="RESP456"';
+    const out = redact(`${header}\nnext line`);
+    expect(out).toBe("Authorization: Digest ***\nnext line");
+    for (const secret of ["alice", "corp", "NONCE123", "RESP456"]) expect(out).not.toContain(secret);
+  });
+
+  it("masks the whole Cookie header line", () => {
+    const out = redact("Cookie: session=SESS123; theme=dark\nHost: example.org");
+    expect(out).toBe("Cookie: ***\nHost: example.org");
+    expect(out).not.toContain("SESS123");
+    expect(redact("Set-Cookie: sid=SIDVAL; Path=/")).not.toContain("SIDVAL");
+  });
+
+  it("keeps words that merely end in a secret word intact", () => {
+    expect(redact("monkey=banana")).toBe("monkey=banana");
+    expect(redact("oauth=shown&keyboard=us&author=bob")).toBe("oauth=shown&keyboard=us&author=bob");
+    expect(redact("tokens=3 keyword=x")).toBe("tokens=3 keyword=x");
+    expect(redact("Authority: example")).toBe("Authority: example");
+  });
+
+  it("still masks compound key names by their last segment", () => {
+    expect(redact("x-api-key=AAA1 private_token=BBB2 client-secret=CCC3")).not.toMatch(/AAA1|BBB2|CCC3/);
+    expect(redact("myapikey=DDD4")).toBe("myapikey=***");
+  });
+
+  it("masks sensitive properties of objects whatever their value", () => {
+    const value = redactValue({
+      password: "hunter2",
+      config: { api_key: "k-123", "Set-Cookie": "sid=abc", nested: { refresh_token: "r-9" } },
+      Authorization: "Basic dXNlcjpwYXNz",
+      monkey: "banana",
+      count: 3,
+    }) as Record<string, any>;
+    expect(value.password).toBe("***");
+    expect(value.config.api_key).toBe("***");
+    expect(value.config["Set-Cookie"]).toBe("***");
+    expect(value.config.nested.refresh_token).toBe("***");
+    expect(value.Authorization).toBe("***");
+    expect(value.monkey).toBe("banana");
+    expect(value.count).toBe(3);
+    expect(JSON.stringify(value)).not.toMatch(/hunter2|k-123|sid=abc|r-9|dXNlcjpw/);
+  });
+
+  it("stays linear on long runs (no quadratic rescans of one key or header)", () => {
+    const n = 200_000;
+    for (const unit of ["a", "token", "auth:", "bearer ", "=", "a=", '"password":"', "Digest a=\"", "\\"]) {
+      const text = unit.repeat(Math.ceil(n / unit.length)).slice(0, n);
+      const t0 = performance.now();
+      redact(text);
+      expect(performance.now() - t0, unit).toBeLessThan(1_000);
+    }
+  });
 });

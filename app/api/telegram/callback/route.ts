@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyMarkReadUrl } from "@/lib/telegram-callback";
+import { userStateGroups, writeUserState } from "@/server/articles/user-state";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
   }
 
   if (!article.isRead) {
-    await db.article.update({ where: { id }, data: { isRead: true, readAt: new Date() } });
+    await writeUserState(uid, userStateGroups([id], { isRead: true })); // raw write: updatedAt untouched
   }
 
   return new NextResponse(html("Marked as read", `&ldquo;${escapeHtml(article.title)}&rdquo; has been marked as read.`), {

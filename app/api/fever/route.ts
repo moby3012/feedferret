@@ -14,6 +14,7 @@ import { checkRateLimit, peekRateLimit, getClientIdentifier, RATE_LIMITS, rateLi
 import { mapRendered, renderMarkdownToHtml } from "@/lib/markdown-render";
 import { readBoundedBytes, RequestTooLargeError } from "@/lib/bounded-body";
 import { getConnectorSecretRules, redactFeedsForClient, stripConnectorSecretsWith } from "@/lib/connector-secrets";
+import { userStateGroups, writeUserState, type UserStatePatch } from "@/server/articles/user-state";
 
 const FEVER_MAX_BODY_BYTES = 64 * 1024;
 const FEVER_MAX_WITH_IDS = 1000;
@@ -206,20 +207,11 @@ async function handleMark(
   if (!Number.isFinite(beforeDate.getTime())) return;
 
   if (mark === "item") {
-    const data: Record<string, unknown> = {};
-    if (as_ === "read") {
-      data.isRead = true;
-      data.readAt = new Date();
-    } else if (as_ === "unread") {
-      data.isRead = false;
-      data.readAt = null;
-    } else if (as_ === "saved") {
-      data.isStarred = true;
-    } else if (as_ === "unsaved") {
-      data.isStarred = false;
-    }
-    if (Object.keys(data).length) {
-      await db.article.updateMany({ where: { extId: { in: numericIds(withIds || id!).slice(0, FEVER_MAX_WITH_IDS) }, userId, ...(before ? { createdAt: { lte: beforeDate } } : {}) }, data });
+    const patch: UserStatePatch = as_ === "read" ? { isRead: true } : as_ === "unread" ? { isRead: false } : as_ === "saved" ? { isStarred: true } : as_ === "unsaved" ? { isStarred: false } : {};
+    if (Object.keys(patch).length) {
+      const rows = await db.article.findMany({ where: { extId: { in: numericIds(withIds || id!).slice(0, FEVER_MAX_WITH_IDS) }, userId, ...(before ? { createdAt: { lte: beforeDate } } : {}) }, select: { id: true } });
+      // Raw writes: read / star state never moves Article.updatedAt (server/articles/user-state.ts).
+      await writeUserState(userId, userStateGroups(rows.map((row) => row.id), patch));
     }
   } else if ((mark === "feed" || mark === "group") && as_ === "read") {
     // Chunked, set-based, `updatedAt` untouched (server/articles/bulk-read.ts); `before` = arrival cutoff.

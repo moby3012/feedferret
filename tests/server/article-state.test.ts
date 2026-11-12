@@ -11,18 +11,24 @@ const h = vi.hoisted(() => {
   const db = {
     article: {
       findMany: vi.fn(async ({ where }: any) => store.rows.filter((r) => matches(r, where)).map((r) => ({ id: r.id }))),
-      updateMany: vi.fn(({ where, data }: any) => ({ where, data })),
     },
-    $transaction: vi.fn(async (ops: Array<{ where: any; data: any }>) => {
-      return ops.map(({ where, data }) => {
-        const hit = store.rows.filter((r) => matches(r, where));
-        hit.forEach((r) => Object.assign(r, data));
-        return { count: hit.length };
-      });
-    }),
   };
-  return { store, db };
+  // Stand-in for server/articles/user-state.ts (raw SQL, no updatedAt): same conditional, per-field semantics.
+  const writeUserState = vi.fn(async (userId: string, groups: Array<{ field: "isRead" | "isStarred" | "isReadLater"; value: boolean; ids: string[] }>, now = new Date()) => {
+    let changed = 0;
+    for (const g of groups) {
+      for (const r of store.rows.filter((row) => row.userId === userId && g.ids.includes(row.id) && row[g.field] === !g.value)) {
+        if (g.field === "isRead") Object.assign(r, { isRead: g.value, readAt: g.value ? now : null });
+        else if (g.field === "isReadLater") Object.assign(r, { isReadLater: g.value, readLaterSavedAt: g.value ? now : null });
+        else r.isStarred = g.value;
+        changed++;
+      }
+    }
+    return changed;
+  });
+  return { store, db, writeUserState };
 });
+vi.mock("@/server/articles/user-state", async (original) => ({ ...(await original<typeof import("@/server/articles/user-state")>()), writeUserState: h.writeUserState }));
 vi.mock("@/lib/db", () => ({ db: h.db, getDatabaseProvider: () => "sqlite" }));
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => (h.store.user ? { user: { id: h.store.user } } : null)) }));
 
@@ -38,6 +44,7 @@ beforeEach(() => {
     { id: "b1", userId: "bob", ...base },
   ];
   vi.clearAllMocks();
+  h.writeUserState.mockClear();
 });
 const row = (id: string) => h.store.rows.find((r) => r.id === id)!;
 
@@ -78,7 +85,7 @@ describe("applyArticleStateOps", () => {
       { id: "nope", isRead: true },
     ]);
     expect(result.failed.sort()).toEqual(["b1", "nope"]);
-    expect(h.db.$transaction).toHaveBeenCalledTimes(1);
+    expect(h.writeUserState).toHaveBeenCalledTimes(1);
     expect(row("a1")).toMatchObject({ isRead: true, isReadLater: true });
     expect(row("a1").readAt).toBeInstanceOf(Date);
     expect(row("a1").readLaterSavedAt).toBeInstanceOf(Date);

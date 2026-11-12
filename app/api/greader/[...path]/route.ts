@@ -45,6 +45,7 @@ import {
   MAX_GREADER_LABEL_NAME,
 } from "@/lib/greader";
 import { connectorFeedUrlError, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
+import { userStateGroups, writeUserState, type UserStatePatch } from "@/server/articles/user-state";
 import { ImportBusyError, importBusyResponse } from "@/lib/import/import-slots";
 
 
@@ -197,20 +198,13 @@ async function applyTagEdit(userId: string, ids: string[], add: string[], remove
   ids = [...new Set(owned.map((row) => row.id))];
   if (ids.length === 0) return;
 
-  const updates: Record<string, unknown> = {};
-  if (add.includes(GREADER_READ)) {
-    updates.isRead = true;
-    updates.readAt = new Date();
-  }
-  if (remove.includes(GREADER_READ)) {
-    updates.isRead = false;
-    updates.readAt = null;
-  }
-  if (add.includes(GREADER_STARRED)) updates.isStarred = true;
-  if (remove.includes(GREADER_STARRED)) updates.isStarred = false;
-  if (Object.keys(updates).length > 0) {
-    await db.article.updateMany({ where: { id: { in: ids }, userId }, data: updates });
-  }
+  const patch: UserStatePatch = {};
+  if (add.includes(GREADER_READ)) patch.isRead = true;
+  if (remove.includes(GREADER_READ)) patch.isRead = false;
+  if (add.includes(GREADER_STARRED)) patch.isStarred = true;
+  if (remove.includes(GREADER_STARRED)) patch.isStarred = false;
+  // Raw writes: GReader `updated` / ot-nt clock (Article.updatedAt) must not move on read / star state.
+  if (Object.keys(patch).length > 0) await writeUserState(userId, userStateGroups(ids, patch));
 
   for (const tag of add) {
     const labelName = normalizeCategoryNameFromTag(tag);

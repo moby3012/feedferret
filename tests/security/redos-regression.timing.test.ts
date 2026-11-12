@@ -56,7 +56,7 @@ const HTML_UNITS = [
   "<!--", "<![CDATA[", "<a role=", "<a href=\"x\" ", "</", "<h1 ", "<svg ", " ", "\n", "a",
 ];
 const MD_UNITS = ["[", "![", "[a](", "[a](b", "[a]", "](", "<", " ", "(", "!"];
-const TEXT_UNITS = [" ", "a", "a.", "a-", ".0", "a@", "/", "=", "%23", "%3f", "&", "://", "a://", "http://", "x@y.", ">", "<", "\u2026 ", " - ", "!", "?", "(", "-"];
+const TEXT_UNITS = [" ", "a", "a.", "a-", ".0", "a@", "/", "=", "%23", "%3f", "&", "://", "a://", "http://", "x@y.", ">", "<", "\u2026 ", " - ", "!", "?", "(", "-", "token", "auth:", "Authorization: ", "bearer ", "api_key=", "a=", '"password":"', 'Digest a="', '"', "\\", '{\\"password\\":\\"', '\\\\\\"', '"password":123,', '\\"password\\":'];
 const SEARCH_UNITS = ['"', "'", 'a:"', "a ", '"a ', "'a ", "-a:", "a:", " ", "\"'", "a'", '"a\u2028', "\u2028", "\u2029", '-a:"b ', "!a:'"];
 
 interface Case {

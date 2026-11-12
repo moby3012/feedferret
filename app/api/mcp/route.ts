@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { assertComplete, markWhereRead, setReadStateByIds } from "@/server/articles/bulk-read";
+import { userStateGroups, writeUserState, type UserStatePatch } from "@/server/articles/user-state";
 import { apiError, clampInt, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
@@ -309,12 +310,17 @@ async function callTool(user: ApiUser, name: string, args: any) {
       return { ...redactArticleWith(await getConnectorSecretRules(), article), suggestAutoFullText };
     }
     case "feedferret.update_article_state": {
-      const data: any = {};
-      if (typeof args.isRead === "boolean") { data.isRead = args.isRead; data.readAt = args.isRead ? new Date() : null; }
-      if (typeof args.isStarred === "boolean") data.isStarred = args.isStarred;
-      if (typeof args.isReadLater === "boolean") { data.isReadLater = args.isReadLater; data.readLaterSavedAt = args.isReadLater ? new Date() : null; }
-      const updated = await db.article.updateMany({ where: { id: String(args.articleId), userId: user.id }, data });
-      return { updated: updated.count };
+      const patch: UserStatePatch = {};
+      if (typeof args.isRead === "boolean") patch.isRead = args.isRead;
+      if (typeof args.isStarred === "boolean") patch.isStarred = args.isStarred;
+      if (typeof args.isReadLater === "boolean") patch.isReadLater = args.isReadLater;
+      const articleId = String(args.articleId);
+      const groups = userStateGroups([articleId], patch);
+      if (groups.length === 0) return { updated: 0 }; // nothing to update: no write, no count
+      const owned = await db.article.findFirst({ where: { id: articleId, userId: user.id }, select: { id: true } });
+      if (!owned) return { updated: 0 };
+      await writeUserState(user.id, groups); // raw writes: updatedAt untouched
+      return { updated: 1 };
     }
     case "feedferret.list_feeds":
       return clientFeed(await db.feed.findMany({ where: { userId: user.id }, include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } }, orderBy: [{ order: "asc" }, { name: "asc" }] }));
@@ -431,17 +437,13 @@ async function callTool(user: ApiUser, name: string, args: any) {
       const owned = await db.article.findMany({ where: { id: { in: ids }, userId: user.id }, select: { id: true } });
       const ownedIds = owned.map((a: { id: string }) => a.id);
       if (ownedIds.length === 0) throw new Error("No matching articles found");
-      let data: any = {};
-      if (action === "read") { data = { isRead: true, readAt: new Date() }; }
-      else if (action === "unread") { data = { isRead: false, readAt: null }; }
-      else if (action === "star") { data = { isStarred: true }; }
-      else if (action === "unstar") { data = { isStarred: false }; }
       if (action === "read" || action === "unread") {
         const result = assertComplete(await setReadStateByIds(user.id, ownedIds, action === "read"));
         return { updated: result.ids.length, notFound: ids.length - ownedIds.length };
       }
-      const result = await db.article.updateMany({ where: { id: { in: ownedIds } }, data });
-      return { updated: result.count, notFound: ids.length - ownedIds.length };
+      const patch: UserStatePatch = action === "star" ? { isStarred: true } : { isStarred: false };
+      await writeUserState(user.id, userStateGroups(ownedIds, patch));
+      return { updated: ownedIds.length, notFound: ids.length - ownedIds.length };
     }
     // Saved searches
     case "feedferret.list_saved_searches":
