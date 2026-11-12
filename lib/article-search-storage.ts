@@ -113,52 +113,67 @@ async function missingProjectionRows(): Promise<number> {
 // Lock timeout (55P03), deadlock (40P01), or Prisma's own transaction timeout (P2028).
 const isLockConflict = (err: unknown) =>
     (err as { code?: string })?.code === "P2028" || /lock timeout|deadlock|55P03|40P01|P2028/i.test(String((err as { message?: string })?.message ?? err));
+// statement_timeout fired (57014): the batch was too slow for this storage, retry it smaller.
+const isStatementTimeout = (err: unknown) => /57014|statement timeout/i.test(String((err as { message?: string })?.message ?? err));
 
 /**
  * Fills missing projection rows in small key-ordered batches (never one long statement).
- * Postgres: each batch briefly holds an EXCLUSIVE lock on Article (a few ms). Plain reads continue;
+ * Postgres: each batch briefly holds an EXCLUSIVE lock on Article. Plain reads continue;
  * writers AND row-locking readers (SELECT … FOR UPDATE in bulk mark-read) wait. The lock is only
  * granted once every transaction that wrote or row-locked Article has finished, so the copy's
  * FK checks never wait on another transaction's row lock and no cycle (deadlock) is possible.
- * lock_timeout: a long-running transaction delays the batch (retried) instead of stalling writers.
- * ON CONFLICT DO NOTHING keeps newer rows written by the triggers. Safe to interrupt at any point;
- * a later start resumes via the count check.
+ * Writers are blocked per batch by at most lock_timeout (waiting for the lock) + statement_timeout
+ * (the copy), 5 s each: a batch that is too slow for the storage is cancelled and retried with
+ * half the rows, so a slow disk can never stall writers into their own transaction timeouts
+ * (bulk mark-read: 30 s). ON CONFLICT DO NOTHING keeps newer rows written by the triggers.
+ * Safe to interrupt at any point; a later start resumes via the count check.
  */
-export async function backfillArticleSearch(options: { yieldMs?: number } = {}): Promise<number> {
+export async function backfillArticleSearch(options: { yieldMs?: number; batchSize?: number } = {}): Promise<number> {
     const pg = getDatabaseProvider() === "postgresql";
     const yieldMs = options.yieldMs ?? BATCH_YIELD_MS;
     const pause = (ms: number) => (ms ? new Promise(r => setTimeout(r, ms)) : Promise.resolve());
     let inserted = 0;
     if (pg) {
         let after = "";
+        let batch = options.batchSize ?? PG_BATCH;
         for (;;) {
-            const [bound] = await db.$queryRawUnsafe<{ upper: string | null }[]>(
-                'SELECT max("id") AS upper FROM (SELECT "id" FROM "Article" WHERE "id" > $1 ORDER BY "id" LIMIT $2) b', after, PG_BATCH
-            );
-            if (!bound?.upper) break;
+            let upper: string | null = null;
             for (let attempt = 1; ; attempt++) {
+                const [bound] = await db.$queryRawUnsafe<{ upper: string | null }[]>(
+                    'SELECT max("id") AS upper FROM (SELECT "id" FROM "Article" WHERE "id" > $1 ORDER BY "id" LIMIT $2) b', after, batch
+                );
+                upper = bound?.upper ?? null;
+                if (!upper) break;
                 try {
-                    // Interactive transaction with a timeout well above lock_timeout, so a lock wait
-                    // surfaces as 55P03 (retried here), not as Prisma's 5 s default timeout.
-                    const upper = bound.upper;
+                    // Interactive transaction with a timeout well above both statement bounds, so a
+                    // lock wait or slow copy surfaces as 55P03/57014 (handled here), not as P2028.
+                    const range = upper;
                     const count = await db.$transaction(async (tx) => {
                         await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '5s'");
+                        await tx.$executeRawUnsafe("SET LOCAL statement_timeout = '5s'");
                         await tx.$executeRawUnsafe('LOCK TABLE "Article" IN EXCLUSIVE MODE');
                         return tx.$executeRawUnsafe(
                             `INSERT INTO "ArticleSearch" ("id", "title", "content", "excerpt", "author", "entities")
                              SELECT a."id", a."title", a."content", a."excerpt", a."author", a."entities" FROM "Article" a
                              WHERE a."id" > $1 AND a."id" <= $2 AND NOT EXISTS (SELECT 1 FROM "ArticleSearch" s WHERE s."id" = a."id")
-                             ON CONFLICT ("id") DO NOTHING`, after, upper
+                             ON CONFLICT ("id") DO NOTHING`, after, range
                         );
                     }, { timeout: 30_000, maxWait: 10_000 });
                     inserted += count;
                     break;
                 } catch (err) {
-                    if (attempt >= 5 || !isLockConflict(err)) throw err;
+                    if (attempt >= 8) throw err;
+                    if (isStatementTimeout(err) && batch > 1) {
+                        batch = Math.max(1, Math.floor(batch / 2));
+                        console.warn(`[search-projection] Backfill batch exceeded 5 s; retrying with ${batch} rows.`);
+                    } else if (!isLockConflict(err) && !isStatementTimeout(err)) {
+                        throw err;
+                    }
                     await pause(1000 * attempt);
                 }
             }
-            after = bound.upper;
+            if (!upper) break;
+            after = upper;
             await pause(yieldMs);
         }
     } else {

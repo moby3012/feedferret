@@ -60,18 +60,26 @@ Postgres migration (`20261112130000_article_search_table`), each phase its own s
    re-runs it (see P3009 below). App routes with a 5 s interactive transaction (e.g. REST v1
    PATCH) therefore no longer hit Prisma's timeout because of this phase.
 2. Copy into the unindexed projection under `LOCK TABLE "Article" IN EXCLUSIVE MODE` with
-   `lock_timeout = 15s`. Plain reads continue; writers **and row-locking readers** (bulk
+   `lock_timeout` and `statement_timeout` of 10 s. Plain reads continue; writers **and row-locking readers** (bulk
    mark-read's `SELECT … FOR UPDATE`) wait for the copy. The lock is granted only after every
    transaction that wrote or row-locked Article has finished, so neither a trigger-written
    projection row nor a foreign row lock can be in flight: the copy's inserts and FK checks
    never wait on another transaction, hence no cycle. (A SHARE lock, used by an earlier draft,
    still admits `FOR UPDATE` and deadlocks with bulk mark-read; the PG test keeps that as a
-   control.) `ON CONFLICT DO NOTHING` makes a re-run cheap. If the lock is not granted in time
-   (a long-running transaction) the copy is skipped with a WARNING instead of failing the
-   deploy; search stays on the Article columns until the app's self-check has filled the gap
-   in 5,000-row batches (each batch holds the same EXCLUSIVE lock for milliseconds,
-   `lock_timeout = 5s`, retried) and verified it. Writers can queue behind the waiting lock
-   request for up to the 15 s timeout.
+   control.) `ON CONFLICT DO NOTHING` makes a re-run cheap. The lock wait and the copy run in one
+   statement (the `DO` block), so `statement_timeout` bounds the **total** time writers can be
+   held up to 10 s, independent of corpus size and storage speed (bulk mark-read's own
+   transaction allows 30 s; an unbounded copy on a large/slow corpus would have failed it with
+   P2028). If the lock is not granted in time (a long-running transaction) or the copy is too
+   slow (a large corpus — at the measured ~0.5 s per 20k articles, roughly beyond 300–400k on
+   this hardware), the subtransaction rolls back, which releases the lock, and the copy is
+   skipped with a WARNING instead of failing the deploy. Search stays on the Article columns
+   until the app's self-check has filled the gap in batches and verified it. Each batch holds the
+   same EXCLUSIVE lock with `lock_timeout` and `statement_timeout` of 5 s (writers wait ≤ 10 s
+   per batch); a batch that hits the statement timeout is retried with half the rows, so a slow
+   disk shrinks the batches instead of stalling writers. Tested with fault injection (1 s per
+   projection insert): the real bulk mark-read finished inside the bound, the copy was handed
+   off cleanly.
 3. Only if Article is empty (fresh install, Prisma's shadow replay): drop the old
    `Article_*_trgm_idx` and create the new GIN indexes (instant). Both branches key on Article
    being empty, so a populated database whose copy was deferred never takes them.
@@ -146,8 +154,8 @@ total content size (the content index dominates).
 2. Deploy normally. Expected startup log: `Applying migration 20261112130000_article_search_table`,
    then `…except the search index swap the app finishes in the background…`. During the
    migration, Article writers (and `SELECT … FOR UPDATE`) wait at most ~2 s at a time in phase 1
-   and up to 15 s (the `lock_timeout` of the copy's lock request) plus the copy itself in phase 2;
-   plain reads are never blocked.
+   and at most 10 s in phase 2 (lock wait plus copy, bounded by `statement_timeout`; a longer copy
+   is handed off to the app's batches, ≤ 10 s each); plain reads are never blocked.
 3. Watch `[search-indexes] … built in N s` / `Dropped legacy Article_*` lines, or poll
    `/api/health` until `search.indexes` is `ready` and `search.projection.state` is `complete`.
    Search works meanwhile (slower). Ingestion continues.

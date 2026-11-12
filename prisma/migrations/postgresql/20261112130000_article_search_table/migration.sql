@@ -74,11 +74,16 @@ COMMIT;
 -- only after every transaction that wrote or row-locked Article has finished, so neither a
 -- trigger-written projection row nor a foreign row lock can be in flight: the copy's inserts and
 -- FK checks never wait on another transaction, hence no deadlock. ON CONFLICT DO NOTHING makes a
--- re-run cheap. If the lock is not granted within lock_timeout (a long-running transaction), the
--- copy is deferred instead of failing the deploy: search keeps using the Article columns until
--- the app's startup self-check (lib/article-search-storage.ts) has filled and verified it.
+-- re-run cheap. The lock wait AND the copy run inside one statement (the DO block), so
+-- statement_timeout bounds how long writers can be held up in total: 10 s, whatever the corpus
+-- size or storage speed (writers' own transactions, e.g. bulk mark-read, allow 30 s). If the lock
+-- is not granted in time (a long-running transaction) or the copy is too slow (a large corpus),
+-- the subtransaction is rolled back, which releases the lock, and the copy is deferred instead of
+-- failing the deploy: search keeps using the Article columns until the app's startup self-check
+-- (lib/article-search-storage.ts) has filled and verified it in bounded batches.
 BEGIN;
-SET LOCAL lock_timeout = '15s';
+SET LOCAL lock_timeout = '10s';
+SET LOCAL statement_timeout = '10s';
 DO $$ BEGIN
   LOCK TABLE "Article" IN EXCLUSIVE MODE;
   INSERT INTO "ArticleSearch" ("id", "title", "content", "excerpt", "author", "entities")

@@ -255,6 +255,51 @@ it.runIf(pgUrl)("copy and backfill never deadlock with a bulk mark-read (SELECT 
   }
 }, 60_000);
 
+it.runIf(pgUrl)("a slow copy never holds writers past their transaction timeout: bounded, then handed off to bounded batches", async () => {
+  const db = state.db;
+  const { setReadStateByIds } = await import("@/server/articles/bulk-read");
+  const sql = readFileSync(join(root, migration, "migration.sql"), "utf8");
+  const phase = sql.slice(sql.indexOf("BEGIN;\nSET LOCAL lock_timeout"), sql.indexOf("COMMIT;", sql.indexOf("BEGIN;\nSET LOCAL lock_timeout")));
+  expect(phase).toContain("SET LOCAL statement_timeout = '10s'");
+  const ids = (await db.article.findMany({ where: { userId: "a" }, select: { id: true } })).map(r => r.id);
+  const copier = new pg.Client({ connectionString: url });
+  await copier.connect();
+  // Fault injection: every projection insert takes 1 s, so the full copy would need ~15 s.
+  await db.$executeRawUnsafe("CREATE FUNCTION slow_search_copy() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(1); RETURN NEW; END $$");
+  await db.$executeRawUnsafe('CREATE TRIGGER slow_search_copy BEFORE INSERT ON "ArticleSearch" FOR EACH ROW EXECUTE FUNCTION slow_search_copy()');
+  try {
+    await db.$executeRawUnsafe('DELETE FROM "ArticleSearch"');
+    const started = Date.now();
+    const copy = copier.query(phase + "COMMIT;");
+    while (!(await db.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM pg_locks WHERE relation = '"Article"'::regclass AND mode = 'ExclusiveLock' AND granted`))[0].n) {
+      await new Promise(r => setTimeout(r, 20));
+    }
+    // The real bulk mark-read (SELECT … FOR UPDATE, then UPDATE; 30 s interactive transaction).
+    const writer = setReadStateByIds("a", ids, true);
+    await expect(copy).resolves.toBeDefined(); // statement_timeout → rolled back + deferred, not an error
+    const result = await writer;
+    const waited = (Date.now() - started) / 1000;
+    expect(result.complete).toBe(true);
+    expect(waited).toBeLessThan(20); // ~10 s bound, far below the writer's 30 s transaction timeout
+    expect(await db.articleSearch.count()).toBe(0); // the copy was handed off, nothing half-done
+
+    // App hand-off: batches are bounded the same way (5 s) and shrink until they fit.
+    await db.$executeRawUnsafe("CREATE OR REPLACE FUNCTION slow_search_copy() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.4); RETURN NEW; END $$");
+    const backfill = backfillArticleSearch({ yieldMs: 0, batchSize: 16 });
+    await new Promise(r => setTimeout(r, 500));
+    const t = Date.now();
+    await setReadStateByIds("a", ids, false);
+    expect((Date.now() - t) / 1000).toBeLessThan(12); // ≤ lock_timeout + statement_timeout per batch
+    await backfill;
+    expect(await db.articleSearch.count()).toBe(await db.article.count());
+  } finally {
+    await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS slow_search_copy ON "ArticleSearch"');
+    await db.$executeRawUnsafe("DROP FUNCTION IF EXISTS slow_search_copy()");
+    await copier.end().catch(() => {});
+    await ensureArticleSearchStorage({ yieldMs: 0 });
+  }
+}, 120_000);
+
 it("startup self-check finds and repairs an incomplete projection", async () => {
   const db = state.db;
   const total = await db.article.count();
