@@ -123,6 +123,11 @@ export async function loadReadingPreferences(userId: string) {
       secondaryColor: true,
       hideDuplicates: true,
       mediaProxyImages: true,
+      mediaYoutubeFrontend: true,
+      mediaYoutubeInstance: true,
+      mediaRedditFrontend: true,
+      mediaTwitterInstance: true,
+
       markReadOnScroll: true,
       markReadOnAdvance: true,
       storyClustering: true,
@@ -148,6 +153,11 @@ export async function loadReadingPreferences(userId: string) {
     secondaryColor: user?.secondaryColor ?? "#F0963C",
     hideDuplicates: user?.hideDuplicates ?? true,
     mediaProxyImages: user?.mediaProxyImages ?? false,
+    mediaYoutubeFrontend: user?.mediaYoutubeFrontend ?? "invidious",
+    mediaYoutubeInstance: user?.mediaYoutubeInstance ?? "",
+    mediaRedditFrontend: user?.mediaRedditFrontend ?? "",
+    mediaTwitterInstance: user?.mediaTwitterInstance ?? "",
+
     markReadOnScroll: user?.markReadOnScroll ?? false,
     markReadOnAdvance: user?.markReadOnAdvance ?? false,
     storyClustering: user?.storyClustering ?? true,

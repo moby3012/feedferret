@@ -35,6 +35,7 @@ export function nonceCsp(nonce: string, development = false): string {
     "worker-src 'self'",
     "manifest-src 'self'",
     "object-src 'none'",
+    "frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://www.dailymotion.com https://player.twitch.tv https://clips.twitch.tv",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

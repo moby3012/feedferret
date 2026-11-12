@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("next-intl/server", () => ({ getLocale: async () => "en", getTranslations: async () => () => "Load video" }));
 vi.mock("@/lib/db", () => ({ db: { globalSettings: { findUnique: vi.fn() }, user: { findUnique: vi.fn() } } }));
 import { clearMediaProxySettingsCache } from "@/lib/media-settings";
 import { runHtmlTask } from "@/lib/html-worker/pool";
@@ -43,7 +44,8 @@ it("uses off / opt-in / on without changing disabled content", async () => {
   vi.mocked(db.globalSettings.findUnique).mockResolvedValue({ mediaProxyMode: "off" } as never);
   vi.mocked(db.user.findUnique).mockResolvedValue({ mediaProxyImages: true } as never);
   const input = [{ imageUrl: "http://example.org/a.png", link: "https://example.org", html: '<img src="http://example.org/a.png">' }];
-  expect(await presentMedia(input, "u")).toBe(input);
+  vi.mocked(runHtmlTask).mockResolvedValue(input[0].html);
+  expect(await presentMedia(input, "u")).toEqual(input);
   vi.mocked(db.globalSettings.findUnique).mockResolvedValue({ mediaProxyMode: "opt-in" } as never);
   clearMediaProxySettingsCache();
   expect(await mediaProxyEnabled("u")).toBe(true);

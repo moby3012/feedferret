@@ -40,7 +40,11 @@ function assertTestTasksEnabled() {
 }
 
 export const htmlTasks = {
-  rewriteMedia: rewriteMediaInProcess,
+  rewriteMedia: async (input: Parameters<typeof rewriteMediaInProcess>[0]) => {
+    const sanitizer = await getSanitizer();
+    const html = sanitizer.sanitize(input.html, { ADD_TAGS: ["iframe"], ADD_ATTR: ["src"] });
+    return sanitizer.sanitize(rewriteMediaInProcess({ ...input, html }), { ADD_ATTR: ["target"] });
+  },
   telegram: parseTelegramPreview,
   /** Loads the parsers and the sanitizer's window (boot warm-up). */
   async warm(_input: null): Promise<true> {

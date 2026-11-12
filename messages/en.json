@@ -174,7 +174,14 @@
     "sectionsNav": "Settings sections",
     "backToSettings": "Settings",
     "mediaProxyImages": "Load images through FeedFerret (privacy)",
-    "mediaProxyImagesDescription": "Applies when the administrator allows optional image proxying. Always on applies to everyone."
+    "mediaProxyImagesDescription": "Applies when the administrator allows optional image proxying. Always on applies to everyone.",
+    "mediaYoutubeFrontend": "YouTube frontend",
+    "mediaFrontendsDescription": "Custom frontends open in a new tab. No public instance is selected automatically.",
+    "mediaYoutubeInstance": "YouTube instance URL",
+    "mediaRedditFrontend": "Reddit frontend",
+    "mediaTwitterInstance": "X / Twitter instance URL",
+    "mediaInstanceDescription": "HTTPS instance origin, or empty to use the original site.",
+    "mediaRedditDescription": "Enter old for old.reddit.com, an HTTPS Redlib origin, or leave empty."
   },
   "profile": {
     "changePassword": "Change password",
@@ -1123,7 +1130,8 @@
     "bodyErrorDescription": "Headline and source are above – the text didn't arrive.",
     "bodyOfflineTitle": "Not available offline",
     "bodyOfflineDescription": "This article isn't stored on this device. Stored are “Read later” and your recently opened articles.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "loadVideo": "Load video (connects to provider)"
   },
   "rssHeader": {
     "lastSynced": "Last synced",
