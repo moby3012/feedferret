@@ -30,6 +30,26 @@ describe("parsePhpDate", () => {
     expect(parsePhpDate("  12.08.2026 \n 14:05 ", "d.m.Y H:i")).toEqual(local(2026, 8, 12, 14, 5));
   });
 
+  it("matches a format space against a whitespace run", () => {
+    for (const space of [" ", "   ", "\t", "\n", "\u00a0\t\n"]) {
+      expect(parsePhpDate(`12.08.2026${space}14:05`, "d.m.Y H:i")).toEqual(local(2026, 8, 12, 14, 5));
+    }
+    expect(parsePhpDate("12.08.2026 14:05", "d.m.Y  H:i")).toEqual(local(2026, 8, 12, 14, 5));
+    expect(parsePhpDate("12.08.202614:05", "d.m.Y H:i")).toBeNull();
+  });
+
+  it("leaves escaped literal dots for the format after month and day names", () => {
+    expect(parsePhpDate("12 Aug. 2026", "j M\\. Y")).toEqual(local(2026, 8, 12));
+    expect(parsePhpDate("Wed. 12 Aug 2026", "D\\. j M Y")).toEqual(local(2026, 8, 12));
+    expect(parsePhpDate("12 Aug 2026", "j M\\. Y")).toBeNull();
+  });
+
+  it("accepts lowercase t in the ISO shorthand while keeping escaped literals exact", () => {
+    expect(parsePhpDate("2026-08-12t14:05:00Z", "c")).toEqual(new Date(Date.UTC(2026, 7, 12, 14, 5)));
+    expect(parsePhpDate("2026-08-12x14:05:00Z", "c")).toBeNull();
+    expect(parsePhpDate("2026-08-12t14:05:00Z", "Y-m-d\\TH:i:sP")).toBeNull();
+  });
+
   it("parses English and German month names", () => {
     expect(parsePhpDate("August 12, 2026", "F d, Y")).toEqual(local(2026, 8, 12));
     expect(parsePhpDate("Aug 12, 2026", "M d, Y")).toEqual(local(2026, 8, 12));

@@ -5,6 +5,8 @@
 // overwriting any value the client sent. The token is random per process and only known to this process
 // (and children inheriting the environment): lib/client-ip.ts ignores the header without it, so a client
 // cannot forge a peer address, and nothing changes where this file is not loaded (next dev, tests).
+// Only node:http Server request events are stamped here; https.Server and
+// upgrade events are not stamped. Production terminates TLS at the reverse proxy.
 "use strict";
 const http = require("node:http");
 const crypto = require("node:crypto");

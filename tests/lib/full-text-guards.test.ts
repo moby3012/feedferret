@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RecentFullTextIndex, RECENT_FULL_TEXT_LIMIT, baselinesDiffer } from "@/lib/full-text-duplicates";
-import { assessExtraction, decideFullText } from "@/lib/extraction-quality";
+import { assessExtraction, decideFullText, leadCoverage } from "@/lib/extraction-quality";
 import { runInHtmlWorker } from "@/lib/html-worker";
 
 const prose = Array.from({ length: 20 }, (_, i) => `Paragraph ${i} describes the observatory telescope mirrors and the mountain expedition with precise measurements from the winter survey.`).join(" ");
@@ -92,4 +92,55 @@ it("preserves a legitimate short article with an ancillary JavaScript prompt", a
     const { isJavaScriptShell } = await import("@/lib/extraction-shell-core");
     const html = `<article><p>${prose.slice(0, 230)}</p><noscript>enable JavaScript for comments</noscript></article>`;
     expect(isJavaScriptShell(html, "https://example.test/story")).toBe(false);
+});
+
+
+it.each(["div", "body"])("accepts short prose in plain %s markup beside a scripted fallback", async (tag) => {
+    const { isJavaScriptShell } = await import("@/lib/extraction-shell-core");
+    expect(isJavaScriptShell(`<${tag}>${prose.slice(0, 230)}</${tag}><noscript>enable JavaScript</noscript><script src="/app.js"></script>`, "https://example.test/story")).toBe(false);
+});
+
+it("skips DOM allocation for long visible prose, excluding script/style payloads", async () => {
+    const { isJavaScriptShell } = await import("@/lib/extraction-shell-core");
+    // An invalid URL would throw if JSDOM were constructed.
+    expect(isJavaScriptShell(`<div>${prose}</div><script src="/app.js"></script>`, "invalid URL")).toBe(false);
+    expect(isJavaScriptShell(`<div id="root"></div><script>${prose}</script><style>${prose}</style><script src="/app.js"></script>`, "https://example.test/app")).toBe(true);
+});
+
+it("ignores a long feed-wide footer when comparing short distinct article bodies", () => {
+    const index = new RecentFullTextIndex();
+    const footer = Array.from({ length: 400 }, (_, i) => `footerword${i}`).join(" ");
+    for (let i = 0; i < 3; i++) index.observe(`history-${i}`, `/history-${i}`, `A brief historical story number ${i} with distinct details. ${footer}`);
+    const body = Array.from({ length: 20 }, (_, n) => `seabirddetail${n}`).join(" ");
+    const page = `${body} ${footer}`;
+    expect(index.observe("new", "/new", page).length).toBeGreaterThan(0);
+    // Candidate matches are vetoed by sync when the article's own lead is present.
+    expect(leadCoverage(body, page)).toBeGreaterThanOrEqual(0.3);
+});
+
+it("compares only the candidate lead, ignoring matching text in a long tail", () => {
+    const baseline = prose.slice(0, 800);
+    const unrelated = "Marine habitats protect migrating seabirds along coastal wetlands. ".repeat(40);
+    expect(leadCoverage(baseline, `<div>${unrelated}</div><p>${baseline}</p>`)).toBe(0);
+    expect(leadCoverage(baseline, `<script>${unrelated}</script><p>${baseline}</p>${unrelated}`)).toBe(1);
+});
+
+
+it.each([
+    `<!-- > ${"comment text ".repeat(200)} -->`,
+    `<div title="> ${"attribute text ".repeat(200)}"></div>`,
+    `<div>${"&nbsp;".repeat(400)}</div>`,
+])("does not count comments, quoted attributes or nonbreaking spaces as shell prose", async (padding) => {
+    const { isJavaScriptShell } = await import("@/lib/extraction-shell-core");
+    expect(isJavaScriptShell(`${padding}<div id="app"></div><script src="/app.js"></script>`, "https://example.test/app")).toBe(true);
+});
+
+it("updates shingle postings when replacing an item and evicting old history", () => {
+    const index = new RecentFullTextIndex();
+    index.observe("a", "/a", prose);
+    index.observe("a", "/a", "Completely different replacement words. ".repeat(40));
+    expect(index.observe("b", "/b", prose)).toEqual([]);
+    expect(index.observe("c", "/c", prose)).toContain("b");
+    for (let i = 0; i < RECENT_FULL_TEXT_LIMIT; i++) index.observe(`new-${i}`, `/new-${i}`, `Replacement history ${i}. `.repeat(100));
+    expect(index.observe("last", "/last", prose)).toEqual([]);
 });

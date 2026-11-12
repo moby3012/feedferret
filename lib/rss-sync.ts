@@ -1009,6 +1009,9 @@ function duplicateGuard(userId: string, feedId: string) {
         observed.set(article.id, html);
         if (observed.size > RECENT_FULL_TEXT_LIMIT) observed.delete(observed.keys().next().value!);
         if (!matches.length) return false;
+        // Shared footers may dominate a short article. A page demonstrably
+        // containing this item's own feed lead is not a wrong generic page.
+        if ((leadCoverage(feedBaseline(article), html) ?? 0) >= 0.3) return false;
         const siblings = await db.article.findMany({
             where: { userId, feedId, id: { in: matches } },
             select: FULL_TEXT_STATE_SELECT,
@@ -1140,6 +1143,10 @@ async function autoFetchFullTextViaEngine(
                 // Escalation was cut short by the per-sync budget: retry next sync
                 // instead of recording a final "rejected".
                 await recordFullTextMiss(article, "deferred", "budget");
+                continue;
+            }
+            if ((!decision.accept || !result.html) && result.renderDeferred) {
+                await recordFullTextMiss(article, "deferred", "render_unavailable");
                 continue;
             }
             if (!decision.accept || !result.html) {

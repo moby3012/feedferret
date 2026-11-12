@@ -32,18 +32,47 @@ export function baselinesDiffer(a: string, b: string): boolean {
  * Per-feed fixed window. Neither crypto nor a scan of historical rows. */
 export class RecentFullTextIndex {
     private entries = new Map<string, { link: string; shingles: Set<string> }>();
+    // Incremental document frequencies/postings: no rebuilding ~16k historical
+    // shingles for each observation. Empty postings are released on replacement/eviction.
+    private shingleDocuments = new Map<string, Set<string>>();
+
+    private remove(id: string): void {
+        const old = this.entries.get(id);
+        if (!old) return;
+        for (const value of old.shingles) {
+            const documents = this.shingleDocuments.get(value)!;
+            documents.delete(id);
+            if (!documents.size) this.shingleDocuments.delete(value);
+        }
+        this.entries.delete(id);
+    }
 
     observe(id: string, link: string, html: string): string[] {
         const next = shingles(html);
-        const matches: string[] = [];
+        this.remove(id);
+        const shared = new Map<string, number>();
         if (next.size >= MIN_UNIQUE_SHINGLES) {
-            for (const [otherId, other] of this.entries) {
-                if (otherId !== id && other.link !== link && other.shingles.size >= MIN_UNIQUE_SHINGLES && overlap(next, other.shingles) >= 0.9) matches.push(otherId);
+            for (const value of next) {
+                for (const otherId of this.shingleDocuments.get(value) ?? []) {
+                    shared.set(otherId, (shared.get(otherId) ?? 0) + 1);
+                }
             }
         }
-        this.entries.delete(id);
+        // Full-set overlap generates candidates even for generic pages with
+        // per-item headings. The caller must veto matches containing the feed lead.
+        const matches: string[] = [];
+        for (const [otherId, count] of shared) {
+            const other = this.entries.get(otherId)!;
+            if (other.link !== link && other.shingles.size >= MIN_UNIQUE_SHINGLES &&
+                count / Math.max(next.size, other.shingles.size) >= 0.9) matches.push(otherId);
+        }
         this.entries.set(id, { link, shingles: next });
-        if (this.entries.size > RECENT_FULL_TEXT_LIMIT) this.entries.delete(this.entries.keys().next().value!);
+        for (const value of next) {
+            const documents = this.shingleDocuments.get(value) ?? new Set<string>();
+            documents.add(id);
+            this.shingleDocuments.set(value, documents);
+        }
+        if (this.entries.size > RECENT_FULL_TEXT_LIMIT) this.remove(this.entries.keys().next().value!);
         return matches;
     }
 }
