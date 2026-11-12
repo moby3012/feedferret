@@ -24,6 +24,7 @@ const state = vi.hoisted(() => ({
   aiCalls: 0,
   renderConfigured: false,
   renderCalls: 0,
+  render: async (): Promise<string | null> => null,
 }));
 vi.mock("@/lib/ai-extraction", () => ({
   extractArticleWithAi: async () => {
@@ -54,12 +55,12 @@ vi.mock("@/lib/ssrf", async (importOriginal) => {
 });
 vi.mock("@/lib/render-sidecar", () => ({
   getRenderSidecarConfig: async () => state.renderConfigured ? { url: "https://renderer.example", token: null } : null,
-  renderViaSidecar: async () => { state.renderCalls++; return null; },
+  renderViaSidecar: async () => { state.renderCalls++; return state.render(); },
 }));
 
 import { syncFeed, upsertArticleBatch, MAX_RENDER_ESCALATIONS_PER_SYNC } from "../../lib/rss-sync";
 import { refetchArticleFullText } from "../../lib/full-text-fetch";
-import { FULL_TEXT_STATE_SELECT, recordFullTextMiss } from "../../lib/full-text-store";
+import { FULL_TEXT_STATE_SELECT, MAX_FULL_TEXT_ATTEMPTS, recordFullTextMiss } from "../../lib/full-text-store";
 import { HttpStatusError } from "../../lib/ssrf";
 import { resetHostBackoff } from "../../lib/host-backoff";
 import { resetTransportMemory } from "../../lib/readability-extract";
@@ -125,6 +126,7 @@ beforeEach(async () => {
   state.aiCalls = 0;
   state.renderConfigured = false;
   state.renderCalls = 0;
+  state.render = async () => null;
   state.page = async (url) => fullPage(url.slice(-1));
   state.fetchFeed.mockReset();
   state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items() }));
@@ -654,6 +656,36 @@ describe("full-text quality guards", () => {
     expect(state.pageFetches).toEqual([]);
   });
 
+  it.each(["null", "error"])("defers transient shell render failures (%s), caps attempts and preserves upstream timestamps", async (failure) => {
+    const feed = await autoFeed();
+    state.renderConfigured = true;
+    state.page = async () => '<div id="app"></div><script src="/app.js"></script>';
+    state.render = async () => { if (failure === "error") throw new Error("renderer unavailable"); return null; };
+    await syncFeed(userId, feed.id);
+    const first = await rows(feed.id);
+    expect(first.every(row => row.fullTextStatus === "deferred" && row.fullTextReason === "render_unavailable" && row.fullTextAttempts === 1)).toBe(true);
+    for (let i = 1; i < MAX_FULL_TEXT_ATTEMPTS; i++) await syncFeed(userId, feed.id);
+    const capped = await rows(feed.id);
+    expect(capped.every(row => row.fullTextStatus === "deferred" && row.fullTextAttempts === MAX_FULL_TEXT_ATTEMPTS)).toBe(true);
+    expect(capped.map(row => row.updatedAt)).toEqual(first.map(row => row.updatedAt));
+    expect(capped.map(row => row.content)).toEqual(first.map(row => row.content));
+    state.pageFetches = [];
+    state.renderCalls = 0;
+    await syncFeed(userId, feed.id);
+    expect(state.pageFetches).toEqual([]);
+    expect(state.renderCalls).toBe(0);
+  });
+
+  it("recovers a deferred shell when the renderer succeeds on the next sync", async () => {
+    const feed = await autoFeed();
+    state.renderConfigured = true;
+    state.page = async () => '<div id="app"></div><script src="/app.js"></script>';
+    await syncFeed(userId, feed.id);
+    state.render = async () => fullPage("rendered");
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id)).every(row => row.fullTextStatus === "ok")).toBe(true);
+  });
+
   it("trims chrome and rejects duplicate selector extractions through the shared sync engine", async () => {
     const feed = await autoFeed();
     await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "selector", fullTextSelector: ".chosen" } });
@@ -666,6 +698,7 @@ describe("full-text quality guards", () => {
   it("defers JS shells after actually exhausting the shared render budget", async () => {
     const feed = await autoFeed();
     state.renderConfigured = true;
+    state.render = async () => '<div id="app"></div><script src="/app.js"></script>';
     state.page = async () => '<div id="app"></div><script src="/app.js"></script>';
     const batch = Array.from({ length: MAX_RENDER_ESCALATIONS_PER_SYNC + 1 }, (_, n) => ({
       ...items()[0], externalId: `shell-${n}`, link: `https://shell.example/${n}`,

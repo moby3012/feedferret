@@ -18,6 +18,8 @@ export type ExtractionResult = {
   // Set by fetchAndExtractReadable when an escalation tier would have run but
   // its per-sync budget was spent — the outcome is "not tried yet", not final.
   budgetSkipped?: boolean;
+  // A configured renderer failed transiently while the direct page was a JS shell.
+  renderDeferred?: boolean;
   // Set by the worker-backed extractReadableContent when the page could not be
   // parsed in budget (`too_complex`: timeout / worker out of memory) or the
   // HTML worker pool was saturated (`busy`, retry later) or cannot run at all

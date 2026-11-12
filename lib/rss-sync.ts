@@ -1142,6 +1142,10 @@ async function autoFetchFullTextViaEngine(
                 await recordFullTextMiss(article, "deferred", "budget");
                 continue;
             }
+            if ((!decision.accept || !result.html) && result.renderDeferred) {
+                await recordFullTextMiss(article, "deferred", "render_unavailable");
+                continue;
+            }
             if (!decision.accept || !result.html) {
                 await recordFullTextMiss(article, "rejected", decision.accept ? "empty" : decision.reason);
                 continue;

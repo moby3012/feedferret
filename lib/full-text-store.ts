@@ -58,8 +58,9 @@ export function feedBaseline(article: Pick<FullTextArticleState, "content" | "fe
 /** Whether background sync should (re)try extracting this article's full text. */
 export function needsFullTextAttempt(article: { fullTextStatus: string | null; fullTextAttempts: number | null }): boolean {
     const status = article.fullTextStatus;
-    if (status === null || status === "deferred") return true;
-    if (status === "failed") return (article.fullTextAttempts ?? 0) < MAX_FULL_TEXT_ATTEMPTS;
+    if (status === null) return true;
+    // Render failures are deferred but consume attempts; budget/backoff deferrals do not.
+    if (status === "failed" || status === "deferred") return (article.fullTextAttempts ?? 0) < MAX_FULL_TEXT_ATTEMPTS;
     return false; // "ok" / "rejected": only an upstream change (status reset) triggers a new attempt
 }
 
@@ -146,8 +147,8 @@ export async function storeFullText(
  *
  * Same concurrency rules as storeFullText; failed attempts are counted
  * compare-and-swap on the current counter, so concurrent attempts never lose
- * an increment. A "deferred" row that is already deferred for the same reason
- * is not rewritten (no write per sync while a host backs off).
+ * an increment. A "deferred" row that did not consume an attempt and is
+ * already deferred for the same reason is not rewritten (no write per sync while a host backs off).
  */
 export async function recordFullTextMiss(
     article: FullTextArticleState,
@@ -155,7 +156,8 @@ export async function recordFullTextMiss(
     reason: string,
 ): Promise<boolean> {
     const shortReason = reason.slice(0, 64);
-    if (status === "deferred" && article.fullTextStatus === "deferred" && article.fullTextReason === shortReason) return true;
+    const countsAttempt = status === "failed" || (status === "deferred" && reason === "render_unavailable");
+    if (!countsAttempt && status === "deferred" && article.fullTextStatus === "deferred" && article.fullTextReason === shortReason) return true;
     const revert =
         status === "rejected" &&
         article.feedContent != null &&
@@ -166,7 +168,7 @@ export async function recordFullTextMiss(
         fullTextStatus: status,
         fullTextReason: shortReason,
         fullTextFetchedAt: new Date(),
-        ...(status === "failed" ? { fullTextAttempts: (current.fullTextAttempts ?? 0) + 1 } : {}),
+        ...(countsAttempt ? { fullTextAttempts: (current.fullTextAttempts ?? 0) + 1 } : {}),
         ...(revert
             ? {
                   content: article.feedContent!,

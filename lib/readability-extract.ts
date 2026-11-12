@@ -303,9 +303,21 @@ export async function fetchAndExtractReadable(
   // Every attempt counts against the per-sync budget (a no-op when no sidecar is configured).
   const shellOnly = (firstResult as ExtractionResult | null)?.quality?.reason === "js_shell";
   const shellHasRenderer = !shellOnly || (await getRenderSidecarConfig()) !== null;
+  let renderDeferred = false;
   if (!goodEnough() && shellHasRenderer && takeBudget(options.escalationBudget, "render", skipped)) {
-    const rendered = await renderViaSidecar(url, { context: "Full-text" });
-    if (rendered) consider(await extractPage(rendered), rendered);
+    let rendered: string | null = null;
+    try {
+      rendered = await renderViaSidecar(url, { context: "Full-text" });
+    } catch (error) {
+      if (!shellOnly) throw error;
+    }
+    renderDeferred = shellOnly && !rendered;
+    if (rendered) {
+      const extracted = await extractPage(rendered);
+      consider(extracted, rendered);
+      // Preserve a completed render's actual outcome instead of the original shell.
+      if (shellOnly) { firstResult = extracted; firstFetchedHtml = rendered; }
+    }
   }
 
   // Last resort: the user's own hosted-API BYOK connector (M7-T3), for pages
@@ -326,7 +338,7 @@ export async function fetchAndExtractReadable(
   options.onFetchedPage?.(finalBest ? bestFetchedHtml : firstFetchedHtml);
   if (finalBest) return budgetSkipped && !goodEnough() ? { ...finalBest, budgetSkipped: true } : finalBest;
   const empty = firstResult as ExtractionResult | null;
-  if (empty) return budgetSkipped ? { ...empty, budgetSkipped: true } : empty; // the (empty) in-process result
+  if (empty) return { ...empty, ...(budgetSkipped ? { budgetSkipped: true } : {}), ...(renderDeferred ? { renderDeferred: true } : {}) }; // the (empty) in-process result
   // Rate-limiting on the last-resort tier is worth telling the caller apart
   // from an ordinary fetch failure (see fetchFullText in app/actions/feeds.ts),
   // since "try again later / add your own key" is actionable advice a plain

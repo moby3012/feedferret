@@ -36,9 +36,28 @@ export class RecentFullTextIndex {
     observe(id: string, link: string, html: string): string[] {
         const next = shingles(html);
         const matches: string[] = [];
+        // Count each historical page once, so aliases cannot make prose look
+        // like feed-wide chrome. The fixed history/shingle bounds cap this work.
+        const frequency = new Map<string, Set<string>>();
+        for (const [otherId, other] of this.entries) {
+            if (otherId === id) continue;
+            for (const value of other.shingles) {
+                const links = frequency.get(value) ?? new Set<string>();
+                links.add(other.link);
+                frequency.set(value, links);
+            }
+        }
+        const unique = (values: Set<string>) => new Set([...values].filter((value) => (frequency.get(value)?.size ?? 0) < 3));
+        const nextUnique = unique(next);
         if (next.size >= MIN_UNIQUE_SHINGLES) {
             for (const [otherId, other] of this.entries) {
-                if (otherId !== id && other.link !== link && other.shingles.size >= MIN_UNIQUE_SHINGLES && overlap(next, other.shingles) >= 0.9) matches.push(otherId);
+                if (otherId === id || other.link === link) continue;
+                const otherUnique = unique(other.shingles);
+                // Fully identical generic pages remain suspicious. Otherwise,
+                // shared chrome alone cannot supply the minimum article evidence.
+                const [left, right] = nextUnique.size === 0 && otherUnique.size === 0
+                    ? [next, other.shingles] : [nextUnique, otherUnique];
+                if (Math.min(left.size, right.size) >= MIN_UNIQUE_SHINGLES && overlap(left, right) >= 0.9) matches.push(otherId);
             }
         }
         this.entries.delete(id);
