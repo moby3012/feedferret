@@ -1707,6 +1707,16 @@
       "description": "Sie haben nicht gespeicherte Änderungen an den Feed-Einstellungen. Wenn Sie jetzt schließen, gehen diese verloren.",
       "keepEditing": "Weiter bearbeiten",
       "discardChanges": "Änderungen verwerfen"
+    },
+    "contentRules": {
+      "title": "Inhalt bereinigen",
+      "description": "Geordnete JSON-Regeln für neue oder vom Herausgeber geänderte Artikel. Bestehende Artikel bleiben unverändert.",
+      "help": "transforms: strip_selector(css), replace_regex(pattern, replacement, flags), strip_text_before/after(marker). gates: title_include/title_exclude(pattern, flags), numeric_min(pattern, minimum; Gruppe 1). Gates prüfen den Originaltext; alle müssen passen.",
+      "preview": "Live-Vorschau des letzten gespeicherten Artikels (bereits bereinigt)",
+      "allowed": "Wird zugelassen",
+      "held": "Wird zurückgehalten",
+      "empty": "Kein Artikel vorhanden",
+      "invalid": "Ungültige/unsichere Regeln oder Vorschau nicht verfügbar"
     }
   },
   "serverManagement": {

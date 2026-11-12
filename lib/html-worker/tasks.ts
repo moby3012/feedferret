@@ -1,3 +1,4 @@
+import { evaluateFeedContentRules } from "@/lib/feed-content-rules-core";
 import { rewriteMediaInProcess } from "@/lib/media-rewrite-core";
 // The HTML tasks the worker pool (lib/html-worker/pool.ts) can run. Everything
 // reachable from here is bundled into build/html-worker/worker.cjs, so this
@@ -40,6 +41,7 @@ function assertTestTasksEnabled() {
 }
 
 export const htmlTasks = {
+  feedContentRules: evaluateFeedContentRules,
   rewriteMedia: async (input: Parameters<typeof rewriteMediaInProcess>[0]) => {
     const sanitizer = await getSanitizer();
     // This flag comes only from server-rendered Markdown (html:false, KaTeX trust:false),

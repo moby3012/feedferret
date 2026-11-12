@@ -1707,6 +1707,16 @@
       "description": "You have unsaved changes to this feed's settings. If you close now, they will be lost.",
       "keepEditing": "Keep editing",
       "discardChanges": "Discard changes"
+    },
+    "contentRules": {
+      "title": "Clean content",
+      "description": "Ordered JSON rules for new or publisher-updated items. Existing articles stay unchanged.",
+      "help": "transforms: strip_selector(css), replace_regex(pattern, replacement, flags), strip_text_before/after(marker). gates: title_include/title_exclude(pattern, flags), numeric_min(pattern, minimum; capture 1). Gates inspect original text; all must pass.",
+      "preview": "Live preview of latest stored item (already cleaned)",
+      "allowed": "Allowed",
+      "held": "Held back",
+      "empty": "No item available",
+      "invalid": "Invalid/unsafe rules or preview unavailable"
     }
   },
   "serverManagement": {

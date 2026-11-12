@@ -169,3 +169,18 @@ describe("review follow-ups (P2-1, P2-2, P3)", () => {
     expect(row.content).not.toContain("Ad</div>");
   });
 });
+
+
+it("rekeys held legacy items before setting the feed marker, then relaxes gates without duplicates", async () => {
+  state.body = rss(ITEMS);
+  const feed = await state.db.feed.create({ data: { userId, name: "Gated", url: "https://blog.example/gated", unicityCriteria: "sha1:link_published", contentRules: JSON.stringify({ gates: [{ type: "title_include", pattern: "^Beta$" }] }) } });
+  const stamp = new Date("2026-01-01T00:00:00Z");
+  const legacy = await state.db.article.create({ data: { userId, feedId: feed.id, title: "Alpha", link: ITEMS[0].link, externalId: ITEMS[0].guid, dedupeKey: ITEMS[0].guid, content: "<p>Alpha body</p>", excerpt: "Alpha body", publishedAt: new Date(ITEMS[0].date), isStarred: true, updatedAt: stamp } });
+  await syncFeed(userId, feed.id);
+  expect(await state.db.article.findUniqueOrThrow({ where: { id: legacy.id } })).toMatchObject({ dedupeKey: sha1(ITEMS[0].link + unix(ITEMS[0].date)), updatedAt: stamp });
+  expect((await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).dedupeRekeyedFor).toBe("sha1:link_published");
+  await state.db.feed.update({ where: { id: feed.id }, data: { contentRules: "{}" } });
+  await syncFeed(userId, feed.id);
+  expect(await state.db.article.count({ where: { feedId: feed.id } })).toBe(2);
+  expect(await state.db.article.findUniqueOrThrow({ where: { id: legacy.id } })).toMatchObject({ isStarred: true, updatedAt: stamp });
+});

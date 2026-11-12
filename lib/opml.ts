@@ -171,6 +171,7 @@ function feedExtensionAttributes(feed: any, options: OpmlExportOptions) {
     for (const name of JSON_ATTRS) emit(name, scraper.json?.[name]);
     emit("xPathToJson", scraper.xPathToJson);
 
+    emit("contentRules", feed.contentRules);
     emit("filtersActionRead", exportReadFilters(feed.filtersActionRead, scraper.preserved?.filtersActionRead));
     // In FreshRSS a non-empty selector *is* the switch for full-content download, so a
     // selector kept on a feed whose full text is turned off must not be exported.
@@ -277,6 +278,7 @@ export function getKnownExtensionNames(): ReadonlySet<string> {
         "unicityCriteria",
         "unicityCriteriaForced",
         "xPathToJson",
+        "contentRules",
         "filtersActionRead",
         "cssFullContent",
         "cssFullContentConditions",

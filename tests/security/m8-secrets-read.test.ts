@@ -283,7 +283,7 @@ describe("feed credentials", () => {
     state.session = { user: { id: ids.sealedUser } };
     const config = await getFeedEditConfig(ids[which]);
     expect(config).toEqual({
-      authUsername: "u", hasAuthPassword: true, scraperConfig: null,
+      authUsername: "u", hasAuthPassword: true, scraperConfig: null, contentRules: null,
       httpOptions: JSON.stringify({ CURLOPT_COOKIE: "__keep__" }), maskedHttpOptions: ["CURLOPT_COOKIE"],
     });
     expectNoSecrets(config);
