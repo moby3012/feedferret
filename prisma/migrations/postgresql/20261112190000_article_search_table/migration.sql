@@ -1,7 +1,7 @@
 -- ff:allow-destructive Empty databases only (fresh install, Prisma shadow replay): swap the five disposable Article GIN indexes for ArticleSearch ones. Populated databases keep them; lib/search-indexes.ts swaps them in the background with CREATE/DROP INDEX CONCURRENTLY. No Article column or row is removed.
 --
 -- Every statement is idempotent so an interrupted deploy can simply be re-run
--- (`prisma migrate resolve --rolled-back 20261112170000_article_search_table`, restart).
+-- (`prisma migrate resolve --rolled-back 20261112190000_article_search_table`, restart).
 -- Each phase is its own short transaction. Phase 1 creates ArticleSearch and then locks Article,
 -- but the new table is uncommitted and invisible to other sessions until COMMIT, so nobody can
 -- wait on it; no later phase locks ArticleSearch and then Article.
