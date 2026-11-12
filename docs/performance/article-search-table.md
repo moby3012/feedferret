@@ -76,8 +76,11 @@ Postgres migration (`20261112130000_article_search_table`), each phase its own s
    skipped with a WARNING instead of failing the deploy. Search stays on the Article columns
    until the app's self-check has filled the gap in batches and verified it. Each batch holds the
    same EXCLUSIVE lock with `lock_timeout` and `statement_timeout` of 5 s (writers wait ≤ 10 s
-   per batch); a batch that hits the statement timeout is retried with half the rows, so a slow
-   disk shrinks the batches instead of stalling writers. Tested with fault injection (1 s per
+   per batch); a batch that hits the statement timeout is retried with half the rows actually in
+   its range (down to 1) without spending the retry budget, so a slow disk shrinks the batches
+   instead of stalling writers. The size is remembered for the process (also across maintenance
+   cycles) and doubles again after batches that finish in under 1 s. Only lock conflicts and
+   timeouts of a single-row batch count toward the 8-attempt budget. Tested with fault injection (1 s per
    projection insert): the real bulk mark-read finished inside the bound, the copy was handed
    off cleanly.
 3. Only if Article is empty (fresh install, Prisma's shadow replay): drop the old

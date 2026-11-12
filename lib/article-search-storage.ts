@@ -98,6 +98,10 @@ export function markArticleSearchVerifiedForTests() {
 }
 
 const PG_BATCH = 5000;
+const BATCH_KEY = "__feedferret_article_search_batch__";
+const batchStore = globalThis as unknown as Record<string, number | undefined>;
+/** Current adaptive Postgres backfill batch size (tests). */
+export function articleSearchBackfillBatchSize(): number { return batchStore[BATCH_KEY] ?? PG_BATCH; }
 const SQLITE_BATCH = 1000;
 const BATCH_YIELD_MS = 10;
 
@@ -135,15 +139,22 @@ export async function backfillArticleSearch(options: { yieldMs?: number; batchSi
     let inserted = 0;
     if (pg) {
         let after = "";
-        let batch = options.batchSize ?? PG_BATCH;
+        // Batch size is adaptive and remembered for this process (also across maintenance cycles):
+        // a statement timeout halves it (based on the rows actually in the range, down to 1) WITHOUT
+        // spending the retry budget; a batch that completes in under 1 s doubles it again, up to
+        // PG_BATCH. The retry budget only counts lock conflicts and timeouts of a single-row batch.
+        let batch = options.batchSize ?? batchStore[BATCH_KEY] ?? PG_BATCH;
         for (;;) {
             let upper: string | null = null;
-            for (let attempt = 1; ; attempt++) {
-                const [bound] = await db.$queryRawUnsafe<{ upper: string | null }[]>(
-                    'SELECT max("id") AS upper FROM (SELECT "id" FROM "Article" WHERE "id" > $1 ORDER BY "id" LIMIT $2) b', after, batch
+            let failures = 0;
+            for (;;) {
+                const [bound] = await db.$queryRawUnsafe<{ upper: string | null; n: bigint | number }[]>(
+                    'SELECT max("id") AS upper, count(*) AS n FROM (SELECT "id" FROM "Article" WHERE "id" > $1 ORDER BY "id" LIMIT $2) b', after, batch
                 );
                 upper = bound?.upper ?? null;
                 if (!upper) break;
+                const rows = Number(bound.n);
+                const started = Date.now();
                 try {
                     // Interactive transaction with a timeout well above both statement bounds, so a
                     // lock wait or slow copy surfaces as 55P03/57014 (handled here), not as P2028.
@@ -160,18 +171,22 @@ export async function backfillArticleSearch(options: { yieldMs?: number; batchSi
                         );
                     }, { timeout: 30_000, maxWait: 10_000 });
                     inserted += count;
+                    if (Date.now() - started < 1000 && batch < PG_BATCH && rows >= batch) batch = Math.min(PG_BATCH, batch * 2);
                     break;
                 } catch (err) {
-                    if (attempt >= 8) throw err;
-                    if (isStatementTimeout(err) && batch > 1) {
-                        batch = Math.max(1, Math.floor(batch / 2));
-                        console.warn(`[search-projection] Backfill batch exceeded 5 s; retrying with ${batch} rows.`);
-                    } else if (!isLockConflict(err) && !isStatementTimeout(err)) {
-                        throw err;
+                    if (isStatementTimeout(err) && rows > 1) {
+                        batch = Math.max(1, Math.floor(rows / 2));
+                        batchStore[BATCH_KEY] = batch;
+                        console.warn(`[search-projection] Backfill batch of ${rows} rows exceeded 5 s; retrying with ${batch}.`);
+                        await pause(200); // let the waiting writers through
+                        continue;
                     }
-                    await pause(1000 * attempt);
+                    if (!isLockConflict(err) && !isStatementTimeout(err)) throw err;
+                    if (++failures >= 8) throw err;
+                    await pause(1000 * failures);
                 }
             }
+            batchStore[BATCH_KEY] = batch;
             if (!upper) break;
             after = upper;
             await pause(yieldMs);

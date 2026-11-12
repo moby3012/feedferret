@@ -14,7 +14,7 @@ vi.mock("@/lib/db", () => ({
   get db() { return state.db; },
   getDatabaseProvider: () => process.env.SEARCH_TEST_PG_URL ? "postgresql" : "sqlite",
 }));
-import { articleSearchProjectionStatus, backfillArticleSearch, ensureArticleSearchStorage, isArticleSearchReady, setPostgresSearchIndexStatus, POSTGRES_SEARCH_DDL, SQLITE_SEARCH_TRIGGERS } from "@/lib/article-search-storage";
+import { articleSearchBackfillBatchSize, articleSearchProjectionStatus, backfillArticleSearch, ensureArticleSearchStorage, isArticleSearchReady, setPostgresSearchIndexStatus, POSTGRES_SEARCH_DDL, SQLITE_SEARCH_TRIGGERS } from "@/lib/article-search-storage";
 import pg from "pg";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { ensureSearchIndexes, postgresSearchIndexStatus, schedulePostgresIndexRetry } from "@/lib/search-indexes";
@@ -283,15 +283,29 @@ it.runIf(pgUrl)("a slow copy never holds writers past their transaction timeout:
     expect(waited).toBeLessThan(20); // ~10 s bound, far below the writer's 30 s transaction timeout
     expect(await db.articleSearch.count()).toBe(0); // the copy was handed off, nothing half-done
 
-    // App hand-off: batches are bounded the same way (5 s) and shrink until they fit.
+    // App hand-off with the PRODUCTION default batch size (5,000): batches are bounded the same
+    // way (5 s) and shrink to the rows that fit, without spending the retry budget.
     await db.$executeRawUnsafe("CREATE OR REPLACE FUNCTION slow_search_copy() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.4); RETURN NEW; END $$");
-    const backfill = backfillArticleSearch({ yieldMs: 0, batchSize: 16 });
+    delete (globalThis as Record<string, unknown>).__feedferret_article_search_batch__;
+    expect(articleSearchBackfillBatchSize()).toBe(5000);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const backfill = backfillArticleSearch({ yieldMs: 0 });
     await new Promise(r => setTimeout(r, 500));
     const t = Date.now();
     await setReadStateByIds("a", ids, false);
     expect((Date.now() - t) / 1000).toBeLessThan(12); // ≤ lock_timeout + statement_timeout per batch
     await backfill;
     expect(await db.articleSearch.count()).toBe(await db.article.count());
+    const shrunk = articleSearchBackfillBatchSize();
+    expect(shrunk).toBeLessThan(16); // ≥ 16 rows × 0.4 s would exceed 5 s
+    expect(warn.mock.calls.some(c => /exceeded 5 s/.test(String(c[0])))).toBe(true);
+    // Next maintenance cycle remembers the size: no further timeouts, completes again.
+    warn.mockClear();
+    await db.$executeRawUnsafe('DELETE FROM "ArticleSearch"');
+    (globalThis as Record<string, unknown>).__feedferret_article_search_projection__ = { state: "backfilling" };
+    expect(await ensureArticleSearchStorage({ yieldMs: 0 })).toMatchObject({ state: "complete" });
+    expect(warn.mock.calls.some(c => /exceeded 5 s/.test(String(c[0])))).toBe(false);
+    warn.mockRestore();
   } finally {
     await db.$executeRawUnsafe('DROP TRIGGER IF EXISTS slow_search_copy ON "ArticleSearch"');
     await db.$executeRawUnsafe("DROP FUNCTION IF EXISTS slow_search_copy()");
