@@ -21,7 +21,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { prepareSchema } from "./prepare-prisma-schema.mjs";
-import { baseline as BASELINE_MIGRATION, pureDdlViolations } from "./migration-utils.mjs";
+import { baseline as BASELINE_MIGRATION, isPendingSearchIndexSwap, pureDdlViolations } from "./migration-utils.mjs";
 import { classifyTables, ensurePgTrgm, listTables, lockWaitMs, normalizeProvider, waitForPostgres } from "./db-state.mjs";
 
 const CONFIG = "prisma/startup.config.mjs";
@@ -225,7 +225,9 @@ async function main() {
   if ((env.FEEDFERRET_DB_DRIFT_CHECK ?? "1") !== "0") {
     const { status, out } = prisma([...diffArgs(resolve("prisma/schema.generated.prisma")), "--exit-code"], { capture: true });
     if (status === 0) log("✅ Database schema matches prisma/schema.prisma.");
-    else if (status === 2) { log("⚠️ Schema drift: the database differs from prisma/schema.prisma (not changed automatically):"); console.log(out); }
+    else if (status === 2 && isPg && isPendingSearchIndexSwap(diffSql(resolve("prisma/schema.generated.prisma")))) {
+      log("✅ Database schema matches prisma/schema.prisma, except the search index swap the app finishes in the background after start (CREATE/DROP INDEX CONCURRENTLY; search works meanwhile, unindexed). See docs/performance/article-search-table.md.");
+    } else if (status === 2) { log("⚠️ Schema drift: the database differs from prisma/schema.prisma (not changed automatically):"); console.log(out); }
     else { log(`⚠️ Drift check could not run (exit ${status}); continuing.`); console.log(out.split("\n").slice(-5).join("\n")); }
   }
 }

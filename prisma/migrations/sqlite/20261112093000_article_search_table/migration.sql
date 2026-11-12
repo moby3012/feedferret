@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "ArticleSearch" (
+CREATE TABLE IF NOT EXISTS "ArticleSearch" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "title" TEXT NOT NULL,
     "content" TEXT NOT NULL,

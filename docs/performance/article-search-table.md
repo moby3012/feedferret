@@ -19,7 +19,11 @@ guard so even SET title=title does no work. Read state, updatedAt and full-text
 bookkeeping do not fire them. Deletion and identity changes cascade through the FK.
 All ingestion paths, raw SQL, full-text extraction and entity enrichment are covered.
 The startup helper provisions the identical triggers only for explicit db-push/dev
-databases; migration-managed installations take a cheap catalog probe.
+databases; migration-managed installations take a cheap catalog probe. It then compares
+the Article and ArticleSearch row counts (the FK makes the projection a subset, so equal
+counts mean complete) and, if rows are missing, fills them in small batches in the
+background, logging it and reporting `search.projection` in /api/health. An incomplete
+projection would otherwise silently hide articles from search.
 
 SQLite's existing external-content trigram FTS now reads ArticleSearch. The old
 Article-backed FTS is discarded atomically at startup, including stale completion
@@ -31,53 +35,113 @@ semantics, especially -author and -entity.
 
 ## Deployment and locks
 
-Generated with pnpm db:migration:new article_search_table, then reviewed to add
-synchronization/backfill and reorder index removal. Both provider histories remain
-additive with respect to application data.
+The migration only does the fast part; it is idempotent and never builds or drops a GIN index
+on a populated database (that is what made the first version deadlock and run ~130 s at 200k).
 
-Postgres:
-1. In a short explicit transaction, create the table/FK and install triggers.
-2. In a separate transaction, INSERT...SELECT into the unindexed projection.
-   FOR KEY SHARE protects source rows against concurrent deletion/identity changes;
-   ordinary read-state and non-key content updates remain possible. ON CONFLICT
-   DO NOTHING preserves newer projections inserted by a concurrent trigger.
-3. Build the new GIN indexes, guarded by extension availability, then remove the five
-   old indexes with IF EXISTS. No Article columns are removed.
+Postgres migration (`20261112093000_article_search_table`), each phase its own short transaction:
+1. Table (`IF NOT EXISTS`), FK and triggers in guarded `DO` blocks, `CREATE OR REPLACE FUNCTION`.
+   First run: short SHARE ROW EXCLUSIVE lock on Article; a re-run takes no table lock.
+2. Copy into the unindexed projection under `LOCK TABLE "Article" IN SHARE MODE` with
+   `lock_timeout = 15s`. Writers wait for the copy; they cannot deadlock with it, because no
+   Article writer can be mid-transaction (and hold a trigger-written projection row) while it
+   runs. `ON CONFLICT DO NOTHING` makes a re-run cheap. If the lock is not granted in time
+   (a long-running transaction) the copy is skipped with a WARNING instead of failing the
+   deploy, and the app's startup self-check fills the gap in 5,000-row batches (each batch
+   holds the same SHARE lock for milliseconds, `lock_timeout = 5s`, retried).
+3. Only if Article is empty (fresh install, Prisma's shadow replay): drop the old
+   `Article_*_trgm_idx`. Only if ArticleSearch is empty: create the new GIN indexes (instant).
+   The migration history must produce the schema's index set for the CI drift gate, so this
+   small, lock-safe branch remains; populated databases never take it.
 
-The copy uses one set-based INSERT, not per-article application calls. It needs WAL
-and additional text storage, but no long exclusive lock on Article. Initial trigger/FK
-installation and final DROP INDEX require short table locks; long-running transactions
-can delay them. New projection indexes use ordinary CREATE INDEX: they block projection
-writers (and consequently ingestion) while building, but do not block Article read-state
-updates. Deploy during a quiet ingestion period. Explicit transaction boundaries keep
-the Article trigger-installation locks out of the copy/index phases. A failed later
-phase can leave the new table populated; inspect the failed Prisma migration and resume
-from that phase with the documented migrate resolve workflow rather than rerunning CREATE
-TABLE blindly. Old indexes are removed only after new index creation succeeds.
-Without pg_trgm privileges, the projection/triggers/backfill still deploy and queries
-use ILIKE without GIN, matching the existing PRISMA_PG_TRGM=0 behavior.
+After the migration, on a populated database, `ensureSearchIndexes()` (lib/search-indexes.ts)
+runs in the background, not awaited before serving (also no longer awaited on Postgres in
+instrumentation.ts):
+- dedicated connection, session advisory lock (one instance builds), `statement_timeout = 0`;
+- per column `CREATE INDEX CONCURRENTLY IF NOT EXISTS "ArticleSearch_<col>_trgm_idx"`; an
+  `INVALID` leftover (`pg_index.indisvalid = false`, from a killed concurrent build) is first
+  dropped with `DROP INDEX CONCURRENTLY` and rebuilt;
+- only when all five are valid: `DROP INDEX CONCURRENTLY IF EXISTS` the five old
+  `Article_*_trgm_idx`. This runs on every start, so it also cleans up after a roll-forward
+  from an older image (which recreates them, see Rollback);
+- skipped entirely with `PRISMA_PG_TRGM=0`, or when pg_trgm is missing and cannot be created
+  by the role (restricted installs): search uses unindexed ILIKE, as before.
 
-SQLite copies text in its migration write transaction; its single-writer architecture
-means writes wait for that copy. The expensive trigram build is deferred to the resumable
-background process. Leave additional disk space for both copies of the text and temporary
-index build files. Startup search remains complete throughout FTS rebuilding.
+Search stays correct throughout, only slower until the indexes are ready: ILIKE without a
+trigram index is a sequential scan of ArticleSearch. Until the swap is done, the startup drift
+check logs `✅ Database schema matches prisma/schema.prisma, except the search index swap the
+app finishes in the background…` (only these exact ten statements are tolerated; anything else
+is still reported as drift). Progress: `[search-indexes]` log lines with per-index build times,
+and `/api/health` → `search.indexes` (`pending`/`building`/`ready`/`unavailable`/`error`).
+`FEEDFERRET_DB_SYNC=push` (fallback) applies the swap synchronously via `db push`, i.e. with a
+blocking index build; do not use it for this upgrade.
+
+### Measured (synthetic, Postgres 16, 200,000 articles)
+
+`scripts/bench-search-migration.mjs` (results in
+[article-search-migration-results.json](article-search-migration-results.json)), Docker
+Postgres 16 on the dev Mac. Article: 398 MB heap+TOAST, 902 MB with indexes (≈450-word bodies).
+Two writers run multi-statement transactions throughout (insert article, update a title,
+mark 50 read, 20 % delete one) — the pattern that deadlocked the previous version.
+
+| step | result |
+|---|---|
+| migration (`prisma migrate deploy`), 3 trials | 5.6 s, 4.8 s, 5.6 s; 0 deadlocks, 0 deferred copies, 0 writer errors; projection == Article, 0 content mismatches; Article GIN indexes untouched |
+| writer pause during the migration | ≈ the copy phase (a few seconds); writers resume, no errors |
+| background index build (app helper, writers running) | 295 s total: content 178.5 s, excerpt 42.8 s, author 4.1 s, title 3.3 s, entities 0.4 s; 1,376 writer transactions completed meanwhile, 0 errors; then 5 valid ArticleSearch indexes, 0 legacy |
+| projection size | 824 MB incl. 405 MB GIN indexes |
+| kill during `CREATE INDEX CONCURRENTLY` (SIGKILL + backend terminated) | INVALID leftover detected on restart, dropped, rebuilt; all 5 valid |
+| kill during the migration copy (SIGKILL + backend terminated) | next start stops with P3009; `migrate resolve --rolled-back` + restart completes; projection complete, triggers present |
+| legacy Article GIN build (what an older image does at start after rollback) | 71.5 s, blocking |
+
+The app's HTTP server is up right after the migration (≈5 s plus normal boot), well inside the
+60 s healthcheck start period; the index build no longer delays startup. Real bodies, slower
+storage and WAL pressure will make both numbers larger; the build time scales mostly with the
+total content size (the content index dominates).
+
+### Deploy procedure (production)
+
+1. Backup (`pg_dump -Fc`, restore tested) — owner's normal process.
+2. Deploy normally. Expected startup log: `Applying migration 20261112093000_article_search_table`,
+   then `…except the search index swap the app finishes in the background…`.
+3. Watch `[search-indexes] … built in N s` / `Dropped legacy Article_*` lines, or poll
+   `/api/health` until `search.indexes` is `ready` and `search.projection.state` is `complete`.
+   Search works meanwhile (slower). Ingestion continues.
+4. If the container is killed during the migration: `prisma migrate resolve --config
+   prisma/startup.config.mjs --rolled-back 20261112093000_article_search_table`, restart.
+   If it is killed during the index build: just restart (INVALID indexes are rebuilt).
+
+SQLite copies text in its migration write transaction (`IF NOT EXISTS`/`ON CONFLICT`, so it is
+re-runnable too); its single-writer architecture means writes wait for that copy. The expensive
+trigram build is deferred to the existing resumable background FTS process. Startup search
+remains complete throughout FTS rebuilding. Leave additional disk space for both copies of the text.
 
 The migration passes scripts/check-migration-policy.mjs with an explicit, narrow
-ff:allow-destructive reason for removing disposable GIN indexes. **It is deliberately
-not added to the pure-DDL adoption allowlist** in migration-utils.mjs: that allowlist
-means "safe to mark applied WITHOUT executing", which would skip both triggers and
-backfill. A test explicitly verifies rejection. Normal migrate deploy executes it.
-A legacy database already pushed to the new schema fails closed: install the operational
-trigger/backfill part, then use FEEDFERRET_DB_ADOPT_CONFIRM for this migration once, as
-documented in docs/database.md. Integration tests exercise this operator path and prove
-that default adoption cannot skip the projection.
+ff:allow-destructive reason (empty-database index swap only). **It is deliberately not added to
+the pure-DDL adoption allowlist** in migration-utils.mjs: that allowlist means "safe to mark
+applied WITHOUT executing", which would skip both triggers and backfill. Consequence: every
+legacy db-push database that is already *ahead of* the baseline now stops at startup and needs
+the operator path in docs/database.md (run the idempotent migration SQL, then
+`FEEDFERRET_DB_ADOPT_CONFIRM=20261112093000_article_search_table` once). Databases with
+`_prisma_migrations` (production) are not affected.
 
 ## Rollback
 
 Do not merge until the PM has arranged the owner's backup. No merge is part of this work.
 Roll back the application image; keep ArticleSearch, its triggers and migration history.
-All original Article columns remain authoritative for the older binary. Older Postgres
-startup can recreate the five Article GIN indexes (allow build time and disk space).
+All original Article columns remain authoritative for the older binary, and the triggers keep
+ArticleSearch in sync while it runs, so a later roll-forward needs no backfill.
+
+Older Postgres images recreate the five Article GIN indexes **at startup, awaited, with a plain
+CREATE INDEX** (71.5 s at 200k above, holding a SHARE lock on Article). That old code cannot be
+changed. To avoid the startup delay, pre-build them concurrently while the new image still runs,
+then roll back (the old `CREATE INDEX IF NOT EXISTS` then finds them):
+
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS "Article_title_trgm_idx" ON "Article" USING GIN ("title" gin_trgm_ops);
+    -- same for content, excerpt, author, entities
+
+(Do not restart the new image in between: its startup drops them again.) After rolling forward
+again, the new image drops them concurrently once the ArticleSearch indexes are valid.
+
 SQLite's older startup reinstalls its Article FTS triggers; preserved rowids keep its
 lookups compatible. For a clean legacy SQLite FTS rebuild, discard only the disposable
 article_fts table/triggers and markers before starting the older binary.
@@ -108,14 +172,13 @@ For cross-provider upgrade/equivalence/trigger assertions:
     SEARCH_TEST_PG_URL=postgresql://.../empty_test \
       pnpm exec vitest run tests/lib/article-search-storage.test.ts
 
-The migration itself was applied to a copy of the 55k synthetic benchmark database,
-with its articles duplicated (new IDs) to 110,000 rows: **9.16 seconds** for the complete
-Postgres migration, including backfill and all indexes. Expect seconds to minutes for
-100k+ real rows depending on body length, storage throughput, WAL and lock waits; this
-synthetic timing is not a production downtime guarantee.
+Migration and index-build timings: see "Measured" above (the earlier 9 s figure for the
+first version was wrong; an independent review measured 129.6 s at 200k for it, almost all in
+the in-migration GIN builds that this version moved to the background).
 
-All local gates passed: lint, TypeScript, 2,986 unit tests and 58 timing tests,
-plus both full migration integration gates (including restricted Postgres roles).
+All local gates passed: lint, TypeScript, 3,200 unit tests and 58 timing tests,
+plus both full migration integration gates (including restricted Postgres roles and the
+interrupted-migration `--rolled-back` re-run).
 The separate real-DB equivalence suite also passed on Postgres. No UI changes.
 
 ### Results

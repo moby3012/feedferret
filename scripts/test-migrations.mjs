@@ -117,6 +117,15 @@ function startupAsync(url, extra = {}) {
     child.on('close', (status) => { console.log(output); done({ status, output }); });
   });
 }
+// Mirrors ensurePostgresTrigramIndexes() in lib/search-indexes.ts (one statement per call: CONCURRENTLY).
+async function finishSearchIndexSwap(url) {
+  for (const column of ['title', 'content', 'excerpt', 'author', 'entities']) {
+    await query(url, `CREATE INDEX CONCURRENTLY IF NOT EXISTS "ArticleSearch_${column}_trgm_idx" ON "ArticleSearch" USING GIN ("${column}" gin_trgm_ops)`);
+  }
+  for (const column of ['title', 'content', 'excerpt', 'author', 'entities']) {
+    await query(url, `DROP INDEX CONCURRENTLY IF EXISTS "Article_${column}_trgm_idx"`);
+  }
+}
 function expect(condition, message) { if (!condition) throw new Error(`startup: ${message}`); }
 async function legacyDatabase(label, legacySchema) {
   const url = await database(label);
@@ -147,6 +156,13 @@ async function startupUpgradeChecks(legacySchema) {
   expect(Number((await query(url, 'SELECT count(*) AS n FROM "ArticleSearch"'))[0].n) ===
     Number((await query(url, 'SELECT count(*) AS n FROM "Article"'))[0].n), 'search projection backfill incomplete');
   expect(/Database schema matches prisma\/schema.prisma/.test(r.output), 'drift check did not report a clean schema');
+  if (provider === 'postgresql') {
+    // Populated database: the migration leaves the GIN swap to the app (no index build/drop
+    // under the deploy). Do what lib/search-indexes.ts does in the background, then expect a clean schema.
+    expect(/except the search index swap/.test(r.output), 'populated DB: swap should be pending for the app');
+    expect((await query(url, "SELECT 1 FROM pg_indexes WHERE indexname LIKE 'Article\\_%\\_trgm\\_idx'")).length === 5, 'migration must not drop Article indexes on a populated DB');
+    await finishSearchIndexSwap(url);
+  }
 
   r = startup(url);
   expect(r.status === 0 && /Database state: migrated/.test(r.output), 'second start not on the migrated path');
@@ -198,21 +214,39 @@ async function startupUpgradeChecks(legacySchema) {
   r = startup(current);
   expect(r.status !== 0 && /cannot be marked as applied without running/.test(r.output), 'must not skip search backfill/triggers on a db-push database');
   expect(await migrationRows(current) === null, 'non-DDL adoption must leave history untouched');
-  // Simulate the documented operator path: install triggers and backfill, then explicitly confirm.
+  // Documented operator path: the migration is idempotent, so run it as-is (installs the
+  // triggers, backfills; the pushed table/indexes already exist), then explicitly confirm.
   const searchMigration = expected.find(name => name.endsWith('_article_search_table'));
-  const sql = readFileSync(join('prisma/migrations', provider, searchMigration, 'migration.sql'), 'utf8');
-  const operational = sql.slice(sql.indexOf(provider === 'sqlite' ? 'CREATE TRIGGER' : 'CREATE OR REPLACE FUNCTION'));
-  if (provider === 'sqlite') await execute(current, operational);
-  else {
-    // Current schema already has the new indexes/table. Only the operational phase is missing.
-    await execute(current, 'BEGIN;\n' + operational.slice(0, operational.indexOf('\nDO $$ BEGIN')));
-  }
+  await execute(current, readFileSync(join('prisma/migrations', provider, searchMigration, 'migration.sql'), 'utf8'));
+  expect(Number((await query(current, 'SELECT count(*) AS n FROM "ArticleSearch"'))[0].n) === 1, 'operator path did not backfill');
   r = startup(current, { FEEDFERRET_DB_ADOPT_CONFIRM: searchMigration });
   expect(r.status === 0 && /Legacy database matches the current schema: marking all/.test(r.output), `current-schema legacy exited ${r.status}`);
   expect(!/db push to the|Additive gap/.test(r.output), 'current-schema legacy must not push');
   expect(JSON.stringify(await migrationRows(current)) === JSON.stringify(expected), 'current-schema legacy: not all migrations marked applied');
   expect(/No pending migrations to apply/.test(r.output), 'current-schema legacy: migrations still pending');
   expect(currentBefore === await fingerprint(current), 'current-schema legacy changed data');
+
+  // 6b. Interrupted search migration (killed container, crash): Prisma records it as failed
+  //     (P3009) and refuses to start. After the documented `migrate resolve --rolled-back`
+  //     the migration re-runs on top of whatever the interrupted run left behind (here the
+  //     worst case: table + triggers installed, projection emptied) and completes.
+  {
+    const name = expected.find(n => n.endsWith('_article_search_table'));
+    await execute(url, `DELETE FROM "ArticleSearch"; UPDATE _prisma_migrations SET finished_at = NULL, logs = 'simulated interruption' WHERE migration_name = '${name}'`);
+    r = startup(url);
+    expect(r.status !== 0 && /P3009|failed migrations/.test(r.output), 'a failed search migration must stop the start');
+    run(['migrate', 'resolve', '--rolled-back', name], { DATABASE_URL: url, PRISMA_SCHEMA_OVERRIDE: schema, SHADOW_DATABASE_URL: '' });
+    r = startup(url);
+    expect(r.status === 0 && /Database schema matches prisma\/schema.prisma/.test(r.output), `re-run after --rolled-back exited ${r.status}`);
+    expect(JSON.stringify(await migrationRows(url)) === JSON.stringify(expected), 're-run: wrong history');
+    expect(Number((await query(url, 'SELECT count(*) AS n FROM "ArticleSearch"'))[0].n) ===
+      Number((await query(url, 'SELECT count(*) AS n FROM "Article"'))[0].n), 're-run did not backfill the projection');
+    const triggers = provider === 'sqlite'
+      ? await query(url, "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name IN ('article_search_ai', 'article_search_au')")
+      : await query(url, "SELECT tgname FROM pg_trigger WHERE tgname IN ('article_search_ai', 'article_search_au')");
+    expect(triggers.length === 2, `re-run: ${triggers.length} sync triggers`);
+    expect(before === await fingerprint(url), 're-run changed application data');
+  }
 
   if (provider === 'postgresql') {
     // 7a. Two instances starting at the same time on one legacy database: the advisory

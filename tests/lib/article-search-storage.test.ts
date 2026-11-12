@@ -14,9 +14,9 @@ vi.mock("@/lib/db", () => ({
   get db() { return state.db; },
   getDatabaseProvider: () => process.env.SEARCH_TEST_PG_URL ? "postgresql" : "sqlite",
 }));
-import { POSTGRES_SEARCH_TRIGGERS, SQLITE_SEARCH_TRIGGERS } from "@/lib/article-search-storage";
+import { articleSearchProjectionStatus, ensureArticleSearchStorage, POSTGRES_SEARCH_TRIGGERS, SQLITE_SEARCH_TRIGGERS } from "@/lib/article-search-storage";
 import { buildAdvancedSearchWhere } from "@/lib/search";
-import { ensureSearchIndexes } from "@/lib/search-indexes";
+import { ensureSearchIndexes, postgresSearchIndexStatus } from "@/lib/search-indexes";
 import { pureDdlViolations } from "../../scripts/migration-utils.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "ff-search-projection-"));
@@ -120,10 +120,48 @@ it("preserves search results, NULL negation, user isolation, wildcard and field 
     await state.db.$executeRawUnsafe("CREATE TABLE article_fts_meta (id INTEGER PRIMARY KEY, backfilled_at TEXT)");
     await state.db.$executeRawUnsafe("INSERT INTO article_fts_meta VALUES (1, 'old-ready-marker')");
   }
-  await ensureSearchIndexes({ backfill: "await" });
+  await ensureSearchIndexes({ backfill: "await", postgresUrl: url });
   for (const query of queries) {
     expect(await ids(await buildAdvancedSearchWhere("a", query)), `indexed: ${query}`).toEqual(expected.get(query));
   }
+});
+
+it("startup self-check finds and repairs an incomplete projection", async () => {
+  const db = state.db;
+  const total = await db.article.count();
+  // e.g. the migration backfill was deferred by a lock conflict, or a dump was restored without it.
+  await db.$executeRawUnsafe(`DELETE FROM "ArticleSearch" WHERE id IN ('a1', 'a2', 'a3')`);
+  expect(await db.articleSearch.count()).toBe(total - 3);
+  const status = await ensureArticleSearchStorage({ yieldMs: 0 });
+  expect(status).toMatchObject({ state: "complete", missing: 0 });
+  expect(articleSearchProjectionStatus().detail).toBe("backfilled 3");
+  expect(await db.articleSearch.count()).toBe(total);
+  expect(await db.articleSearch.findUnique({ where: { id: "a1" } })).toMatchObject({ excerpt: "excerpt needle", author: "Jane Doe" });
+  // Complete projection: no work, no rewrite.
+  expect(await ensureArticleSearchStorage()).toMatchObject({ state: "complete", missing: 0 });
+  expect(articleSearchProjectionStatus().detail).toBeUndefined();
+});
+
+it.runIf(pgUrl)("builds the GIN indexes concurrently, rebuilds INVALID leftovers, then drops the legacy Article indexes", async () => {
+  const db = state.db;
+  const indexes = async () => (await db.$queryRawUnsafe<{ name: string; valid: boolean }[]>(
+    `SELECT c.relname AS name, i.indisvalid AS valid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid
+     WHERE c.relname LIKE 'Article%\\_trgm\\_idx' ORDER BY 1`)).map(row => `${row.name}:${row.valid}`);
+  expect(postgresSearchIndexStatus().state).toBe("ready");
+  expect(await indexes()).toEqual(["author", "content", "entities", "excerpt", "title"].map(c => `ArticleSearch_${c}_trgm_idx:true`));
+  // A killed CREATE INDEX CONCURRENTLY leaves an INVALID index behind; simulate one that fails mid-build.
+  await db.$executeRawUnsafe('DROP INDEX "ArticleSearch_title_trgm_idx"');
+  await expect(db.$executeRawUnsafe(
+    'CREATE INDEX CONCURRENTLY "ArticleSearch_title_trgm_idx" ON "ArticleSearch" USING GIN ((title || (1 / (length(title) - length(title)))::text) gin_trgm_ops)'
+  )).rejects.toThrow();
+  expect(await indexes()).toContain("ArticleSearch_title_trgm_idx:false");
+  // Rollback to an older image recreates the legacy Article indexes.
+  await db.$executeRawUnsafe('CREATE INDEX "Article_title_trgm_idx" ON "Article" USING GIN ("title" gin_trgm_ops)');
+  await ensureSearchIndexes({ postgresUrl: url });
+  expect(postgresSearchIndexStatus().state).toBe("ready");
+  expect(await indexes()).toEqual(["author", "content", "entities", "excerpt", "title"].map(c => `ArticleSearch_${c}_trgm_idx:true`));
+  const def = await db.$queryRawUnsafe<{ indexdef: string }[]>(`SELECT indexdef FROM pg_indexes WHERE indexname = 'ArticleSearch_title_trgm_idx'`);
+  expect(def[0].indexdef).toContain("gin (title gin_trgm_ops)");
 });
 
 it("syncs content and deletes, while state/bookkeeping/no-op writes leave search untouched", async () => {

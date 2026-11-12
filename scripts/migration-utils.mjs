@@ -59,6 +59,21 @@ export function assertSafeSql(sql, file) {
   if (/gin_trgm_ops/i.test(withoutGuards)) throw new Error(`${file}: unguarded gin_trgm_ops`);
 }
 
+// The Postgres trigram index swap (Article_*_trgm_idx -> ArticleSearch_*_trgm_idx) is done by the
+// app in the background with CREATE/DROP INDEX CONCURRENTLY (lib/search-indexes.ts), not by the
+// migration, on populated databases. Until it finishes, the startup drift check sees exactly these
+// statements; anything else in the diff is real drift.
+const SEARCH_COLUMNS = '(title|content|excerpt|author|entities)';
+const PENDING_SWAP = [
+  new RegExp(`^DROP INDEX "Article_${SEARCH_COLUMNS}_trgm_idx"$`),
+  new RegExp(`^CREATE INDEX "ArticleSearch_${SEARCH_COLUMNS}_trgm_idx" ON "ArticleSearch" USING GIN \\("\\1" gin_trgm_ops\\)$`),
+];
+/** True when a non-empty `migrate diff --script` consists only of the pending search index swap. */
+export function isPendingSearchIndexSwap(sql) {
+  const statements = sql.replace(/--[^\n]*/g, '').split(';').map((s) => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  return statements.length > 0 && statements.every((s) => PENDING_SWAP.some((re) => re.test(s)));
+}
+
 // ── Pure-DDL allowlist (startup adoption of db-push databases, scripts/db-migrate.mjs) ──
 // A migration may be marked applied WITHOUT running it only if pushing the schema does
 // exactly what the migration would do: plain object creation. The SQL is tokenized

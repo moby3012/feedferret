@@ -1,4 +1,5 @@
 import { db, getDatabaseProvider } from "./db";
+import pg from "pg";
 import { ensureArticleSearchStorage } from "./article-search-storage";
 
 // Audit finding P-11: free-text search (lib/search.ts) uses leading-wildcard
@@ -38,13 +39,15 @@ export type EnsureSearchIndexesOptions = {
      * "none": schema + triggers only, caller drives runSqliteFtsBackfill() (tests).
      */
     backfill?: "background" | "await" | "none";
+    /** Postgres only: connection for the index builds (default DATABASE_URL). */
+    postgresUrl?: string;
 };
 
 export async function ensureSearchIndexes(options: EnsureSearchIndexesOptions = {}): Promise<void> {
     try {
         await ensureArticleSearchStorage();
         if (getDatabaseProvider() === "postgresql") {
-            await ensurePostgresTrigramIndexes();
+            await ensurePostgresTrigramIndexes(options.postgresUrl ?? process.env.DATABASE_URL);
         } else {
             await ensureSqliteFts(options.backfill ?? "background");
         }
@@ -56,17 +59,101 @@ export async function ensureSearchIndexes(options: EnsureSearchIndexesOptions = 
     }
 }
 
-async function ensurePostgresTrigramIndexes() {
-    // Requires the pg_trgm extension to be installable by the connecting role
-    // (superuser, or a role granted CREATE on the extension). If it can't be
-    // created, the whole thing is caught by ensureSearchIndexes()'s try/catch.
-    await db.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+// ── Postgres pg_trgm GIN indexes on ArticleSearch ─────────────────────────────
+//
+// Built here, in the background after the server already serves requests, and never in
+// the migration on a populated database: a plain CREATE INDEX holds a SHARE lock on
+// ArticleSearch for the whole build (minutes at 100k+ articles), which blocks every
+// Article insert/content update through the sync trigger. CREATE INDEX CONCURRENTLY
+// lets ingestion continue; search stays correct meanwhile (ILIKE without the index).
+//
+//   * One instance at a time: a session advisory lock on a dedicated connection
+//     (CONCURRENTLY cannot run inside a transaction, so Prisma's pool is not used).
+//   * A killed concurrent build leaves an INVALID index behind (pg_index.indisvalid =
+//     false); it is dropped CONCURRENTLY and rebuilt.
+//   * Only when all five ArticleSearch indexes are valid are the old Article_*_trgm_idx
+//     dropped (CONCURRENTLY). An older image recreates them on rollback; the next start
+//     of this version drops them again.
+//   * PRISMA_PG_TRGM=0, a missing pg_trgm extension that this role cannot create, or no
+//     privilege: nothing is built and search keeps using unindexed ILIKE.
 
-    for (const column of ARTICLE_TEXT_COLUMNS) {
-        const indexName = `ArticleSearch_${column}_trgm_idx`;
-        await db.$executeRawUnsafe(
-            `CREATE INDEX IF NOT EXISTS "${indexName}" ON "ArticleSearch" USING GIN ("${column}" gin_trgm_ops)`
-        );
+export type PostgresSearchIndexState = "pending" | "building" | "ready" | "unavailable" | "error";
+export type PostgresSearchIndexStatus = { state: PostgresSearchIndexState; detail?: string };
+const PG_INDEX_STATUS_KEY = "__feedferret_pg_search_indexes__";
+const pgStatusStore = globalThis as unknown as Record<string, PostgresSearchIndexStatus | undefined>;
+function setPgIndexStatus(status: PostgresSearchIndexStatus) { pgStatusStore[PG_INDEX_STATUS_KEY] = status; }
+export function postgresSearchIndexStatus(): PostgresSearchIndexStatus {
+    return pgStatusStore[PG_INDEX_STATUS_KEY] ?? { state: "pending" };
+}
+
+// Distinct from the schema-migration lock in scripts/db-migrate.mjs.
+const PG_SEARCH_INDEX_LOCK_KEY = "4207513662990112";
+export const LEGACY_ARTICLE_TRGM_INDEXES = ARTICLE_TEXT_COLUMNS.map(column => `Article_${column}_trgm_idx`);
+
+async function ensurePostgresTrigramIndexes(url: string | undefined) {
+    if (process.env.PRISMA_PG_TRGM === "0") {
+        setPgIndexStatus({ state: "unavailable", detail: "PRISMA_PG_TRGM=0" });
+        return;
+    }
+    if (!url) throw new Error("DATABASE_URL is not set");
+    const client = new pg.Client({ connectionString: url });
+    client.on("error", (err) => console.warn("[search-indexes] index connection error", err));
+    await client.connect();
+    try {
+        // Index builds can legitimately run for minutes; a role-level statement_timeout must not abort them.
+        await client.query("SET statement_timeout = 0");
+        const hasExtension = async () => ((await client.query("SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'")).rowCount ?? 0) > 0;
+        if (!(await hasExtension())) {
+            try {
+                await client.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+            } catch (err) {
+                setPgIndexStatus({ state: "unavailable", detail: "pg_trgm extension missing and not installable by this role" });
+                console.warn("[search-indexes] pg_trgm is not available; search uses unindexed ILIKE.", err instanceof Error ? err.message : err);
+                return;
+            }
+        }
+        const { rows } = await client.query("SELECT pg_try_advisory_lock($1::bigint) AS ok", [PG_SEARCH_INDEX_LOCK_KEY]);
+        if (!rows[0]?.ok) {
+            setPgIndexStatus({ state: "building", detail: "another instance holds the search index lock" });
+            console.info("[search-indexes] Another instance is building the search indexes; skipping.");
+            return;
+        }
+        try {
+            const validity = async (name: string): Promise<boolean | null> => {
+                const r = await client.query<{ valid: boolean }>(
+                    "SELECT i.indisvalid AS valid FROM pg_index i WHERE i.indexrelid = to_regclass($1)", [`"${name}"`]
+                );
+                return r.rows.length ? r.rows[0].valid : null;
+            };
+            for (const column of ARTICLE_TEXT_COLUMNS) {
+                const name = `ArticleSearch_${column}_trgm_idx`;
+                const valid = await validity(name);
+                if (valid) continue;
+                if (valid === false) {
+                    console.warn(`[search-indexes] ${name} is INVALID (interrupted concurrent build); dropping and rebuilding.`);
+                    await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${name}"`);
+                }
+                setPgIndexStatus({ state: "building", detail: name });
+                const started = Date.now();
+                console.info(`[search-indexes] Building ${name} concurrently (search works meanwhile, unindexed)...`);
+                await client.query(`CREATE INDEX CONCURRENTLY IF NOT EXISTS "${name}" ON "ArticleSearch" USING GIN ("${column}" gin_trgm_ops)`);
+                if (!(await validity(name))) throw new Error(`${name} is not valid after CREATE INDEX CONCURRENTLY`);
+                console.info(`[search-indexes] ${name} built in ${((Date.now() - started) / 1000).toFixed(1)} s.`);
+            }
+            for (const name of LEGACY_ARTICLE_TRGM_INDEXES) {
+                if ((await validity(name)) === null) continue;
+                await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "${name}"`);
+                console.info(`[search-indexes] Dropped legacy ${name} (replaced by the ArticleSearch index).`);
+            }
+            setPgIndexStatus({ state: "ready" });
+        } finally {
+            await client.query("SELECT pg_advisory_unlock($1::bigint)", [PG_SEARCH_INDEX_LOCK_KEY]).catch(() => {});
+        }
+    } catch (err) {
+        setPgIndexStatus({ state: "error", detail: err instanceof Error ? err.message : String(err) });
+        throw err;
+    } finally {
+        await client.end().catch(() => {});
     }
 }
 

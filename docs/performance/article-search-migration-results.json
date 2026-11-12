@@ -1,0 +1,123 @@
+{
+  "articles": 200000,
+  "writers": 2,
+  "trials": [
+    {
+      "trial": 1,
+      "ok": true,
+      "migrateSeconds": 5.6,
+      "exit": 0,
+      "deadlock": false,
+      "deferred": false,
+      "writerOps": 107,
+      "writerErrors": {},
+      "a": 200092,
+      "s": 200092,
+      "triggers": 2,
+      "legacy": 5,
+      "search": 0,
+      "contentMismatches": 0
+    },
+    {
+      "trial": 2,
+      "ok": true,
+      "migrateSeconds": 4.8,
+      "exit": 0,
+      "deadlock": false,
+      "deferred": false,
+      "writerOps": 106,
+      "writerErrors": {},
+      "a": 200179,
+      "s": 200179,
+      "triggers": 2,
+      "legacy": 5,
+      "search": 0,
+      "contentMismatches": 0
+    },
+    {
+      "trial": 3,
+      "ok": true,
+      "migrateSeconds": 5.6,
+      "exit": 0,
+      "deadlock": false,
+      "deferred": false,
+      "writerOps": 65,
+      "writerErrors": {},
+      "a": 200230,
+      "s": 200230,
+      "triggers": 2,
+      "legacy": 5,
+      "search": 0,
+      "contentMismatches": 0
+    }
+  ],
+  "indexBuild": {
+    "ok": true,
+    "seconds": 295.2,
+    "perIndex": [
+      {
+        "index": "ArticleSearch_title_trgm_idx",
+        "seconds": 3.3
+      },
+      {
+        "index": "ArticleSearch_content_trgm_idx",
+        "seconds": 178.5
+      },
+      {
+        "index": "ArticleSearch_excerpt_trgm_idx",
+        "seconds": 42.8
+      },
+      {
+        "index": "ArticleSearch_author_trgm_idx",
+        "seconds": 4.1
+      },
+      {
+        "index": "ArticleSearch_entities_trgm_idx",
+        "seconds": 0.4
+      }
+    ],
+    "writerOps": 1376,
+    "writerErrors": {},
+    "projection_total": "824 MB",
+    "projection_indexes": "405 MB",
+    "a": 201356,
+    "s": 201356,
+    "triggers": 2,
+    "legacy": 0,
+    "search": 5,
+    "contentMismatches": 0
+  },
+  "kills": [
+    {
+      "phase": "CREATE INDEX CONCURRENTLY",
+      "ok": true,
+      "invalidLeftover": 1,
+      "rebuiltOnRestart": true,
+      "a": 201356,
+      "s": 201356,
+      "triggers": 2,
+      "legacy": 0,
+      "search": 5,
+      "contentMismatches": 0
+    },
+    {
+      "phase": "migration backfill",
+      "ok": true,
+      "killedBackends": 1,
+      "firstStartBlockedP3009": true,
+      "restartExit": 0,
+      "writerErrors": {},
+      "a": 202243,
+      "s": 202243,
+      "triggers": 2,
+      "legacy": 0,
+      "search": 0,
+      "contentMismatches": 0
+    }
+  ],
+  "legacyIndexBuildSeconds": 71.5,
+  "articleSize": {
+    "total": "902 MB",
+    "heap_toast": "398 MB"
+  }
+}
