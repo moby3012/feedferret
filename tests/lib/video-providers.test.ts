@@ -39,6 +39,12 @@ describe("sanitized presentation pipeline", () => {
     expect(html).not.toContain("data-ff-video");
     expect(await render("", "", "https://peer.example/videos/watch/abc")).toContain('target="_blank"');
   });
+  it("turns alternative Reddit and Twitter embeds into inert navigation links", async () => {
+    const html = await render('<iframe src="https://platform.twitter.com/embed/Tweet.html?id=123"></iframe><iframe src="https://www.redditmedia.com/r/test/comments/abc"></iframe>', "", undefined, { mediaTwitterInstance: "https://social.example", mediaRedditFrontend: "https://forum.example" });
+    expect(html).toContain('href="https://social.example/i/status/123"');
+    expect(html).toContain('href="https://forum.example/r/test/comments/abc"');
+    expect(html).not.toContain("<iframe");
+  });
   it("inlines gallery images exposed by Reddit RSS", async () => {
     const html = await render('<a href="https://preview.redd.it/a.jpg?width=1080">image</a><a href="https://i.redd.it/b.jpg">image</a><a href="https://v.redd.it/abc">video</a>', "01".repeat(32), "https://reddit.com/r/test/comments/abc");
     expect(html.match(/<img/g)).toHaveLength(2);

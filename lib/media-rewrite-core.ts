@@ -46,7 +46,17 @@ export function rewriteMediaInProcess({ html, base, keyHex, frontends = {}, play
       try { absolute = new URL(raw, base).href; } catch { continue; }
       const box = placeholder(absolute);
       if (box) el.replaceWith(box);
-      else if (el.tagName === "IFRAME") el.remove();
+      else if (el.tagName === "IFRAME") {
+        const alternative = alternativeUrl(absolute, frontends);
+        if (alternative !== absolute) {
+          const link = dom.window.document.createElement("a");
+          link.href = alternative;
+          link.textContent = alternative;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          el.replaceWith(link);
+        } else el.remove();
+      }
       else if (el.tagName === "A") {
         const alternative = alternativeUrl(absolute, frontends);
         if (alternative !== absolute) { el.setAttribute("href", alternative); el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener noreferrer"); }

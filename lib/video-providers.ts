@@ -62,9 +62,13 @@ export function alternativeUrl(raw: string, settings: Frontends): string {
       const id = new URL(video.embed!).pathname.split("/").at(-1)!;
       return `${origin}/watch?v=${id}`;
     }
-    if (["reddit.com", "www.reddit.com", "old.reddit.com", "new.reddit.com"].includes(u.hostname) && settings.mediaRedditFrontend) {
+    if (["reddit.com", "www.reddit.com", "old.reddit.com", "new.reddit.com", "www.redditmedia.com", "embed.reddit.com"].includes(u.hostname) && settings.mediaRedditFrontend) {
       const origin = settings.mediaRedditFrontend === "old" ? "https://old.reddit.com" : validateInstance(settings.mediaRedditFrontend);
       return origin + u.pathname + u.search + u.hash;
+    }
+    if (u.hostname === "platform.twitter.com" && u.pathname === "/embed/Tweet.html" && settings.mediaTwitterInstance) {
+      const id = u.searchParams.get("id") ?? "";
+      if (/^\d+$/.test(id)) return validateInstance(settings.mediaTwitterInstance) + "/i/status/" + id;
     }
     if (["twitter.com", "www.twitter.com", "x.com", "www.x.com", "mobile.twitter.com"].includes(u.hostname) && settings.mediaTwitterInstance) {
       return validateInstance(settings.mediaTwitterInstance) + u.pathname + u.search + u.hash;
