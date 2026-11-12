@@ -337,6 +337,20 @@ export const RATE_LIMITS = {
     windowSecs: 60,
     prefix: "newsletter-unsubscribe",
   } satisfies RateLimitConfig,
+
+  // N1 PR C: inbound-email webhook (spec §6.3), 60 mails/min per source + client IP
+  inboundEmailWebhook: {
+    limit: 60,
+    windowSecs: 60,
+    prefix: "inbound-email-webhook",
+  } satisfies RateLimitConfig,
+
+  // N1 PR C: wrong signature / password on the webhook, 10 per 5 min per source + client IP
+  inboundEmailWebhookAuthFail: {
+    limit: 10,
+    windowSecs: 5 * 60,
+    prefix: "inbound-email-webhook-auth-fail",
+  } satisfies RateLimitConfig,
 } as const;
 
 /**

@@ -1,5 +1,6 @@
 // N1 PR B: per-user newsletter addresses on top of the admin's inbound source.
 import { db } from "@/lib/db";
+import { INBOUND_KINDS } from "@/lib/newsletter-constants";
 import { generateNewsletterToken, newsletterAddressFor } from "@/lib/inbound-email";
 
 /** Most addresses a user may hold (active + deactivated). */
@@ -10,8 +11,8 @@ export type InboundSourceSummary = { id: string; kind: string; address: string |
 /** The inbound source user addresses derive from (IMAP first), or null when none is set up. */
 export async function getInboundSource(): Promise<InboundSourceSummary | null> {
   const sources = await db.inboundMailSource.findMany({
-    // A disconnected IMAP row only remembers the last mailbox: not a source.
-    where: { address: { not: null }, kind: { not: "imap-disconnected" } },
+    // A disconnected row only remembers the last base address: not a source.
+    where: { address: { not: null }, kind: { in: [...INBOUND_KINDS] } },
     select: { id: true, kind: true, address: true, paused: true },
     orderBy: { createdAt: "asc" },
   });

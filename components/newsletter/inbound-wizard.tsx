@@ -1,14 +1,15 @@
 "use client";
 
-// N1 PR B: admin wizard "Newsletter-Eingang" (spec §10) — 3 steps:
-// 1 choose the way in (IMAP recommended; Cloudflare/webhook coming later),
-// 2 connect (address + app password, server auto-detected), 3 end-to-end test.
+// N1 PR B/C: admin wizard "Newsletter-Eingang" (spec §10) — 3 steps:
+// 1 choose the way in (IMAP recommended; own domain via Cloudflare; mail service webhook),
+// 2 connect (IMAP: address + app password, server auto-detected; Cloudflare / webhook:
+//   domain + generated secret, worker script / URL to copy), 3 end-to-end test.
 // Afterwards a status card (way, last mail, errors, pause / disconnect).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { CheckCircle2, ChevronDown, Cloud, ExternalLink, Inbox, Loader2, Mail, Send, TriangleAlert, Webhook, Copy } from "lucide-react";
+import { CheckCircle2, ChevronDown, Cloud, ExternalLink, Inbox, Loader2, Mail, Send, TriangleAlert, Webhook } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { CopyButton } from "@/components/newsletter/copy-button";
+import { DomainConnectStep, webhookUrl } from "@/components/newsletter/inbound-domain-setup";
+import { isWebhookKind, type WebhookKind } from "@/lib/newsletter-constants";
 import {
   checkNewsletterTestMail,
   detectNewsletterImapServer,
@@ -47,9 +51,11 @@ const FATAL_POLL_ERRORS = new Set(["auth-failed", "app-password-required", "imap
 const ERROR_CODES = [
   "confirm-address-change", "invalid-email", "no-server", "password-required", "invalid-server", "auth-failed", "app-password-required", "imap-disabled",
   "tls", "timeout", "host-blocked", "host-not-found", "unreachable", "folder", "credentials-unreadable", "no-source", "send-failed", "unknown",
+  "invalid-domain", "invalid-way", "mail-unparseable", "mail-too-large", "payload-unsupported",
 ] as const;
 
 type Step = "choose" | "connect" | "test";
+type Way = "imap" | WebhookKind;
 type State = { source: InboundSourceView | null; mailAvailable: boolean; testAddress: string | null };
 
 function useErrorText() {
@@ -61,6 +67,7 @@ export function NewsletterInboundPanel() {
   const t = useTranslations("newsletterInbound");
   const [state, setState] = useState<State | null>(null);
   const [step, setStep] = useState<Step | null>(null);
+  const [way, setWay] = useState<Way>("imap");
   const [loadError, setLoadError] = useState(false);
 
   const reload = useCallback(async () => {
@@ -101,19 +108,38 @@ export function NewsletterInboundPanel() {
       {showWizard ? (
         <>
           <StepIndicator step={current} />
-          {current === "choose" && <ChooseStep onNext={() => setStep("connect")} />}
-          {current === "connect" && (
-            <ConnectStep
-              source={state.source}
-              onBack={() => setStep(state.source ? null : "choose")}
-              onSaved={async () => {
-                await reload();
-                setStep("test");
+          {current === "choose" && (
+            <ChooseStep
+              onPick={(picked) => {
+                setWay(picked);
+                setStep("connect");
               }}
             />
           )}
+          {current === "connect" &&
+            (way === "imap" ? (
+              <ConnectStep
+                source={state.source}
+                onBack={() => setStep(state.source ? null : "choose")}
+                onSaved={async () => {
+                  await reload();
+                  setStep("test");
+                }}
+              />
+            ) : (
+              <DomainConnectStep
+                way={way}
+                source={state.source}
+                onBack={() => setStep(state.source ? null : "choose")}
+                onSaved={async () => {
+                  await reload();
+                  setStep("test");
+                }}
+              />
+            ))}
           {current === "test" && (
             <TestStep
+              push={isWebhookKind(state.source?.kind)}
               mailAvailable={state.mailAvailable}
               onDone={async () => {
                 await reload();
@@ -125,7 +151,10 @@ export function NewsletterInboundPanel() {
       ) : (
         <StatusCard
           source={state.source!}
-          onEdit={() => setStep("connect")}
+          onEdit={() => {
+            setWay(isWebhookKind(state.source?.kind) ? (state.source!.kind as WebhookKind) : "imap");
+            setStep("connect");
+          }}
           onTest={() => setStep("test")}
           onChanged={(source) => setState({ ...state, source })}
           onDisconnected={async () => {
@@ -161,12 +190,11 @@ function StepIndicator({ step }: { step: Step }) {
   );
 }
 
-function PathCard({ icon: Icon, title, body, badge, disabled, selected, onClick, testId }: {
+function PathCard({ icon: Icon, title, body, badge, selected, onClick, testId }: {
   icon: typeof Inbox;
   title: string;
   body: string;
   badge: string;
-  disabled?: boolean;
   selected?: boolean;
   onClick?: () => void;
   testId: string;
@@ -174,14 +202,13 @@ function PathCard({ icon: Icon, title, body, badge, disabled, selected, onClick,
   return (
     <button
       type="button"
-      disabled={disabled}
       aria-pressed={selected}
       onClick={onClick}
       data-testid={testId}
       className={cn(
         "flex w-full items-start gap-4 rounded-panel border p-4 text-start transition-colors duration-(--dur-fast) focus-ring",
         selected ? "border-brand bg-brand/5" : "border-border/60 bg-card",
-        disabled ? "cursor-not-allowed opacity-60" : "hover:bg-surface-sunken",
+        "hover:bg-surface-sunken",
       )}
     >
       <span className="ui-brand-icon flex size-10 shrink-0 items-center justify-center rounded-control">
@@ -190,7 +217,7 @@ function PathCard({ icon: Icon, title, body, badge, disabled, selected, onClick,
       <span className="min-w-0 flex-1 space-y-1">
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-body font-semibold">{title}</span>
-          <span className={cn("rounded-full px-2 py-0.5 text-caption font-medium", disabled ? "bg-muted text-muted-foreground" : "bg-success/10 text-success")}>{badge}</span>
+          <span className="rounded-full bg-success/10 px-2 py-0.5 text-caption font-medium text-success">{badge}</span>
         </span>
         <span className="block text-body-sm text-muted-foreground">{body}</span>
       </span>
@@ -198,17 +225,17 @@ function PathCard({ icon: Icon, title, body, badge, disabled, selected, onClick,
   );
 }
 
-function ChooseStep({ onNext }: { onNext: () => void }) {
+function ChooseStep({ onPick }: { onPick: (way: Way) => void }) {
   const t = useTranslations("newsletterInbound");
   return (
     <section className="space-y-3" aria-labelledby="nl-choose-title">
       <h3 id="nl-choose-title" className="text-body font-semibold">{t("chooseTitle")}</h3>
-      <PathCard icon={Inbox} title={t("pathImapTitle")} body={t("pathImapBody")} badge={t("recommended")} selected onClick={onNext} testId="nl-path-imap" />
-      <PathCard icon={Cloud} title={t("pathCloudflareTitle")} body={t("pathCloudflareBody")} badge={t("comingSoon")} disabled testId="nl-path-cloudflare" />
-      <PathCard icon={Webhook} title={t("pathWebhookTitle")} body={t("pathWebhookBody")} badge={t("comingSoon")} disabled testId="nl-path-webhook" />
+      <PathCard icon={Inbox} title={t("pathImapTitle")} body={t("pathImapBody")} badge={t("recommended")} selected onClick={() => onPick("imap")} testId="nl-path-imap" />
+      <PathCard icon={Cloud} title={t("pathCloudflareTitle")} body={t("pathCloudflareBody")} badge={t("badgeDomain")} onClick={() => onPick("cloudflare")} testId="nl-path-cloudflare" />
+      <PathCard icon={Webhook} title={t("pathWebhookTitle")} body={t("pathWebhookBody")} badge={t("badgeDomain")} onClick={() => onPick("webhook")} testId="nl-path-webhook" />
       <p className="text-footnote text-muted-foreground">{t("tipDedicated")}</p>
       <div className="flex justify-end">
-        <Button onClick={onNext} data-testid="nl-choose-next">{t("next")}</Button>
+        <Button onClick={() => onPick("imap")} data-testid="nl-choose-next">{t("next")}</Button>
       </div>
     </section>
   );
@@ -447,31 +474,7 @@ function ConnectStep({ source, onBack, onSaved }: { source: InboundSourceView | 
   );
 }
 
-function CopyButton({ value, testId }: { value: string; testId?: string }) {
-  const t = useTranslations("newsletterInbound");
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      data-testid={testId}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        } catch {
-          toast.error(t("errors.unknown"));
-        }
-      }}
-    >
-      <Copy className="size-4" aria-hidden />
-      {copied ? t("copied") : t("copy")}
-    </Button>
-  );
-}
-
-function TestStep({ mailAvailable, onDone }: { mailAvailable: boolean; onDone: () => void | Promise<void> }) {
+function TestStep({ mailAvailable, push, onDone }: { mailAvailable: boolean; push: boolean; onDone: () => void | Promise<void> }) {
   const t = useTranslations("newsletterInbound");
   const errorText = useErrorText();
   const [phase, setPhase] = useState<"idle" | "sending" | "waiting" | "arrived" | "timeout" | "failed">("idle");
@@ -612,7 +615,7 @@ function TestStep({ mailAvailable, onDone }: { mailAvailable: boolean; onDone: (
             {t("arrived", { seconds: arrivedIn ?? 0 })}
           </p>
         )}
-        {phase === "timeout" && <p className="text-body-sm text-warning">{t("waitingLong")}</p>}
+        {phase === "timeout" && <p className="text-body-sm text-warning">{t(push ? "waitingLongPush" : "waitingLong")}</p>}
         {phase === "failed" && <p className="text-body-sm text-danger" data-testid="nl-test-failed">{t("testFailed")}</p>}
         {lastPollError && phase !== "arrived" && <p className="mt-2 text-footnote text-danger">{errorText(lastPollError)}</p>}
         {error && <p role="alert" className="mt-2 text-footnote text-danger">{error}</p>}
@@ -651,6 +654,7 @@ function StatusCard({ source, onEdit, onTest, onChanged, onDisconnected }: {
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const status = source.paused ? "paused" : source.errorCount > 0 ? "error" : "ok";
+  const domainWay = isWebhookKind(source.kind);
   const when = (iso: string | null) => (iso ? format.relativeTime(new Date(iso)) : t("never"));
 
   const togglePause = async () => {
@@ -679,9 +683,21 @@ function StatusCard({ source, onEdit, onTest, onChanged, onDisconnected }: {
       </div>
       <dl className="grid gap-x-6 gap-y-2 text-body-sm sm:grid-cols-[auto_1fr]">
         <dt className="text-muted-foreground">{t("statusPath")}</dt>
-        <dd>{t("pathImap")}{source.preset ? ` · ${source.preset.label}` : ""}</dd>
-        <dt className="text-muted-foreground">{t("statusMailbox")}</dt>
+        <dd data-testid="nl-status-path">
+          {t(source.kind === "cloudflare" ? "pathCloudflare" : source.kind === "webhook" ? "pathWebhook" : "pathImap")}
+          {source.preset ? ` · ${source.preset.label}` : ""}
+        </dd>
+        <dt className="text-muted-foreground">{t(domainWay ? "statusDomain" : "statusMailbox")}</dt>
         <dd className="break-all">{source.address}</dd>
+        {domainWay && source.webhookPath && (
+          <>
+            <dt className="text-muted-foreground">{t("statusEndpoint")}</dt>
+            <dd className="flex flex-wrap items-center gap-2">
+              <code className="min-w-0 break-all rounded-control bg-surface-sunken px-2 py-1 text-footnote" data-testid="nl-status-endpoint">{webhookUrl(source.webhookPath)}</code>
+              <CopyButton value={webhookUrl(source.webhookPath)} label={t("statusEndpoint")} />
+            </dd>
+          </>
+        )}
         <dt className="text-muted-foreground">{t("lastMail")}</dt>
         <dd data-testid="nl-last-mail">{when(source.lastReceivedAt)}</dd>
         <dt className="text-muted-foreground">{t("lastCheck")}</dt>
@@ -697,7 +713,7 @@ function StatusCard({ source, onEdit, onTest, onChanged, onDisconnected }: {
       </dl>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={onTest} data-testid="nl-status-test">{t("runTest")}</Button>
-        <Button variant="outline" size="sm" onClick={onEdit} data-testid="nl-status-edit">{t("edit")}</Button>
+        <Button variant="outline" size="sm" onClick={onEdit} data-testid="nl-status-edit">{t(domainWay ? "editDomain" : "edit")}</Button>
         <Button variant="outline" size="sm" onClick={togglePause} disabled={busy} data-testid="nl-status-pause">{source.paused ? t("resume") : t("pause")}</Button>
         <Button variant="ghost" size="sm" className="text-danger" onClick={() => setConfirm(true)} data-testid="nl-status-disconnect">{t("disconnect")}</Button>
       </div>
@@ -705,8 +721,8 @@ function StatusCard({ source, onEdit, onTest, onChanged, onDisconnected }: {
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("disconnectTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>{t("disconnectBody")}</AlertDialogDescription>
+            <AlertDialogTitle>{t(domainWay ? "disconnectDomainTitle" : "disconnectTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t(domainWay ? "disconnectDomainBody" : "disconnectBody")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
