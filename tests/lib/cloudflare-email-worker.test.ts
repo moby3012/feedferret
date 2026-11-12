@@ -82,7 +82,7 @@ describe("the generated worker", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it.each([401, 403, 404, 410, 413])("bounces permanently on HTTP %i", async (status) => {
+  it.each([404, 410, 413])("bounces permanently only for final answers: HTTP %i", async (status) => {
     const worker = load(renderCloudflareEmailWorker(URL_, SECRET));
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status })));
     const msg = message();
@@ -91,7 +91,7 @@ describe("the generated worker", () => {
     expect(msg.setReject).toHaveBeenCalledWith(expect.stringContaining(String(status)));
   });
 
-  it.each([429, 500, 503])("throws (temporary failure) on HTTP %i", async (status) => {
+  it.each([401, 403, 429, 500, 502, 503])("throws (no hard bounce) on HTTP %i: paused source, rotated secret, clock drift, limits, outages", async (status) => {
     const worker = load(renderCloudflareEmailWorker(URL_, SECRET));
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status })));
     const msg = message();

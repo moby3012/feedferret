@@ -355,6 +355,17 @@ describe("webhook ways (Cloudflare / Postmark / Mailgun)", () => {
     expect(await save()).toEqual({ ok: false, code: "confirm-address-change" });
   });
 
+  it("rotating the secret of a paused source keeps it paused; a new way starts active", async () => {
+    await save();
+    await admin.setNewsletterInboundPaused({ paused: true });
+    const rotated = await save();
+    expect(rotated.ok && rotated.source.paused).toBe(true);
+    expect(h.store.rows[0].paused).toBe(true);
+    // Another way (webhook instead of cloudflare) is a fresh setup.
+    const other = await save({ kind: "webhook" });
+    expect(other.ok && other.source.paused).toBe(false);
+  });
+
   it("pauses and disconnects like a mailbox: secret wiped, reconnecting the same domain keeps addresses", async () => {
     await save();
     expect((await admin.setNewsletterInboundPaused({ paused: true })).source?.paused).toBe(true);

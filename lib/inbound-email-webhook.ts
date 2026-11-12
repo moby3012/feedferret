@@ -11,11 +11,19 @@
 //
 // Security model:
 //   - The signature covers `timestamp \n recipient \n body` (HMAC-SHA256, hex)
-//     and is compared in constant time; only a valid signature can be "stale"
-//     (±5 min), so the response never tells an outsider anything about the key.
-//   - Per source + client IP: 60 requests/min, and 10 failed authentications per
-//     5 min lock further attempts out. Failed attempts never write to the DB.
-//   - The body is capped while streaming (Content-Length is not trusted).
+//     and is compared in constant time.
+//   - Rate limits are keyed by the client alone, NOT by source id: the id comes
+//     from the URL (attacker-chosen), and one entry per random id would let a
+//     flood evict other limiters (sign-in lockout) from the shared store. 60
+//     requests/min; failed authentications are counted (10 per 5 min, then 429
+//     instead of 401). A request that authenticates is never locked out. Failed
+//     attempts never write to the DB.
+//   - Credentials are checked before the body is buffered wherever possible
+//     (Basic fully; signature: format + timestamp window). At most
+//     MAX_CONCURRENT_WEBHOOK_REQUESTS bodies are buffered at once (503 +
+//     Retry-After beyond that), the body is capped while streaming
+//     (Content-Length is not trusted) and a stalled body is cut off after
+//     BODY_TIMEOUT_MS.
 //   - A paused/disconnected source answers 403 before the body is read.
 //   - Logs carry ids and status codes only — never bodies, headers or secrets.
 
@@ -23,7 +31,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { readPlainColumnState, sealSecret } from "@/lib/secret-box";
-import { checkRateLimit, consumeRateLimit, getClientIdentifier, peekRateLimit, rateLimitHeaders, RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimit, getClientIdentifier, rateLimitHeaders, RATE_LIMITS } from "@/lib/rate-limit";
 import { ingestRawEmail, MAX_RAW_EMAIL_BYTES, type IngestResult } from "@/lib/inbound-email";
 import { adaptInboundPayload } from "@/lib/inbound-email-adapters";
 import { afterIngest } from "@/lib/newsletter-after-ingest";
@@ -35,6 +43,10 @@ export const TIMESTAMP_HEADER = "x-feedferret-timestamp";
 export const RECIPIENT_HEADER = "x-feedferret-recipient";
 /** Allowed clock difference between sender and server (replay window). */
 export const SIGNATURE_TOLERANCE_SECS = 5 * 60;
+/** Bodies buffered at the same time, instance-wide (13 MB each): the rest gets 503. */
+export const MAX_CONCURRENT_WEBHOOK_REQUESTS = 4;
+/** A body that has not fully arrived by then is dropped (slow-loris). */
+export const BODY_TIMEOUT_MS = 30_000;
 /** Raw mail limit (10 MB) plus base64 inflation for JSON payloads with attachments. */
 export const MAX_WEBHOOK_BODY_BYTES = Math.ceil((MAX_RAW_EMAIL_BYTES * 4) / 3) + 64 * 1024;
 
@@ -103,23 +115,43 @@ export function verifyBasicSecret(authorization: string | null, secret: string):
 // ---------------------------------------------------------------------------
 // Body
 
-/** Reads at most `limit` bytes; null when the body is (or declares itself) larger. */
-export async function readBodyCapped(request: Request, limit: number): Promise<Buffer | null> {
+export class BodyTimeoutError extends Error {
+  constructor() {
+    super("request body timed out");
+    this.name = "BodyTimeoutError";
+  }
+}
+
+/** Reads at most `limit` bytes; null when the body is (or declares itself) larger; throws BodyTimeoutError when it stalls. */
+export async function readBodyCapped(request: Request, limit: number, timeoutMs = BODY_TIMEOUT_MS): Promise<Buffer | null> {
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > limit) return null;
   if (!request.body) return Buffer.alloc(0);
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > limit) {
-      await reader.cancel().catch(() => undefined);
-      return null;
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    void reader.cancel().catch(() => undefined);
+  }, timeoutMs);
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (timedOut) throw new BodyTimeoutError();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch (error) {
+    if (timedOut) throw new BodyTimeoutError();
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
   return Buffer.concat(chunks, total);
 }
@@ -138,17 +170,27 @@ const bookkeeping = (sourceId: string, data: Record<string, unknown>) =>
 /** Stored in `InboundMailSource.lastError` (wizard maps them to copy). */
 export type WebhookErrorCode = "mail-unparseable" | "mail-too-large" | "payload-unsupported";
 
+let inFlight = 0;
+/** Webhook requests currently holding a body slot (tests). */
+export const inFlightWebhookRequests = () => inFlight;
+
+const SIGNATURE_FORMAT_RE = /^(?:sha256=)?[0-9a-f]{64}$/i;
+
+type AuthFailed = (error: string, status?: number, extra?: HeadersInit) => Response;
+
 export async function handleInboundEmailWebhook(request: Request, sourceId: string): Promise<Response> {
   if (!SOURCE_ID_RE.test(sourceId)) return reply(404, { error: "not-found" });
 
-  const client = `${sourceId}:${getClientIdentifier(request)}`;
+  // Keyed by the client alone: the source id comes from the URL, i.e. from the attacker.
+  const client = getClientIdentifier(request);
   const limited = checkRateLimit(client, RATE_LIMITS.inboundEmailWebhook);
   if (!limited.success) return reply(429, { error: "rate-limited" }, rateLimitHeaders(limited));
-  const lockout = peekRateLimit(client, RATE_LIMITS.inboundEmailWebhookAuthFail);
-  if (!lockout.success) return reply(429, { error: "too-many-failed-attempts" }, rateLimitHeaders({ ...lockout, retryAfterSecs: Math.ceil((lockout.resetAt - Date.now()) / 1000) }));
-  const authFailed = (error: string, status = 401, extra: HeadersInit = {}) => {
-    consumeRateLimit(client, RATE_LIMITS.inboundEmailWebhookAuthFail, 1);
+  // Counts a failed authentication (check + increment in one step); once the
+  // budget is spent the answer turns from 401 into 429.
+  const authFailed: AuthFailed = (error, status = 401, extra = {}) => {
+    const budget = checkRateLimit(client, RATE_LIMITS.inboundEmailWebhookAuthFail);
     logger.warn("[inbound-email-webhook] rejected", { sourceId, reason: error });
+    if (!budget.success) return reply(429, { error: "too-many-failed-attempts" }, rateLimitHeaders(budget));
     return reply(status, { error }, extra);
   };
 
@@ -163,27 +205,56 @@ export async function handleInboundEmailWebhook(request: Request, sourceId: stri
     return reply(503, { error: "source-not-configured" });
   }
 
-  const body = await readBodyCapped(request, MAX_WEBHOOK_BODY_BYTES).catch(() => undefined);
-  if (body === undefined) return reply(400, { error: "unreadable-body" });
-  if (body === null) return reply(413, { error: "payload-too-large" });
-
+  // Everything that can be checked without the body is checked first.
   const recipientHeader = request.headers.get(RECIPIENT_HEADER);
   const signature = request.headers.get(SIGNATURE_HEADER);
   const authorization = request.headers.get("authorization");
-  if (signature) {
-    const verdict = verifyInboundSignature({
-      secret,
-      signatureHeader: signature,
-      timestampHeader: request.headers.get(TIMESTAMP_HEADER),
-      recipient: recipientHeader ?? "",
-      body,
-    });
+  const timestamp = request.headers.get(TIMESTAMP_HEADER);
+  const mode: "signature" | "basic" | null = signature ? "signature" : authorization ? "basic" : null;
+  if (mode === null) return authFailed("unauthorized", 401, { "www-authenticate": 'Basic realm="FeedFerret inbound email"' });
+  if (mode === "basic" && !verifyBasicSecret(authorization, secret)) return authFailed("invalid-credentials");
+  if (mode === "signature") {
+    const ts = (timestamp ?? "").trim();
+    if (!SIGNATURE_FORMAT_RE.test((signature ?? "").trim()) || !/^\d{1,12}$/.test(ts)) return authFailed("invalid-signature");
+    if (Math.abs(Math.floor(Date.now() / 1000) - Number(ts)) > SIGNATURE_TOLERANCE_SECS) return authFailed("timestamp-out-of-window");
+  }
+
+  // Bounded memory: only a few (up to 13 MB) bodies at once, instance-wide.
+  if (inFlight >= MAX_CONCURRENT_WEBHOOK_REQUESTS) return reply(503, { error: "busy" }, { "retry-after": "5" });
+  inFlight += 1;
+  try {
+    return await processBody(request, { sourceId, secret, mode, signature, timestamp, recipientHeader, authFailed });
+  } finally {
+    inFlight -= 1;
+  }
+}
+
+async function processBody(
+  request: Request,
+  ctx: {
+    sourceId: string;
+    secret: string;
+    mode: "signature" | "basic";
+    signature: string | null;
+    timestamp: string | null;
+    recipientHeader: string | null;
+    authFailed: AuthFailed;
+  },
+): Promise<Response> {
+  const { sourceId, secret, mode, signature, timestamp, recipientHeader, authFailed } = ctx;
+  let body: Buffer | null;
+  try {
+    body = await readBodyCapped(request, MAX_WEBHOOK_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof BodyTimeoutError) return reply(408, { error: "request-timeout" });
+    return reply(400, { error: "unreadable-body" });
+  }
+  if (body === null) return reply(413, { error: "payload-too-large" });
+
+  if (mode === "signature") {
+    const verdict = verifyInboundSignature({ secret, signatureHeader: signature, timestampHeader: timestamp, recipient: recipientHeader ?? "", body });
     if (verdict === "stale") return authFailed("timestamp-out-of-window");
     if (verdict !== "ok") return authFailed("invalid-signature");
-  } else if (authorization) {
-    if (!verifyBasicSecret(authorization, secret)) return authFailed("invalid-credentials");
-  } else {
-    return authFailed("unauthorized", 401, { "www-authenticate": 'Basic realm="FeedFerret inbound email"' });
   }
 
   const adapted = await adaptInboundPayload(request.headers.get("content-type"), body, recipientHeader);

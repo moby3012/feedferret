@@ -27,8 +27,12 @@ vi.mock("@/lib/logger", () => {
   return { logger: { info: sink, warn: sink, error: sink, debug: sink } };
 });
 
+import { checkRateLimit, peekRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import {
+  BodyTimeoutError,
   handleInboundEmailWebhook,
+  inFlightWebhookRequests,
+  MAX_CONCURRENT_WEBHOOK_REQUESTS,
   MAX_WEBHOOK_BODY_BYTES,
   readBodyCapped,
   SIGNATURE_TOLERANCE_SECS,
@@ -161,6 +165,11 @@ describe("readBodyCapped", () => {
     expect(request.headers.get("content-length")).toBeNull();
     expect(await readBodyCapped(request, 10)).toBeNull();
   });
+  it("cuts off a body that stalls", async () => {
+    const stalled = new ReadableStream<Uint8Array>({ start: (c) => c.enqueue(new Uint8Array(4)) });
+    const request = new Request("http://x.example/", { method: "POST", body: stalled, duplex: "half" } as RequestInit);
+    await expect(readBodyCapped(request, 1000, 40)).rejects.toBeInstanceOf(BodyTimeoutError);
+  });
   it("trusts neither a lying nor a missing Content-Length", async () => {
     const declared = new Request("http://x.example/", { method: "POST", body: "tiny", headers: { "content-length": "999999999" } });
     expect(await readBodyCapped(declared, 1000)).toBeNull();
@@ -288,13 +297,107 @@ describe("handleInboundEmailWebhook", () => {
     expect((await call(request({ ip: "198.51.100.78" }))).status).toBe(200);
   });
 
-  it("locks a client out after 10 failed authentications, even for a valid request", async () => {
+  it("counts failed authentications per client: from the 11th the answer is 429, but a valid request is never locked out", async () => {
     const ip = "198.51.100.99";
     for (let i = 0; i < 10; i++) expect((await call(request({ ip, signed: false }))).status).toBe(401);
-    const locked = await call(request({ ip }));
+    const locked = await call(request({ ip, signed: false }));
     expect(locked.status).toBe(429);
     expect(await json(locked)).toEqual({ error: "too-many-failed-attempts" });
-    expect((await call(request({ ip: "198.51.100.100" }))).status).toBe(200);
+    expect((await call(request({ ip }))).status).toBe(200);
+    expect((await call(request({ ip: "198.51.100.100", signed: false }))).status).toBe(401);
+  });
+
+  it("keys the limiters on the client only: a flood of random source ids creates no per-id entries and evicts nothing", async () => {
+    // An existing limiter entry of another feature (sign-in lockout) must survive.
+    const victim = "ip:victim-198.51.100.1";
+    for (let i = 0; i < 4; i++) checkRateLimit(victim, RATE_LIMITS.authSignIn);
+    const before = peekRateLimit(victim, RATE_LIMITS.authSignIn).remaining;
+    const ip = "203.0.113.250";
+    h.db.inboundMailSource.findUnique.mockResolvedValue(null);
+    for (let i = 0; i < 30_000; i++) {
+      await handleInboundEmailWebhook(request({ ip, signed: false }), `rnd${i.toString(36).padStart(8, "0")}`);
+    }
+    expect(peekRateLimit(victim, RATE_LIMITS.authSignIn).remaining).toBe(before);
+    // Random ids from one client share ONE bucket: it is spent after 60 requests.
+    expect((await call(request({ ip }), "anotherRandomId01")).status).toBe(429);
+  });
+
+  describe("before the body is buffered", () => {
+    /** A body whose reads are observable. */
+    function observed() {
+      const state = { pulled: 0, cancelled: false };
+      // highWaterMark 0: nothing is pulled until a consumer actually reads.
+      const stream = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            state.pulled += 1;
+            controller.enqueue(new TextEncoder().encode("x"));
+            controller.close();
+          },
+          cancel() {
+            state.cancelled = true;
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      return { state, stream };
+    }
+    const withStream = (stream: ReadableStream<Uint8Array>, headers: Record<string, string>) =>
+      new Request("http://localhost/api/webhooks/inbound-email/src_webhook_1", {
+        method: "POST",
+        headers: { "x-forwarded-for": `203.0.113.${(ipSeq = (ipSeq + 1) % 250)}`, "content-type": "message/rfc822", ...headers },
+        body: stream,
+        duplex: "half",
+      } as RequestInit);
+    const ts = () => String(nowSecs());
+    const fakeSignature = `sha256=${"a".repeat(64)}`;
+
+    it.each([
+      ["wrong Basic password", { authorization: `Basic ${Buffer.from("u:wrong").toString("base64")}` }, "invalid-credentials"],
+      ["malformed signature", { "x-feedferret-signature": "sha256=zz", "x-feedferret-timestamp": ts() }, "invalid-signature"],
+      ["missing timestamp", { "x-feedferret-signature": fakeSignature }, "invalid-signature"],
+      ["non-numeric timestamp", { "x-feedferret-signature": fakeSignature, "x-feedferret-timestamp": "soon" }, "invalid-signature"],
+      ["timestamp outside the window", { "x-feedferret-signature": fakeSignature, "x-feedferret-timestamp": String(nowSecs() - 600) }, "timestamp-out-of-window"],
+      ["no credentials at all", {}, "unauthorized"],
+    ])("rejects %s without reading a byte", async (_name, headers, error) => {
+      const { state, stream } = observed();
+      const res = await call(withStream(stream, headers));
+      expect(res.status).toBe(401);
+      expect(await json(res)).toEqual({ error });
+      expect(state.pulled).toBe(0);
+      expect(inFlightWebhookRequests()).toBe(0);
+    });
+
+    it("accepts correct Basic credentials before the body arrives", async () => {
+      const { stream } = observed();
+      const res = await call(withStream(stream, { authorization: `Basic ${Buffer.from(`u:${SECRET}`).toString("base64")}`, "content-type": "application/json" }));
+      // The tiny body is not a Postmark/Mailgun payload, but it was read: 400, not 401.
+      expect(res.status).toBe(400);
+    });
+
+    it(`buffers at most ${MAX_CONCURRENT_WEBHOOK_REQUESTS} bodies at once and answers 503 + Retry-After beyond that`, async () => {
+      const controllers: ReadableStreamDefaultController<Uint8Array>[] = [];
+      const stalledRequest = () =>
+        withStream(new ReadableStream<Uint8Array>({ start: (c) => void controllers.push(c) }), {
+          "x-feedferret-signature": fakeSignature,
+          "x-feedferret-timestamp": ts(),
+        });
+      const pending = Array.from({ length: MAX_CONCURRENT_WEBHOOK_REQUESTS }, () => call(stalledRequest()));
+      await vi.waitFor(() => expect(inFlightWebhookRequests()).toBe(MAX_CONCURRENT_WEBHOOK_REQUESTS));
+
+      const busy = await call(stalledRequest());
+      expect(busy.status).toBe(503);
+      expect(busy.headers.get("retry-after")).toBe("5");
+      expect(await json(busy)).toEqual({ error: "busy" });
+      // The cap does not touch requests that fail the cheap checks.
+      expect((await call(request({ signed: false }))).status).toBe(401);
+
+      // Finishing the bodies frees the slots (bad signature: 401 each).
+      controllers.slice(0, MAX_CONCURRENT_WEBHOOK_REQUESTS).forEach((c) => c.close());
+      expect((await Promise.all(pending)).map((r) => r.status)).toEqual(Array(MAX_CONCURRENT_WEBHOOK_REQUESTS).fill(401));
+      expect(inFlightWebhookRequests()).toBe(0);
+      expect((await call(request())).status).toBe(200);
+    });
   });
 
   it("never logs bodies, subjects, headers or secrets", async () => {

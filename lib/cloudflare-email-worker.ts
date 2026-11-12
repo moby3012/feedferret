@@ -54,12 +54,19 @@ export default {
       body,
     });
     if (response.ok) return;
-    // Permanent problems (wrong secret, source paused or removed, too large): bounce.
-    if ([401, 403, 404, 410, 413].includes(response.status)) {
+    // Only a FINAL "no" is a permanent bounce (setReject = permanent SMTP error,
+    // hard bounce; mailing lists may unsubscribe the user): the source is gone
+    // (404/410) or the mail can never fit (413).
+    if ([404, 410, 413].includes(response.status)) {
       message.setReject("Not accepted by FeedFerret (HTTP " + response.status + ")");
       return;
     }
-    // Temporary problems (server down, rate limited): let Cloudflare retry / report.
+    // Everything else can be fixed on the FeedFerret side (paused source 403,
+    // wrong or rotated secret 401, clock drift 401, rate limit 429, server down
+    // 5xx): throw instead of rejecting. Cloudflare's documentation does not say
+    // what happens to the SMTP message when email() throws; the intent is a
+    // temporary failure the sending server retries, but verify that with a test
+    // mail before relying on it, and check Workers -> Logs when mail goes missing.
     throw new Error("FeedFerret answered HTTP " + response.status);
   },
 };

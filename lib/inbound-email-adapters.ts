@@ -283,7 +283,7 @@ export async function adaptInboundPayload(contentType: string | null, body: Buff
   if (type === "application/x-www-form-urlencoded" || type === "multipart/form-data") {
     let form: FormData;
     try {
-      form = await new Response(new Blob([Uint8Array.from(body)]), { headers: { "content-type": contentType ?? type } }).formData();
+      form = await new Response(new Blob([new Uint8Array(body)]), { headers: { "content-type": contentType ?? type } }).formData();
     } catch {
       return { ok: false, error: "invalid-payload" };
     }

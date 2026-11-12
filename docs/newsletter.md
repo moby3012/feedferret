@@ -39,9 +39,18 @@ The secret is shown **only once**; if you lose it, set the way up again from the
    address yourself with the shown subject). The page waits live and shows
    "arrived in N s".
 
-The worker rejects mail over 10 MB and bounces permanently when FeedFerret answers 401, 403,
-404, 410 or 413 (wrong secret, source paused or removed); it fails temporarily (Cloudflare retries /
-reports) on anything else, e.g. 429 or 5xx. Look into *Workers → Logs* if nothing arrives.
+What the worker does with FeedFerret's answer:
+
+- **200:** done.
+- **404, 410, 413** (source removed, mail too large) and mail over 10 MB: `message.setReject(…)`, a
+  *permanent* SMTP error (hard bounce). Only final "no"s get this, because mailing lists unsubscribe
+  addresses that hard-bounce.
+- **Everything else** — 401 (wrong / rotated secret, clock drift of more than 5 minutes), 403 (source
+  paused), 429, 5xx: the worker **throws**. Cloudflare's documentation does not state what happens to the
+  SMTP message when an Email Worker throws; the intent is a temporary failure that the sending server
+  retries, but check that with a test mail on your account before relying on it, and look into
+  *Workers → Logs* when mail goes missing. Pausing the inbox or rotating the secret is therefore not a
+  bounce for senders — but fix the worker script soon after a rotation.
 
 ## Mail service with webhook (Postmark, Mailgun)
 
@@ -57,7 +66,9 @@ is only safe over HTTPS.
 - **Postmark:** in the server's *inbound stream* enter the URL with credentials as webhook,
   and point an MX record of your domain to `inbound.postmarkapp.com` (priority 10).
   "Include raw email content in JSON payload" is optional; without it FeedFerret rebuilds the
-  message from Postmark's parsed fields (headers, text, html, inline images).
+  message from Postmark's parsed fields (headers, text, html, inline images). Leave it off for big
+  newsletters: the raw copy is added *on top of* the parsed fields, roughly doubling the JSON, and the
+  request limit is ~13.4 MB (mails whose JSON exceeds it get 413 and are dropped by Postmark).
 - **Mailgun:** *Receiving → Routes*, a route matching the recipients on your domain, action
   *Forward* to the URL with credentials, and Mailgun's MX records on the domain. FeedFerret
   accepts the form-encoded / multipart "parsed" format and `body-mime`.
@@ -91,21 +102,24 @@ Responses:
 |---|---|
 | `200` `{ok, status}` | processed. `status` is `created`, `duplicate`, or a dropped mail (`unknown-token`, `inactive`, `no-token`, `rate-limited`, `parse-error`) — dropped mail is **not** retried or bounced, to avoid backscatter |
 | `400` / `415` | unreadable JSON / unsupported content type |
-| `401` | missing or wrong signature / password; `timestamp-out-of-window` when the (authentic) request is more than 5 minutes off |
+| `401` | missing or wrong signature / password; `timestamp-out-of-window` when the timestamp header is more than 5 minutes off |
 | `403` | the source is paused (Postmark stops retrying on 403) |
+| `408` | the body stalled for more than 30 s |
 | `404` | unknown source id, or the source is not a webhook way |
 | `413` | body or mail larger than the limit (raw mail 10 MB; JSON may be ~4/3 larger for base64 attachments) |
-| `429` | rate limit |
-| `500` / `503` | infrastructure error / no readable secret — the sender should retry |
+| `429` | rate limit, or too many failed authentications from that client (a request that authenticates is never locked out) |
+| `500` / `503` | infrastructure error / no readable secret / busy (at most 4 request bodies are buffered at once, `Retry-After: 5`) — the sender should retry |
 
 ## Security notes
 
 - **Signature:** HMAC-SHA256 over `timestamp \n recipient \n body`, compared in constant time.
-  The ±5 minute window is only evaluated for authentic requests. A replay inside the window is
+  The ±5 minute window is checked from the timestamp header before the body is read. A replay inside the window is
   harmless: mails are de-duplicated by Message-ID.
-- **Rate limits (per source and client IP):** 60 requests per minute; 10 failed authentications
-  per 5 minutes lock that client out for the rest of the window. Failed attempts never write
-  to the database. Behind a reverse proxy set `TRUSTED_PROXY_COUNT` correctly so the real client
+- **Rate limits (per client IP, not per source id):** 60 requests per minute; after 10 failed
+  authentications in 5 minutes further failures answer 429 for the rest of the window, but a request that
+  authenticates is never locked out. Failed attempts never write to the database. Credentials (Basic
+  password, signature format and timestamp window) are checked *before* the body is read, and at most 4
+  bodies are buffered at once. Behind a reverse proxy set `TRUSTED_PROXY_COUNT` correctly so the real client
   address is used.
 - **Limits:** the request body is read with a hard cap (Content-Length is not trusted); a paused
   source answers 403 before the body is read. Attachments are never stored; only inline raster images
