@@ -35,6 +35,7 @@ only with *Include credentials*, see [Export variants](#export-variants)).
 |---|---|---|---|---|
 | `type` rss / HTML+XPath / XML+XPath / JSON+DotNotation / JSONFeed / HTML+XPath+JSON+DotNotation | `sourceType` | ✅ (`JSON+DotPath` → JSON+DotNotation, unknown → RSS, reported) | ✅ | ✅ |
 | `frss:xPathItem` … `frss:xPathItemUid` (10) | `scraperConfig.xpath` | ✅ (❌ remote) | ✅ | ✅ |
+| `frss:xPathItemTimeFormat` | `scraperConfig.xpath.xPathItemTimeFormat` — PHP `createFromFormat` format, parsed strictly (`lib/php-date-format.ts`); a non-matching or impossible date gives the item no date, never a guess. No format: dot dates are day-first | ✅ (❌ remote) | ✅ | ✅ |
 | `frss:jsonItem` … `frss:jsonItemUid` (10), `frss:xPathToJson` | `scraperConfig.json`, `.xPathToJson` | ✅ (❌ remote) | ✅ | ✅ |
 | `frss:priority` important / main / category | `priority`; category → `hideFromAllFeeds` | ✅ | ✅ (also: hidden-from-All-feeds → `category`) | ✅ |
 | `frss:priority` feed / hidden | `priority` + `hideFromAllFeeds` | ⚠️ approximated (still listed in its category), reported | ✅ | ✅ |

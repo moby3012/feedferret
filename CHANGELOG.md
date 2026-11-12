@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Fixed — scraped item dates honour `xPathItemTimeFormat`
+
+- HTML/XML+XPath feeds ignored the FreshRSS `frss:xPathItemTimeFormat` (a PHP `DateTime::createFromFormat` format such as `d.m.Y`, `d/m/Y H:i`, `j. F Y`) and let the JS engine guess, so `12.08.2026` became 8 December. The format is now parsed by a small `createFromFormat`-compatible parser (`lib/php-date-format.ts`: `d j m n y Y H G h g i s u v A a D l M F U e T O P p c r`, `\` escapes, `!` `|` `? * +`; English month/day names plus German as a tolerant extension). With a format configured the string must match it exactly — otherwise the item has **no** date (never a guess); impossible dates (31.02., 24:00) are rejected too. Without a format, dot-separated dates (`12.08.2026`, `12.08.26`, with optional time) are read day-first. The format is editable in the feed's scraper config (feed edit dialog), is part of `create_page_feed`'s config, and round-trips through FreshRSS OPML as before.
+
 ### Security — untrusted HTML is parsed only in bounded worker threads
 
 - A synchronous jsdom/DOMPurify parse of a hostile page (1 MiB of nested `<div>`s: 7 s, then a stack overflow; DOMPurify on it ran for minutes) froze the whole instance, and the background sync runs full text automatically. All parsing of fetched pages, feed item bodies, newsletter mails, OPML (incl. remote dynamic OPML), catalog OPMLs, FreshRSS imports and rendered Markdown now runs in a worker-thread pool (`lib/html-worker`, public API `runInHtmlWorker`): hard per-task timeout (worker terminated), V8 heap limit per worker (default 384 MiB × 2 workers, `FEEDFERRET_HTML_WORKER_HEAP_MB` / `_POOL_SIZE`), bounded queues, an interactive lane with a reserved worker and an aging background lane. A cheap linear pre-scan (`lib/html-guard.ts`) cuts input at 2 MiB / depth 128 / 30 000 elements / elements×depth before any parser sees it; Defuddle is skipped on very large or deep documents.

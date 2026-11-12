@@ -2,6 +2,8 @@
 // fetcher (main thread) and the XPath engine (lib/feed-parse-core.ts, HTML
 // worker only).
 
+import { parsePhpDate } from "./php-date-format";
+
 export type FetchedFeedArticle = {
   /** Display title; synthesized from content when the feed supplied none. */
   title: string;
@@ -63,6 +65,27 @@ export function htmlText(value: unknown) {
   return String(value).trim();
 }
 
+/** Matches `dd.mm.yyyy` / `d.m.yy` with an optional `HH:mm[:ss]` (and "Uhr") — dot dates are day-first. */
+const DOTTED_DATE = /^(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2})(?:[ ,T]+(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s*Uhr)?)?$/;
+
+/**
+ * Format-less date guess. Dot-separated dates (`12.08.2026`) are day-first as everywhere
+ * they are written; the engine's own parser (`new Date`) would read them US-style
+ * (Dec 8). Everything else keeps going through `new Date(raw)`.
+ */
+export function parseLooseDate(raw: string): Date | null {
+  const dotted = DOTTED_DATE.exec(raw.trim());
+  if (dotted) {
+    const [, d, m, y, hh, mm, ss] = dotted;
+    const year = y.length === 2 ? (Number(y) < 70 ? 2000 : 1900) + Number(y) : Number(y);
+    const format = `d.m.Y${hh ? " H:i" : ""}${ss ? ":s" : ""}`;
+    const text = `${d}.${m}.${String(year).padStart(4, "0")}${hh ? ` ${hh}:${mm}` : ""}${ss ? `:${ss}` : ""}`;
+    return parsePhpDate(text, format);
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 export function dateFrom(value: unknown, format?: string) {
   if (!value) return null;
   const raw = htmlText(value);
@@ -71,8 +94,19 @@ export function dateFrom(value: unknown, format?: string) {
     const n = Number(raw);
     if (Number.isFinite(n)) return new Date(raw.length > 10 ? n : n * 1000);
   }
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  return parseLooseDate(raw);
+}
+
+/**
+ * Date of a scraped (XPath) item. With a configured PHP `createFromFormat` format the
+ * string is parsed strictly by it and a mismatch yields `null` — never a guess. Without
+ * a format it falls back to the loose guess of {@link parseLooseDate}.
+ */
+export function scrapedDateFrom(value: unknown, format?: string): Date | null {
+  const raw = htmlText(value);
+  if (!raw) return null;
+  const phpFormat = format?.trim();
+  return phpFormat ? parsePhpDate(raw, phpFormat) : parseLooseDate(raw);
 }
 
 export function categoriesFrom(value: unknown) {

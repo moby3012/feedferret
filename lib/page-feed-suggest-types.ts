@@ -10,6 +10,8 @@ export type SuggestedFieldConfig = {
   xPathItemUri?: string;
   xPathItemContent?: string;
   xPathItemTimestamp?: string;
+  /** PHP `DateTime::createFromFormat` format of the timestamp text (FreshRSS `xPathItemTimeFormat`). */
+  xPathItemTimeFormat?: string;
   xPathItemThumbnail?: string;
 };
 

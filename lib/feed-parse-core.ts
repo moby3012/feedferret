@@ -9,7 +9,7 @@ import type { FeedExtractionConfig } from "./feed-extraction";
 import { stripStyleBlocks } from "./html-utils";
 import { resolveItemTitle } from "./title-synthesis";
 
-import { categoriesFrom, dateFrom, type FetchedFeed, type FetchedFeedArticle } from "./feed-item-fields";
+import { categoriesFrom, scrapedDateFrom, type FetchedFeed, type FetchedFeedArticle } from "./feed-item-fields";
 
 export type { FetchedFeed, FetchedFeedArticle } from "./feed-item-fields";
 
@@ -87,7 +87,7 @@ export function buildXPathArticlesFromDocument(
       link,
       content,
       author: evaluateString(xpath, settings.xPathItemAuthor || settings.itemAuthor, node) || null,
-      publishedAt: dateFrom(evaluateString(xpath, settings.xPathItemTimestamp || settings.itemTimestamp, node), settings.xPathItemTimeFormat || settings.itemTimeFormat),
+      publishedAt: scrapedDateFrom(evaluateString(xpath, settings.xPathItemTimestamp || settings.itemTimestamp, node), settings.xPathItemTimeFormat || settings.itemTimeFormat),
       imageUrl: rawImage ? new URL(rawImage, feedUrl).toString() : null,
       externalId: evaluateString(xpath, settings.xPathItemUid || settings.itemUid, node) || link,
       guid: evaluateString(xpath, settings.xPathItemUid || settings.itemUid, node) || null,
