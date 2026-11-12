@@ -1151,6 +1151,10 @@
     "feedsInCategory": "{count} Feeds"
   },
   "common": {
+    "feedDeferredReason": "Wird später erneut versucht",
+    "feedRefreshDeferred": "Abruf verschoben: {reason}",
+    "feedBlockedReason": "Zugriff auf diesen Feed blockiert (HTTP 403)",
+    "feedHostReason": "Server pausiert oder Abrufabstand noch nicht erreicht",
     "apiSourceAttention": {
       "status": "Braucht Aufmerksamkeit",
       "unconfigured": "Twitch ist nicht eingerichtet (oder wurde deaktiviert). Ein Admin muss unter Admin → Server-Einstellungen → Twitch Client ID und Client Secret speichern. Der Feed läuft danach automatisch weiter.",
@@ -1580,7 +1584,11 @@
     "fetch": {
       "updateInterval": "Aktualisierungsintervall (Minuten)",
       "globalDefault": "Globaler Standard",
-      "overrideSync": "Globales Synchronisierungsintervall für diesen Feed überschreiben.",
+      "automatic": "Automatisch",
+"cadence": "Automatisch (Ø {count} Beiträge/Tag · gebündelt)",
+"learning": "Automatisch (Publikationsrhythmus wird ermittelt)",
+"nextSync": "Nächster Abruf ca. {time}",
+"overrideSync": "Leer = automatisch; geerbte Intervalle gelten als Mindestabstand. Minuten eingeben, um diesen Feed fest einzustellen.",
       "customUserAgent": "Benutzerdefinierter User-Agent",
       "userAgentDefault": "FeedFerret/1.0 (Standard)",
       "timeout": "Timeout (Sekunden)",

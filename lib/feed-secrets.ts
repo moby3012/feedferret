@@ -23,6 +23,8 @@ export type FeedSecretField = (typeof FEED_SECRET_FIELDS)[number];
  * leaks by default.
  */
 export const FEED_CLIENT_SELECT = {
+  nextSyncAt: true,
+  cadenceMinutes: true,
   id: true,
   url: true,
   name: true,

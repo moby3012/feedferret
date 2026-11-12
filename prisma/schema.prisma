@@ -338,6 +338,8 @@ model Feed {
   updateFrequency Int?
   retentionDays   Int?
   keepMinArticles Int?
+  nextSyncAt      DateTime?
+  cadenceMinutes  Float?
   lastFetchedAt   DateTime?
   lastStatus       String?
   lastError        String?
@@ -393,6 +395,7 @@ model Feed {
   @@index([userId])
   @@index([categoryId])
   @@index([userId, archivedAt])
+  @@index([autoMuted, archivedAt, nextSyncAt])
 }
 
 model Article {

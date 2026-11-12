@@ -66,6 +66,7 @@ const BROKEN_SELECT = {
     url: true,
     sourceType: true,
     lastError: true,
+    lastStatus: true,
     autoMuted: true,
     consecutiveFailureCount: true,
     failingSince: true,
@@ -166,7 +167,7 @@ export async function getBrokenFeeds(): Promise<BrokenFeedDto[]> {
             userId,
             archivedAt: null,
             sourceType: { not: NEWSLETTER_SOURCE_TYPE },
-            OR: [{ autoMuted: true }, { consecutiveFailureCount: { gt: 0 } }],
+            OR: [{ autoMuted: true }, { consecutiveFailureCount: { gt: 0 } }, { lastStatus: "attention", lastError: "HTTP 403: feed_blocked" }],
         },
         select: BROKEN_SELECT,
         orderBy: [{ autoMuted: "desc" }, { consecutiveFailureCount: "desc" }, { name: "asc" }],
@@ -207,7 +208,7 @@ export async function unmuteBrokenFeed(feedId: string): Promise<{ success: true 
     await ownedFeed(userId, feedId);
     await db.feed.update({
         where: { id: feedId, userId },
-        data: { ...applyManualUnmute(), failingSince: null },
+        data: { ...applyManualUnmute(), failingSince: null, nextSyncAt: null, lastStatus: null, lastError: null },
     });
     revalidatePath("/");
     return { success: true };
@@ -355,12 +356,13 @@ export type InactiveFeedsResult = { thresholdDays: number; feeds: InactiveFeedDt
 
 /** Rows that can possibly be inactive; the date test itself happens against the newest article below. */
 const INACTIVE_CANDIDATE = {
+    OR: [{ lastStatus: null }, { lastStatus: { not: "attention" } }, { lastError: null }, { lastError: { not: "HTTP 403: feed_blocked" } }],
     archivedAt: null,
     autoMuted: false,
     consecutiveFailureCount: 0,
     lastFetchedAt: { not: null },
     sourceType: { not: NEWSLETTER_SOURCE_TYPE },
-} as const;
+};
 
 async function inactiveThreshold(userId: string): Promise<number> {
     const user = await db.user.findUnique({ where: { id: userId }, select: { inactiveFeedDays: true } });
@@ -460,13 +462,14 @@ export async function archiveInactiveFeeds(feedIds: string[]): Promise<{ archive
     const ids = cleanIds(feedIds);
     if (ids.length === 0) return { archived: 0, skipped: 0, archivedIds: [] };
     const cutoff = new Date(Date.now() - (await inactiveThreshold(userId)) * 86_400_000);
+    const { OR: exclusion, ...inactiveCandidate } = INACTIVE_CANDIDATE;
     const archivedIds = await archiveWhere(userId, {
             id: { in: ids },
-            ...INACTIVE_CANDIDATE,
+            ...inactiveCandidate,
             // No item newer than the cutoff, and either some (older) item exists or the feed itself is older than
             // the cutoff (an empty feed is silent since its creation).
             articles: { none: { publishedAt: { gte: cutoff } } },
-            OR: [{ createdAt: { lt: cutoff } }, { articles: { some: {} } }],
+            AND: [{ OR: exclusion }, { OR: [{ createdAt: { lt: cutoff } }, { articles: { some: {} } }] }],
     });
     revalidatePath("/");
     return { archived: archivedIds.length, skipped: ids.length - archivedIds.length, archivedIds };
@@ -479,7 +482,7 @@ export async function restoreFeeds(feedIds: string[]): Promise<{ restored: numbe
     if (ids.length === 0) return { restored: 0 };
     const { count } = await db.feed.updateMany({
         where: { id: { in: ids }, userId, archivedAt: { not: null } },
-        data: { archivedAt: null },
+        data: { archivedAt: null, nextSyncAt: null },
     });
     revalidatePath("/");
     return { restored: count };

@@ -132,7 +132,7 @@ const tools = [
         name: { type: "string" },
         icon: { type: "string", description: "Emoji or short icon string." },
         categoryId: { type: ["string", "null"], description: "Category/folder id, or null to remove." },
-        updateFrequency: { type: ["number", "null"], description: "Refresh interval in minutes; null = inherit default." },
+        updateFrequency: { type: ["number", "null"], description: "Refresh interval in minutes; null = automatic cadence with inherited minimum." },
         retentionDays: { type: ["number", "null"] },
         keepMinArticles: { type: ["number", "null"] },
         priority: { type: "string", description: "e.g. 'low' | 'normal' | 'high'." },
@@ -386,11 +386,12 @@ async function callTool(user: ApiUser, name: string, args: any) {
         if (args[key] !== undefined) data[key] = args[key];
       }
       if (data.categoryId) await assertOwnedCategories(user.id, [data.categoryId]);
+      if (data.updateFrequency !== undefined || data.categoryId !== undefined) data.nextSyncAt = null;
       clampFeedLimits(data);
       if (typeof args.archived === "boolean") {
         // Keep the original archive date when archiving an already archived feed.
         if (args.archived) await db.feed.updateMany({ where: { id: String(args.feedId), userId: user.id, archivedAt: null }, data: { archivedAt: new Date() } });
-        else data.archivedAt = null;
+        else { data.archivedAt = null; data.nextSyncAt = null; }
       }
       // An archive-only call leaves `data` empty (Prisma matches nothing then): existence is checked instead.
       const matched = Object.keys(data).length

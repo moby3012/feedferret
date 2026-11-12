@@ -60,6 +60,7 @@ describe("isBrokenFeed / countBrokenFeeds", () => {
     expect(isBrokenFeed({ autoMuted: true, consecutiveFailureCount: 0 })).toBe(true);
     expect(isBrokenFeed({ autoMuted: false, consecutiveFailureCount: 3 })).toBe(true);
     expect(isBrokenFeed({ autoMuted: false, consecutiveFailureCount: 0 })).toBe(false);
+    expect(isBrokenFeed({ autoMuted: false, consecutiveFailureCount: 0, lastStatus: "attention", lastError: "HTTP 403: feed_blocked" })).toBe(true);
   });
 
   it("never counts newsletter feeds", () => {

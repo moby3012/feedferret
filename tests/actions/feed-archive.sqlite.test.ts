@@ -42,7 +42,8 @@ import {
 } from "../../app/actions/broken-feeds";
 import { updateGlobalSettings } from "../../app/actions/settings";
 import { addFeed } from "../../app/actions/feeds";
-import { syncUserFeeds } from "../../lib/rss-sync";
+import { syncAllFeeds, syncUserFeeds } from "../../lib/rss-sync";
+import { importOpmlXml } from "../../lib/import/opml-import";
 import { getCounts, loadFeeds, loadArchivedFeeds, loadReadingPreferences } from "../../server/bootstrap";
 import { buildViewScope } from "../../server/articles/view-scope";
 
@@ -60,6 +61,7 @@ async function makeFeed(userId: string, data: Record<string, unknown> = {}) {
       name: "Feed",
       url: `https://f${++seq}.example/feed.xml`,
       lastFetchedAt: daysAgo(0),
+      nextSyncAt: daysAgo(0),
       lastStatus: "success",
       createdAt: daysAgo(1000),
       ...data,
@@ -294,6 +296,13 @@ describe("archive / restore", () => {
     expect(after).toEqual(before);
   });
 
+  it("archiveInactiveFeeds cannot archive a feed that became blocked with no failure streak", async () => {
+    const feed = await makeFeed(alice);
+    await h.db.feed.update({ where: { id: feed.id }, data: { lastStatus: "attention", lastError: "HTTP 403: feed_blocked", consecutiveFailureCount: 0 } });
+    expect(await archiveInactiveFeeds([feed.id])).toMatchObject({ archived: 0, skipped: 1 });
+    expect((await reload(feed.id)).archivedAt).toBeNull();
+  });
+
   it("archiveInactiveFeeds re-checks eligibility atomically: only still-inactive feeds are archived", async () => {
     const quiet = await makeFeed(alice, { name: "quiet" });
     await makeArticle(alice, quiet.id, 300);
@@ -346,16 +355,64 @@ describe("archive / restore", () => {
 });
 
 describe("archived feeds leave the reader but keep their articles", () => {
+  it("a feed-level 403 attention row appears as blocked without a failure streak", async () => {
+    const feed = await makeFeed(alice, { lastStatus: "attention", lastError: "HTTP 403: feed_blocked", consecutiveFailureCount: 0, autoMuted: false });
+    const broken = await getBrokenFeeds();
+    expect(broken.find(row => row.id === feed.id)).toMatchObject({ kind: "blocked", consecutiveFailureCount: 0, autoMuted: false });
+  });
+
+  it("user Refresh all refetches only feeds whose configured interval has passed (as before adaptive refresh)", async () => {
+    const fresh = await makeFeed(alice, { name: "fresh", lastFetchedAt: new Date(), nextSyncAt: null });
+    const overdue = await makeFeed(alice, { name: "overdue", lastFetchedAt: daysAgo(1), nextSyncAt: new Date(Date.now() + DAY) });
+    const never = await makeFeed(alice, { name: "never", lastFetchedAt: null, nextSyncAt: null });
+    h.syncedUrls.length = 0;
+    await syncUserFeeds(alice);
+    expect(h.syncedUrls.sort()).toEqual([overdue.url, never.url].sort());
+    expect(h.syncedUrls).not.toContain(fresh.url);
+  });
+
+  it("feeds created by an OPML import are fetched by the first reader-boot sync (no stagger wait)", async () => {
+    const xml = `<?xml version="1.0"?><opml version="2.0"><head><title>t</title></head><body>${[1, 2, 3]
+      .map((i) => `<outline type="rss" text="Imported ${i}" xmlUrl="https://imported${i}.example/feed.xml"/>`).join("")}</body></opml>`;
+    await importOpmlXml(alice, xml);
+    const imported = await h.db.feed.findMany({ where: { userId: alice, url: { startsWith: "https://imported" } } });
+    expect(imported).toHaveLength(3);
+    expect(imported.every((feed) => feed.nextSyncAt === null && feed.lastFetchedAt === null)).toBe(true);
+    h.syncedUrls.length = 0;
+    await syncUserFeeds(alice, { background: true });
+    expect(h.syncedUrls.filter((url) => url.startsWith("https://imported")).sort()).toEqual(imported.map((feed) => feed.url).sort());
+    const after = await h.db.feed.findMany({ where: { id: { in: imported.map((feed) => feed.id) } } });
+    expect(after.every((feed) => feed.nextSyncAt instanceof Date && feed.nextSyncAt.getTime() > Date.now())).toBe(true);
+  });
+
+  it("a deployment with many NULL schedules persists staggered Prisma Dates before fetching", async () => {
+    for (let i = 0; i < 100; i++) await makeFeed(alice, { nextSyncAt: null, lastFetchedAt: daysAgo(2) });
+    const fresh = await makeFeed(alice, { nextSyncAt: null, lastFetchedAt: new Date() });
+    const before = Date.now();
+    await syncAllFeeds();
+    expect(h.syncedUrls).toEqual([]);
+    // A feed fetched just before adoption keeps its interval instead of being refetched within the stagger window.
+    expect((await reload(fresh.id)).nextSyncAt!.getTime()).toBeGreaterThan(before + 30 * 60_000);
+    await h.db.feed.delete({ where: { id: fresh.id } });
+    const feeds = await h.db.feed.findMany({ where: { userId: alice } });
+    expect(feeds.every(feed => feed.nextSyncAt instanceof Date && feed.nextSyncAt.getTime() > before && feed.nextSyncAt.getTime() <= Date.now() + 901000)).toBe(true);
+    expect(new Set(feeds.map(feed => feed.nextSyncAt!.getTime())).size).toBeGreaterThan(90);
+    // Compare through Prisma/SQLite, not raw integer timestamp fixtures.
+    expect(await h.db.feed.count({ where: { nextSyncAt: { lte: new Date(before) } } })).toBe(0);
+    expect(await h.db.feed.count({ where: { nextSyncAt: { lte: new Date(Date.now() + 901000) } } })).toBe(100);
+  });
+
   it("background sync skips archived feeds and resumes after restore", async () => {
     const live = await makeFeed(alice, { name: "live", lastFetchedAt: daysAgo(2) });
     const archived = await makeFeed(alice, { name: "archived", lastFetchedAt: daysAgo(2), archivedAt: daysAgo(1) });
 
-    await syncUserFeeds(alice);
+    await syncAllFeeds();
     expect(h.syncedUrls).toEqual([live.url]);
 
     h.syncedUrls.length = 0;
     await restoreFeeds([archived.id]);
-    await syncUserFeeds(alice);
+    await h.db.feed.update({ where: { id: archived.id }, data: { nextSyncAt: daysAgo(0) } });
+    await syncAllFeeds();
     // `live` was just synced and is not due again; the restored feed is picked up on the next pass.
     expect(h.syncedUrls).toEqual([archived.url]);
   });

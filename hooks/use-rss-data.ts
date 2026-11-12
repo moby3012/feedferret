@@ -119,14 +119,19 @@ export function useRefresh() {
 
 /** Single-feed refresh: same end-of-refresh path as `useRefresh` (drives `isRefreshing`). */
 export function useRefreshFeed() {
+    const t = useTranslations("common")
     const queryClient = useQueryClient()
     return useMutation({
         mutationKey: REFRESH_FEED_KEY,
         mutationFn: (feedId: string) => refreshFeed(feedId),
-        onSuccess: async () => {
+        onSuccess: async (result) => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
             queryClient.invalidateQueries({ queryKey: ["feed-health"] })
-            toast.success("Feed refreshed")
+            if ("deferred" in result && result.deferred) {
+                const reason = "deferredReason" in result ? result.deferredReason : undefined
+                toast.info(t("feedRefreshDeferred", { reason: t(reason === "feed_blocked" ? "feedBlockedReason" : reason ? "feedHostReason" : "feedDeferredReason") }))
+            }
+            else toast.success("Feed refreshed")
             await invalidateAfterSync(queryClient)
         },
         onError: (error) => {
