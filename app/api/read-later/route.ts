@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { resolveApiUser, scopeError } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
-
+import { userStateGroups, writeUserState } from "@/server/articles/user-state";
 
 /**
  * GET /api/read-later
@@ -74,9 +74,10 @@ export async function POST(request: Request) {
         : await db.article.findFirst({ where: { userId, link: url! }, select: { id: true } });
     if (!article) return NextResponse.json({ error: "Article not found" }, { status: 404 });
 
-    const updated = await db.article.update({
+    // Raw write: `updatedAt` stays put (server/articles/user-state.ts). Repeats keep the original saved-at.
+    await writeUserState(userId, userStateGroups([article.id], { isReadLater: true }));
+    const updated = await db.article.findUniqueOrThrow({
         where: { id: article.id },
-        data: { isReadLater: true, readLaterSavedAt: new Date() },
         select: { id: true, isReadLater: true, readLaterSavedAt: true },
     });
 
@@ -115,9 +116,9 @@ export async function DELETE(request: Request) {
         : await db.article.findFirst({ where: { userId, link: url! }, select: { id: true } });
     if (!article) return NextResponse.json({ error: "Article not found" }, { status: 404 });
 
-    const updated = await db.article.update({
+    await writeUserState(userId, userStateGroups([article.id], { isReadLater: false }));
+    const updated = await db.article.findUniqueOrThrow({
         where: { id: article.id },
-        data: { isReadLater: false, readLaterSavedAt: null },
         select: { id: true, isReadLater: true },
     });
 

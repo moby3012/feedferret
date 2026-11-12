@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
-  user: vi.fn(), token: vi.fn(), log: vi.fn(), compare: vi.fn(), limited: vi.fn(), marks: vi.fn(),
+  user: vi.fn(), token: vi.fn(), log: vi.fn(), compare: vi.fn(), limited: vi.fn(), find: vi.fn(), tx: vi.fn(), raw: vi.fn(),
 }));
 vi.mock("@/lib/db", () => ({ db: {
   user: { findUnique: mocks.user }, apiToken: { findFirst: mocks.token },
-  loginAttempt: { create: mocks.log }, feed: { aggregate: async () => ({ _max: { lastFetchedAt: null } }) }, article: { updateMany: mocks.marks, findMany: async () => [] },
+  loginAttempt: { create: mocks.log }, feed: { aggregate: async () => ({ _max: { lastFetchedAt: null } }) }, article: { findMany: mocks.find },
+  $executeRaw: mocks.raw, $transaction: mocks.tx,
 } }));
 vi.mock("bcryptjs", () => ({ default: { compare: mocks.compare } }));
 vi.mock("@/lib/markdown-render", () => ({ renderMarkdownToHtml: vi.fn() }));
@@ -19,6 +20,8 @@ beforeEach(() => {
   mocks.user.mockResolvedValue(user);
   mocks.compare.mockResolvedValue(true);
   mocks.limited.mockReturnValue({ success: true });
+  mocks.find.mockResolvedValue([]);
+  mocks.tx.mockResolvedValue([1]);
 });
 describe("GReader password authentication", () => {
   const request = new Request("https://example.test");
@@ -55,18 +58,20 @@ describe("Fever token guards", () => {
   it.each([{ expiresAt: new Date(0), user }, { user: { ...user, isActive: false } }])("rejects expired/inactive credentials", async overrides => {
     mocks.token.mockResolvedValue({ scope: "write", ...overrides });
     expect(await (await fever(request())).json()).toMatchObject({ auth: 0 });
-    expect(mocks.marks).not.toHaveBeenCalled();
+    expect(mocks.find).not.toHaveBeenCalled();
   });
   it("rejects marks with read scope", async () => {
     mocks.token.mockResolvedValue({ user, scope: "read" });
     const response = await fever(request());
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ api_version: 3, auth: 1, error: "Insufficient token scope" });
-    expect(mocks.marks).not.toHaveBeenCalled();
+    expect(mocks.find).not.toHaveBeenCalled();
   });
   it("allows marks with write scope", async () => {
     mocks.token.mockResolvedValue({ user, scope: "write" });
+    mocks.find.mockResolvedValue([{ id: "a1" }]);
     expect((await fever(request())).status).toBe(200);
-    expect(mocks.marks).toHaveBeenCalledWith(expect.objectContaining({ where: { extId: { in: ["0000000000000000001"] }, userId: user.id } }));
+    expect(mocks.find).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ extId: { in: ["0000000000000000001"] }, userId: user.id }) }));
+    expect(mocks.tx).toHaveBeenCalledTimes(1); // one raw UPDATE (no Article.updatedAt bump), see server/articles/user-state.ts
   });
 });

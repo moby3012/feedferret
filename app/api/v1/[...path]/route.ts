@@ -5,6 +5,7 @@ import { assertSafeHttpOptionsProxy } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { markWhereRead, parseCutoffMs, setReadStateByIds, type BulkReadResult } from "@/server/articles/bulk-read";
+import { userStateGroups, userStateStatements, writeUserState, type UserStatePatch } from "@/server/articles/user-state";
 import { readPlainColumn, readPlainColumnOrNull } from "@/lib/secret-box";
 import { HTTP_OPTION_KEEP, mergeHttpOptions } from "@/lib/feed-secrets";
 import { apiError, clampInt, parseBool, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
@@ -207,22 +208,17 @@ async function patchArticle(user: ApiUser, articleId: string, request: Request) 
   const body = await readJson<any>(request);
   if (!body) return apiError("Invalid JSON body", 400);
 
-  const data: any = {};
-  if (typeof body.isRead === "boolean") {
-    data.isRead = body.isRead;
-    data.readAt = body.isRead ? new Date() : null;
-  }
-  if (typeof body.isStarred === "boolean") data.isStarred = body.isStarred;
-  if (typeof body.isReadLater === "boolean") {
-    data.isReadLater = body.isReadLater;
-    data.readLaterSavedAt = body.isReadLater ? new Date() : null;
-  }
+  const patch: UserStatePatch = {};
+  if (typeof body.isRead === "boolean") patch.isRead = body.isRead;
+  if (typeof body.isStarred === "boolean") patch.isStarred = body.isStarred;
+  if (typeof body.isReadLater === "boolean") patch.isReadLater = body.isReadLater;
 
   const article = await db.article.findFirst({ where: { id: articleId, userId: user.id }, select: { id: true } });
   if (!article) return apiError("Article not found", 404);
 
   await db.$transaction(async (tx) => {
-    if (Object.keys(data).length) await tx.article.update({ where: { id: articleId }, data });
+    // Raw UPDATEs: user state never moves Article.updatedAt (server/articles/user-state.ts).
+    for (const statement of userStateStatements(tx, user.id, userStateGroups([articleId], patch))) await statement;
     if (Array.isArray(body.labelIds)) {
       const labels = await tx.label.findMany({ where: { userId: user.id, id: { in: body.labelIds.filter((id: unknown) => typeof id === "string") } }, select: { id: true } });
       await tx.articleLabel.deleteMany({ where: { userId: user.id, articleId } });
@@ -276,20 +272,14 @@ async function batchArticles(user: ApiUser, request: Request) {
     return NextResponse.json({ updated: result.count });
   }
 
-  let data: any = {};
-  if (action === "read") { data = { isRead: true, readAt: new Date() }; }
-  else if (action === "unread") { data = { isRead: false, readAt: null }; }
-  else if (action === "star") { data = { isStarred: true }; }
-  else if (action === "unstar") { data = { isStarred: false }; }
-  else if (action === "read_later") { data = { isReadLater: true, readLaterSavedAt: new Date() }; }
-  else if (action === "remove_read_later") { data = { isReadLater: false, readLaterSavedAt: null }; }
-
   if (action === "read" || action === "unread") {
     // Read state: no `updatedAt` bump, `readAt` kept for rows already read (server/articles/bulk-read.ts).
     return bulkReadResponse(await setReadStateByIds(user.id, ownedIds, action === "read"));
   }
-  const result = await db.article.updateMany({ where: { id: { in: ownedIds } }, data });
-  return NextResponse.json({ updated: result.count });
+  const patch: UserStatePatch =
+    action === "star" ? { isStarred: true } : action === "unstar" ? { isStarred: false } : action === "read_later" ? { isReadLater: true } : { isReadLater: false };
+  await writeUserState(user.id, userStateGroups(ownedIds, patch));
+  return NextResponse.json({ updated: ownedIds.length });
 }
 
 async function markAllRead(user: ApiUser, request: Request) {

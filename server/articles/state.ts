@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { setReadStateByIds, type BulkReadResult } from "./bulk-read";
+import { writeUserState, type UserStateGroup } from "./user-state";
 
 // Batched article state writes (.pm/spec-shell-design.md §2.4): the client's
 // state batcher sends every read / star / read-later toggle of one flush as a
@@ -81,17 +82,6 @@ export function groupStateOps(ops: ArticleStateOp[]): Map<`${StateField}:${boole
     }
   }
   return groups;
-}
-
-function dataFor(field: StateField, value: boolean, now: Date) {
-  switch (field) {
-    case "isRead":
-      return { isRead: value, readAt: value ? now : null };
-    case "isReadLater":
-      return { isReadLater: value, readLaterSavedAt: value ? now : null };
-    case "isStarred":
-      return { isStarred: value };
-  }
 }
 
 /**
@@ -178,20 +168,14 @@ export async function applyArticleStateOps(userId: string, ops: ArticleStateOp[]
   const ownedOps = ops.filter((op) => ownedIds.has(op.id));
   const cascades = ownedOps.some((op) => op.isRead === true) ? await storyCascades(userId, ownedOps, owned) : [];
   const affected = cascades.flatMap((c) => c.ids);
-  const groups = groupStateOps([...ownedOps, ...affected.map((id) => ({ id, isRead: true }))]);
-  if (groups.size === 0) return { failed, affected, cascades };
+  const groups: UserStateGroup[] = [...groupStateOps([...ownedOps, ...affected.map((id) => ({ id, isRead: true }))])].map(([key, groupIds]) => {
+    const [field, raw] = key.split(":") as [StateField, string];
+    return { field, value: raw === "true", ids: groupIds };
+  });
+  if (groups.length === 0) return { failed, affected, cascades };
 
-  const now = new Date();
-  await db.$transaction(
-    [...groups].map(([key, groupIds]) => {
-      const [field, raw] = key.split(":") as [StateField, string];
-      const value = raw === "true";
-      return db.article.updateMany({
-        where: { userId, id: { in: groupIds }, [field]: !value },
-        data: dataFor(field, value, now),
-      });
-    }),
-  );
+  // One transaction; raw UPDATEs so `updatedAt` stays put (server/articles/user-state.ts).
+  await writeUserState(userId, groups);
   return { failed, affected, cascades };
 }
 
