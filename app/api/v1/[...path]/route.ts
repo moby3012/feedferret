@@ -1,3 +1,4 @@
+import { parseFeedContentRules } from "@/lib/feed-content-rules";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -115,6 +116,7 @@ function feedPayload(rawFeed: any, rules: Awaited<ReturnType<typeof getConnector
     // Per-feed keyword content filter: newline-separated words that mark
     // matching new articles read on arrival.
     filtersActionRead: feed.filtersActionRead,
+    contentRules: feed.contentRules,
     // Per-feed display overrides (null = inherit the user default)
     hideArticleImage: feed.hideArticleImage,
     hideFromAllFeeds: feed.hideFromAllFeeds,
@@ -498,7 +500,7 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
     // Feed Intelligence / full-text extraction
     "fullTextMode", "fullTextSelector", "fullTextRemoveSelectors", "fullTextConditions", "autoFetchFullText", "defaultContentFormat",
     // Per-feed keyword content filter
-    "filtersActionRead",
+    "contentRules", "filtersActionRead",
     // Per-feed HTTP auth (password is write-only: accepted here, never serialized back)
     "authType", "authUsername", "authPassword",
     // Per-feed display overrides (null = inherit the user default)
@@ -512,6 +514,7 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
     const owned = await db.category.findFirst({ where: { id: String(data.categoryId), userId: user.id }, select: { id: true } });
     if (!owned) return apiError("Invalid category", 422);
   }
+  try { if (data.contentRules !== undefined) parseFeedContentRules(data.contentRules); } catch { return apiError("Invalid or unsafe content rules", 422); }
   clampFeedLimits(data);
   if (typeof data.httpOptions === "string" && data.httpOptions.includes(HTTP_OPTION_KEEP)) {
     const stored = await db.feed.findFirst({ where: { id: feedId, userId: user.id }, select: { httpOptions: true } });
@@ -612,6 +615,7 @@ async function patchCategory(user: ApiUser, categoryId: string, request: Request
     const owned = await db.category.findFirst({ where: { id: String(data.parentId), userId: user.id }, select: { id: true } });
     if (!owned || data.parentId === categoryId) return apiError("Invalid parent category", 422);
   }
+  try { if (data.contentRules !== undefined) parseFeedContentRules(data.contentRules); } catch { return apiError("Invalid or unsafe content rules", 422); }
   clampFeedLimits(data);
   const result = await db.category.updateMany({ where: { id: categoryId, userId: user.id }, data });
   if (!result.count) return apiError("Category not found", 404);

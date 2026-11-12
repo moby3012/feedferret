@@ -1,3 +1,5 @@
+import { applyFeedContentRules } from "./feed-content-rules-client";
+import { assessExtraction } from "./extraction-quality";
 import { FEED_CLIENT_SELECT } from "@/lib/feed-secrets";
 import { db } from "@/lib/db";
 import { decideFullText } from "@/lib/extraction-quality";
@@ -76,7 +78,7 @@ export function describePageFetchError(error: unknown): string {
 export async function refetchArticleFullText(userId: string, articleId: string) {
     const article = await db.article.findFirst({
         where: { id: articleId, userId },
-        select: FULL_TEXT_STATE_SELECT,
+        select: { ...FULL_TEXT_STATE_SELECT, feedId: true, title: true },
     });
 
     if (!article) throw new Error("Article not found");
@@ -109,6 +111,11 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
         throw new Error("Could not extract article content");
     }
 
+    const feed = await db.feed.findFirst({ where: { id: article.feedId, userId }, select: { contentRules: true, fullTextRemoveSelectors: true } });
+    if (feed && (feed.contentRules || feed.fullTextRemoveSelectors)) {
+        const [clean] = await applyFeedContentRules([{ title: article.title, html: result.html }], feed.contentRules, feed.fullTextRemoveSelectors);
+        result = { ...result, html: clean.html, excerpt: clean.excerpt, quality: assessExtraction(clean.html) };
+    }
     const existingPlainLength = (article.content || "").replace(/<[^>]*>?/gm, "").length;
     const decision = decideFullText(result.quality, article.content, "manual", result.html);
     if (!decision.accept) {
@@ -119,7 +126,7 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
     }
     const plainLength = result.quality?.textLength ?? 0;
 
-    const stored = await storeFullText(article, { content: result.html, format: "html", excerpt: result.excerpt });
+    const stored = await storeFullText(article, { content: result.html!, format: "html", excerpt: result.excerpt });
     if (!stored) {
         // The article changed while the page was being fetched (a sync recorded
         // an upstream update, or another fetch stored full text first): this

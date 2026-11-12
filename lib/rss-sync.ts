@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { assessExtraction } from "./extraction-quality";
+import { applyFeedContentRules } from "./feed-content-rules-client";
 import { writeSystemLog } from "./system-log";
 import { db } from "./db";
 import { applyAutoReadRules } from "./auto-read-rules";
@@ -65,6 +68,7 @@ export interface ArticleSyncInput {
      * (`legacyDedupeKeys`). A row found only under one of them is re-keyed in place.
      */
     legacyDedupeKeys?: string[];
+    upstreamContentHash?: string | null;
     contentHash: string | null;
     content: string;
     excerpt: string;
@@ -137,6 +141,7 @@ export interface UpsertArticleBatchOptions {
 // update payload can't drift apart.
 function updatableFields(article: ArticleSyncInput) {
     return {
+        upstreamContentHash: article.upstreamContentHash,
         title: article.title,
         link: article.link,
         externalId: article.externalId,
@@ -174,6 +179,7 @@ function enrichFields(article: ArticleSyncInput) {
 }
 
 const EXISTING_ROW_SELECT = {
+    upstreamContentHash: true,
     id: true,
     dedupeKey: true,
     title: true,
@@ -364,6 +370,15 @@ export async function upsertArticleBatch(
             article = { ...article, publishedAt: existing.publishedAt };
         }
 
+        // A changed cleaning configuration is never an upstream edit. Adopt hashes
+        // conservatively for legacy rows; apply rules on their next publisher edit.
+        const legacyFullTextCandidate = options.fullTextActive && existing.feedContent == null &&
+            existing.fullTextStatus === null && existing.content !== article.content &&
+            htmlToPlainText(existing.content).length > htmlToPlainText(article.content).length * 1.2 + 100;
+        if (article.upstreamContentHash && !legacyFullTextCandidate &&
+            (!existing.upstreamContentHash || existing.upstreamContentHash === article.upstreamContentHash)) {
+            article = { ...article, content: existing.feedContent ?? existing.content, excerpt: existing.excerpt ?? "", keepStored: true };
+        }
         const next = updatableFields(article);
         const linkChanged = existing.link !== next.link;
         // Optional enrichment missing this run: the content-derived fields of the
@@ -437,13 +452,14 @@ export async function upsertArticleBatch(
                 data: { ...writable, ...fullTextReset, ...legacyAdopt, ...(cosmeticTitle ? { title: cosmeticTitle } : {}) },
             });
             if (upsertedIds.length % 25 === 0) await yieldToLoop();
-        } else if (linkChanged || cosmeticTitle || legacyFullText) {
+        } else if (linkChanged || cosmeticTitle || legacyFullText || (article.upstreamContentHash && article.upstreamContentHash !== existing.upstreamContentHash)) {
             // Synthetic / resolved-redirect link rewrite, legacy placeholder
             // title upgrade and/or adopting legacy full text only: store it,
             // keep updatedAt.
             await db.article.update({
                 where: { id: existing.id },
                 data: {
+                    ...(article.upstreamContentHash && article.upstreamContentHash !== existing.upstreamContentHash ? { upstreamContentHash: article.upstreamContentHash } : {}),
                     ...(linkChanged ? { link: next.link } : {}),
                     ...(linkChanged && article.linkCosmetic && article.contentHash ? { contentHash: article.contentHash } : {}),
                     ...(cosmeticTitle ? { title: cosmeticTitle } : {}),
@@ -491,6 +507,7 @@ export async function upsertArticleBatch(
                     externalId: article.externalId,
                     dedupeKey: article.dedupeKey,
                     contentHash: article.contentHash,
+                    upstreamContentHash: article.upstreamContentHash,
                     content: article.content,
                     excerpt: article.excerpt,
                     author: article.author,
@@ -527,6 +544,7 @@ export async function upsertArticleBatch(
                         externalId: article.externalId,
                         dedupeKey: article.dedupeKey,
                         contentHash: article.contentHash,
+                        upstreamContentHash: article.upstreamContentHash,
                         content: article.content,
                         excerpt: article.excerpt,
                         author: article.author,
@@ -709,7 +727,9 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         // worker pool on bounded input, never on the main thread. The feed's
         // remove-selectors (FreshRSS `cssContentFilter`) run in the same worker
         // task, on the feed's own content too — not only on downloaded full text.
-        const sanitizedItems = await sanitizeFeedItemBodies(itemContents, { removeSelectors: feed.fullTextRemoveSelectors });
+        const sanitizedItems = feed.contentRules
+            ? await applyFeedContentRules(remoteFeed.articles.map((item, index) => ({ title: item.title || "", html: itemContents[index] })), feed.contentRules, feed.fullTextRemoveSelectors)
+            : await sanitizeFeedItemBodies(itemContents, { removeSelectors: feed.fullTextRemoveSelectors });
 
         const articles = remoteFeed.articles.map((item, index) => {
             const content = itemContents[index];
@@ -766,6 +786,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 externalId,
                 dedupeKey,
                 ...(legacyKeys.length ? { legacyDedupeKeys: legacyKeys } : {}),
+                upstreamContentHash: createHash("sha256").update(item.content || item.summary || "").digest("hex"),
                 contentHash: computeContentHash(link),
                 content: sanitizedContent,
                 excerpt: excerpt,
@@ -785,8 +806,9 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             };
         });
 
+        const acceptedArticles = articles.filter((_, index) => !("allowed" in sanitizedItems[index]) || sanitizedItems[index].allowed);
         const fullTextMode = resolveFullTextMode(feed);
-        const { createdArticleIds, fullTextCandidateIds } = await upsertArticleBatch(articles, {
+        const { createdArticleIds, fullTextCandidateIds } = await upsertArticleBatch(acceptedArticles, {
             fullTextActive: fullTextMode !== "off",
         });
         // Every item of this fetch went through rekeyLegacyRows: later syncs skip the lookup.
@@ -1054,6 +1076,7 @@ async function autoFetchFullTextViaEngine(
         id: string;
         defaultContentFormat?: string | null;
         fullTextSelector?: string | null;
+        contentRules?: string | null;
         fullTextRemoveSelectors?: string | null;
     },
     mode: "auto" | "ai" | "selector" = "auto",
@@ -1137,6 +1160,10 @@ async function autoFetchFullTextViaEngine(
                 // or a saturated pool (retry next sync).
                 await recordParseAborted(article, result.parseAborted);
                 continue;
+            }
+            if (result.html && (feed.contentRules || feed.fullTextRemoveSelectors)) {
+                const [clean] = await applyFeedContentRules([{ title: "", html: result.html }], feed.contentRules, feed.fullTextRemoveSelectors);
+                result = { ...result, html: clean.html, excerpt: clean.excerpt, markdown: null, quality: assessExtraction(clean.html) };
             }
             const decision = decideFullText(result.quality, baselineHtml, "auto", result.html);
             if ((!decision.accept || !result.html) && result.budgetSkipped) {

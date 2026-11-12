@@ -1,3 +1,4 @@
+import { parseFeedContentRules } from "@/lib/feed-content-rules";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -84,7 +85,7 @@ const FEED_WRITABLE_KEYS = [
   // Feed Intelligence / full-text extraction
   "fullTextMode", "fullTextSelector", "fullTextRemoveSelectors", "fullTextConditions", "autoFetchFullText", "defaultContentFormat",
   // Per-feed keyword content filter (newline-separated words → mark matching new articles read)
-  "filtersActionRead",
+  "contentRules", "filtersActionRead",
   // Per-feed display overrides (null = inherit the user default)
   "hideArticleImage", "hideFromAllFeeds", "readerFontSizeOverride", "readerWidthOverride", "openOriginalOverride",
   // Muting
@@ -152,6 +153,7 @@ const tools = [
         fullTextConditions: { type: ["string", "null"] },
         autoFetchFullText: { type: "boolean", description: "Fetch full text automatically on sync." },
         defaultContentFormat: { type: ["string", "null"], enum: ["html", "markdown", null] },
+        contentRules: { type: ["string", "null"], description: "Ordered content transforms and ingestion gates as JSON. Null disables them. Validated for regex safety." },
         filtersActionRead: { type: ["string", "null"], description: "Newline-separated keywords; new articles containing any are marked read on arrival." },
         // Per-feed display overrides (null = inherit the user default)
         hideArticleImage: { type: ["boolean", "null"] },
@@ -385,6 +387,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       for (const key of FEED_WRITABLE_KEYS) {
         if (args[key] !== undefined) data[key] = args[key];
       }
+      if (data.contentRules !== undefined) parseFeedContentRules(data.contentRules);
       if (data.categoryId) await assertOwnedCategories(user.id, [data.categoryId]);
       if (data.updateFrequency !== undefined || data.categoryId !== undefined) data.nextSyncAt = null;
       clampFeedLimits(data);

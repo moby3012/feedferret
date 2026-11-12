@@ -161,6 +161,17 @@ describe("auto full text: no churn", () => {
     expect(await rows(feed.id)).toEqual(first);
   });
 
+  it("rule edits preserve existing full text, feed bodies and updatedAt", async () => {
+    const feed = await autoFeed();
+    await syncFeed(userId, feed.id);
+    const before = await rows(feed.id);
+    await state.db.feed.update({ where: { id: feed.id }, data: { contentRules: JSON.stringify({ transforms: [{ type: "replace_regex", pattern: "[a-z]", replacement: "Z", flags: "g" }] }) } });
+    state.pageFetches = [];
+    await syncFeed(userId, feed.id);
+    expect(await rows(feed.id)).toEqual(before);
+    expect(state.pageFetches).toEqual([]);
+  });
+
   it("a genuine upstream change re-extracts only that article; a failed fetch keeps the stored full text", async () => {
     const feed = await autoFeed();
     await syncFeed(userId, feed.id);

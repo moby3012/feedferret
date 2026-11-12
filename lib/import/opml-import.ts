@@ -1,3 +1,4 @@
+import { parseFeedContentRules } from "@/lib/feed-content-rules";
 /**
  * Shared OPML import core.
  *
@@ -60,6 +61,7 @@ export interface FeedWriteData {
   scraperConfig: string | null;
   httpOptions: string | null;
   // Written only when the OPML carried the attribute (never wipes local edits).
+  contentRules?: string | null;
   filtersActionRead?: string | null;
   fullTextSelector?: string;
   fullTextConditions?: string;
@@ -139,7 +141,7 @@ const REMOTE_BLOCKED_HTTP = [
 let remoteBlockedExpressions: string[] | null = null;
 const getRemoteBlockedExpressions = () =>
   (remoteBlockedExpressions ??= [
-    "cssFullContent", "cssContentFilter", "cssFullContentFilter", "cssFullContentConditions",
+    "contentRules", "cssFullContent", "cssContentFilter", "cssFullContentFilter", "cssFullContentConditions",
     "xPathToJson", ...XPATH_ATTRS, ...JSON_ATTRS,
   ]);
 
@@ -187,7 +189,7 @@ export function mapOutlineToFeed(
   // make the worker's per-task time limit (lib/html-worker) the common case.
   const extensions: Record<string, string> = {};
   for (const [name, value] of Object.entries(outline.extensions ?? {})) {
-    const limit = name === "filtersActionRead" || name === "cssFullContentConditions" ? MAX_FILTER_LIST_LENGTH : MAX_EXPRESSION_LENGTH;
+    const limit = name === "contentRules" ? 32_000 : name === "filtersActionRead" || name === "cssFullContentConditions" ? MAX_FILTER_LIST_LENGTH : MAX_EXPRESSION_LENGTH;
     if (value.length > limit) {
       issue("unsupported", "expression-too-long", name, `${value.length} characters (max ${limit}) — not imported`);
       continue;
@@ -307,6 +309,10 @@ export function mapOutlineToFeed(
   if (extensions.cssFullContent) {
     data.fullTextSelector = extensions.cssFullContent;
     data.enableSelectorMode = true;
+  }
+  if (extensions.contentRules !== undefined) {
+    try { parseFeedContentRules(extensions.contentRules); data.contentRules = extensions.contentRules; }
+    catch { issue("unsupported", "content-rules-invalid", "contentRules", "invalid or unsafe content rules ignored"); }
   }
   const remove = extensions.cssContentFilter || extensions.cssFullContentFilter;
   if (remove) data.fullTextRemoveSelectors = remove;
@@ -518,6 +524,7 @@ export async function applyOpmlImportPlan(
       ...(!keep || d.scraperConfig !== null ? { scraperConfig: d.scraperConfig } : {}),
       ...(!keep || (d.httpOptions !== null && plan.trust !== "remote") ? { httpOptions: d.httpOptions } : {}),
       ...(categoryId !== null || !existing ? { categoryId } : {}),
+      ...(d.contentRules !== undefined ? { contentRules: d.contentRules } : {}),
       ...(d.filtersActionRead !== undefined ? { filtersActionRead: d.filtersActionRead } : {}),
       ...(d.fullTextSelector !== undefined ? { fullTextSelector: d.fullTextSelector } : {}),
       ...(d.fullTextConditions !== undefined ? { fullTextConditions: d.fullTextConditions } : {}),

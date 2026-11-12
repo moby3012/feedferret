@@ -1,4 +1,6 @@
 "use server";
+import { parseFeedContentRules } from "@/lib/feed-content-rules";
+import { applyFeedContentRules } from "@/lib/feed-content-rules-client";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -757,6 +759,7 @@ const UPDATE_FEED_FIELDS = [
     "defaultContentFormat",
     "fullTextConditions",
     "fullTextAutoSuggestDismissed",
+    "contentRules",
     "filtersActionRead",
     "sourceType",
     "priority",
@@ -795,6 +798,7 @@ export async function updateFeed(feedId: string, data: {
     defaultContentFormat?: string;
     fullTextConditions?: string | null;
     fullTextAutoSuggestDismissed?: boolean;
+    contentRules?: string | null;
     filtersActionRead?: string | null;
     // Scout Studio source options
     sourceType?: string;
@@ -831,6 +835,8 @@ export async function updateFeed(feedId: string, data: {
         data = { ...data, httpOptions: mergeHttpOptions(data.httpOptions, readPlainColumn("feed.httpOptions", stored.httpOptions)) };
     }
     if (data.httpOptions) await assertSafeHttpOptionsProxy(data.httpOptions);
+
+    if (data.contentRules !== undefined) parseFeedContentRules(data.contentRules);
 
     const READER_FONT_SIZES = new Set(["small", "medium", "large", "xl"]);
     const READER_WIDTHS = new Set(["normal", "wide", "full"]);
@@ -945,7 +951,7 @@ export async function getFeedEditConfig(feedId: string) {
 
     const feed = await db.feed.findFirst({
         where: { id: feedId, userId: session.user.id },
-        select: { authUsername: true, authPassword: true, scraperConfig: true, httpOptions: true },
+        select: { authUsername: true, authPassword: true, scraperConfig: true, httpOptions: true, contentRules: true },
     });
     if (!feed) throw new Error("Feed not found");
     // Owner-only: decrypts v2-sealed values (M8). An undecryptable value throws,
@@ -956,6 +962,7 @@ export async function getFeedEditConfig(feedId: string) {
     return {
         authUsername: opened.authUsername ?? null,
         hasAuthPassword: Boolean(feed.authPassword),
+        contentRules: feed.contentRules,
         scraperConfig: feed.scraperConfig ?? null,
         httpOptions,
         maskedHttpOptions: masked,
@@ -1998,4 +2005,15 @@ export async function createChangedetectionFeed(input: { url: string; useAiSelec
         usedAiSelector: !!includeFilters,
         aiNotes,
     };
+}
+
+/** Owner-only, read-only preview using exactly the ingestion worker evaluator. */
+export async function previewFeedContentRules(feedId: string, rules: string, removeSelectors?: string | null) {
+    const session = await auth();
+    if (!session?.user?.id) throw new Error("Unauthorized");
+    parseFeedContentRules(rules);
+    const article = await db.article.findFirst({ where: { feedId, userId: session.user.id }, orderBy: { publishedAt: "desc" }, select: { title: true, content: true, feedContent: true } });
+    if (!article) return null;
+    const [result] = await applyFeedContentRules([{ title: article.title, html: article.feedContent ?? article.content ?? "" }], rules, removeSelectors);
+    return { ...result, title: article.title };
 }

@@ -117,6 +117,7 @@ describe("N4: feed secrets never reach list / bootstrap payloads", () => {
     expect(config).toEqual({
       authUsername: SECRETS.username,
       hasAuthPassword: true,
+      contentRules: null,
       scraperConfig: JSON.stringify({ marker: SECRETS.scraper }),
       // Cookies / proxy credentials are write-only too (M8 review): masked as "__keep__".
       httpOptions: JSON.stringify({ CURLOPT_COOKIE: "__keep__", CURLOPT_PROXY: "__keep__" }),

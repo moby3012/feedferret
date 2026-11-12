@@ -391,6 +391,7 @@ model Feed {
   // "Enable automatic full text for this feed?" suggestion (shown after a manual
   // fetch reveals the feed is truncated) was declined — don't ask again.
   fullTextAutoSuggestDismissed Boolean @default(false)
+  contentRules            String?
   filtersActionRead        String?
   hideFromAllFeeds         Boolean  @default(false)
   hideArticleImage         Boolean  @default(false)
@@ -412,6 +413,7 @@ model Feed {
 }
 
 model Article {
+  upstreamContentHash String?
   // Fixed-width decimal numeric identity; nullable only during startup backfill.
   extId String? @unique
   id          String   @id @default(cuid())

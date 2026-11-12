@@ -73,6 +73,14 @@ describe("HTML worker pool", () => {
     expect(maxGapMs).toBeLessThan(250);
   }, 30_000);
 
+  it("terminates accepted regexes that exceed the content-rule budget", async () => {
+    const pool = makePool({ timeoutMs: 30_000 });
+    await pool.run("warm", null);
+    const rules = JSON.stringify({ transforms: [{ type: "replace_regex", pattern: "(a|aa)+$", replacement: "" }] });
+    await expect(pool.run("feedContentRules", { rules, items: [{ title: "", html: "a".repeat(5000) + "!" }] }, { timeoutMs: 100 })).rejects.toMatchObject({ reason: "timeout" });
+    expect(pool.liveWorkers).toBe(0);
+  }, 30_000);
+
   it("terminates a worker that exceeds its timeout, reports it, and serves the next task with a fresh worker", async () => {
     const pool = makePool({ timeoutMs: 300 });
     const { result, maxGapMs } = await whileTicking(() => pool.run("__testBusyLoop", { ms: 10_000 }));
