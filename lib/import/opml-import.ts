@@ -1,4 +1,4 @@
-import { parseFeedContentRules } from "@/lib/feed-content-rules";
+import { normalizeFeedContentRules } from "@/lib/feed-content-rules";
 /**
  * Shared OPML import core.
  *
@@ -311,7 +311,7 @@ export function mapOutlineToFeed(
     data.enableSelectorMode = true;
   }
   if (extensions.contentRules !== undefined) {
-    try { parseFeedContentRules(extensions.contentRules); data.contentRules = extensions.contentRules; }
+    try { data.contentRules = normalizeFeedContentRules(extensions.contentRules); }
     catch { issue("unsupported", "content-rules-invalid", "contentRules", "invalid or unsafe content rules ignored"); }
   }
   const remove = extensions.cssContentFilter || extensions.cssFullContentFilter;

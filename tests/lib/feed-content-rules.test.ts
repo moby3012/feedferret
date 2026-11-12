@@ -1,10 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { parseFeedContentRules } from "@/lib/feed-content-rules";
+import { parseFeedContentRules, normalizeFeedContentRules, hasFeedContentRules } from "@/lib/feed-content-rules";
 import { evaluateFeedContentRules } from "@/lib/feed-content-rules-core";
 import { applyFeedContentRules } from "@/lib/feed-content-rules-client";
 import { generateOpml, parseOpml } from "@/lib/opml";
 const json = (transforms: unknown[] = [], gates: unknown[] = []) => JSON.stringify({ transforms, gates });
 describe("feed content rules", () => {
+  it("normalizes empty configurations to null and disables legacy empty JSON at runtime", () => {
+    for (const raw of [null, "", "{}", '{"transforms":[]}', '{"gates":[]}', '{"transforms":[],"gates":[]}']) {
+      expect(normalizeFeedContentRules(raw)).toBeNull();
+      expect(hasFeedContentRules(raw)).toBe(false);
+    }
+    const active = json([{ type: "strip_selector", css: ".ad" }]);
+    expect(normalizeFeedContentRules(active)).toBe(active);
+    expect(hasFeedContentRules(active)).toBe(true);
+    expect(hasFeedContentRules("invalid")).toBe(true); // worker must report invalid_rules
+    expect(() => normalizeFeedContentRules("invalid")).toThrow();
+  });
+  it("uses default sanitizer output for invalid stored rules, including newly rejected regex", async () => {
+    for (const rules of ["invalid JSON", json([], [{ type: "title_include", pattern: "(a|aa)+$" }])]) {
+      const out = await evaluateFeedContentRules({ rules, removeSelectors: ".ad", items: [{ title: "T", html: '<p onclick="evil()">Safe</p><div class="ad">Ad</div><script>evil()</script>' }] });
+      expect(out[0]).toMatchObject({ html: "<p>Safe</p>", allowed: true, rulesSkipped: "invalid_rules" });
+    }
+  });
   it("rejects unsafe regex, invalid flags and oversized configs on save", () => {
     for (const pattern of ["(a+)+$", "(", "(a|aa)+$", "(a|a)*$", "(a*)\\1+b", "a.*a.*a.*a.*a.*a.*b", "(.*)(.*)(.*)(.*)(.*)(.*)z", "(?<=a+)b"]) {
       expect(() => parseFeedContentRules(json([{ type: "replace_regex", pattern, replacement: "" }]))).toThrow();

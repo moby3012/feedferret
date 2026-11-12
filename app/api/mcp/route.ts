@@ -1,4 +1,4 @@
-import { parseFeedContentRules } from "@/lib/feed-content-rules";
+import { normalizeFeedContentRules } from "@/lib/feed-content-rules";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -387,7 +387,7 @@ async function callTool(user: ApiUser, name: string, args: any) {
       for (const key of FEED_WRITABLE_KEYS) {
         if (args[key] !== undefined) data[key] = args[key];
       }
-      if (data.contentRules !== undefined) parseFeedContentRules(data.contentRules);
+      if (data.contentRules !== undefined) data.contentRules = normalizeFeedContentRules(data.contentRules);
       if (data.categoryId) await assertOwnedCategories(user.id, [data.categoryId]);
       if (data.updateFrequency !== undefined || data.categoryId !== undefined) data.nextSyncAt = null;
       clampFeedLimits(data);

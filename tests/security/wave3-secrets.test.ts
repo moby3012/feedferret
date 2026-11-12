@@ -134,6 +134,12 @@ describe("N4: feed secrets never reach list / bootstrap payloads", () => {
     await expect(previewFeedContentRules(ids.feed, "{}")).rejects.toThrow("Too many previews");
   });
 
+  it("updateFeed persists null for a configuration with no transforms or gates", async () => {
+    await updateFeed(ids.feed, { contentRules: JSON.stringify({ transforms: [{ type: "strip_selector", css: ".ad" }] }) });
+    await updateFeed(ids.feed, { contentRules: '{"transforms":[],"gates":[]}' });
+    expect((await state.db.feed.findUniqueOrThrow({ where: { id: ids.feed } })).contentRules).toBeNull();
+  });
+
   it("updateFeed keeps the stored password when the dialog omits it", async () => {
     await updateFeed(ids.feed, { name: "Private 2", authType: "basic", authUsername: SECRETS.username });
     const row = await state.db.feed.findUniqueOrThrow({ where: { id: ids.feed } });

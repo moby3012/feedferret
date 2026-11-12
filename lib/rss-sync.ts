@@ -1,3 +1,4 @@
+import { hasFeedContentRules } from "./feed-content-rules";
 import { createHash } from "node:crypto";
 import { assessExtraction } from "./extraction-quality";
 import { applyFeedContentRules } from "./feed-content-rules-client";
@@ -735,8 +736,9 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         // worker pool on bounded input, never on the main thread. The feed's
         // remove-selectors (FreshRSS `cssContentFilter`) run in the same worker
         // task, on the feed's own content too — not only on downloaded full text.
-        const sanitizedItems: { html: string; excerpt: string; defaultHtml?: string; allowed?: boolean }[] = feed.contentRules
-            ? await applyFeedContentRules(remoteFeed.articles.map((item, index) => ({ title: item.title || "", html: itemContents[index] })), feed.contentRules, feed.fullTextRemoveSelectors)
+        const contentRules = hasFeedContentRules(feed.contentRules) ? feed.contentRules : null;
+        const sanitizedItems: { html: string; excerpt: string; defaultHtml?: string; allowed?: boolean }[] = contentRules
+            ? await applyFeedContentRules(remoteFeed.articles.map((item, index) => ({ title: item.title || "", html: itemContents[index] })), contentRules, feed.fullTextRemoveSelectors)
             : await sanitizeFeedItemBodies(itemContents, { removeSelectors: feed.fullTextRemoveSelectors });
 
         const articles = remoteFeed.articles.map((item, index) => {
@@ -794,7 +796,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 externalId,
                 dedupeKey,
                 ...(legacyKeys.length ? { legacyDedupeKeys: legacyKeys } : {}),
-                ...(feed.contentRules ? { upstreamContentHash: createHash("sha256").update(sanitizedItems[index].defaultHtml!).digest("hex") } : {}),
+                ...(contentRules ? { upstreamContentHash: createHash("sha256").update(sanitizedItems[index].defaultHtml!).digest("hex") } : {}),
                 contentHash: computeContentHash(link),
                 content: sanitizedContent,
                 excerpt: excerpt,
@@ -1176,7 +1178,7 @@ async function autoFetchFullTextViaEngine(
                 await recordParseAborted(article, result.parseAborted);
                 continue;
             }
-            if (result.html && feed.contentRules) {
+            if (result.html && hasFeedContentRules(feed.contentRules)) {
                 const [clean] = await applyFeedContentRules([{ title: "", html: result.html }], feed.contentRules, feed.fullTextRemoveSelectors);
                 result = { ...result, html: clean.html, excerpt: clean.excerpt, markdown: null, quality: assessExtraction(clean.html) };
             }

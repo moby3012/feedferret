@@ -73,6 +73,12 @@ describe("HTML worker pool", () => {
     expect(maxGapMs).toBeLessThan(250);
   }, 30_000);
 
+  it("returns a default-sanitized fallback for invalid stored config in a real worker", async () => {
+    const pool = makePool();
+    const output = await pool.run("feedContentRules", { rules: JSON.stringify({ gates: [{ type: "title_include", pattern: "(a|aa)+$" }] }), removeSelectors: ".ad", items: [{ title: "T", html: '<p onclick="bad()">body</p><aside class="ad">ad</aside><script>bad()</script>' }] });
+    expect(output).toEqual([{ html: "<p>body</p>", excerpt: "body", allowed: true, rulesSkipped: "invalid_rules" }]);
+  });
+
   it("terminates rule tasks that exceed their execution budget", async () => {
     const pool = makePool({ timeoutMs: 30_000 });
     await pool.run("warm", null);

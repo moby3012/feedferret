@@ -1,5 +1,5 @@
 "use server";
-import { parseFeedContentRules } from "@/lib/feed-content-rules";
+import { parseFeedContentRules, normalizeFeedContentRules } from "@/lib/feed-content-rules";
 import { applyFeedContentRules } from "@/lib/feed-content-rules-client";
 
 import { auth } from "@/auth";
@@ -836,7 +836,7 @@ export async function updateFeed(feedId: string, data: {
     }
     if (data.httpOptions) await assertSafeHttpOptionsProxy(data.httpOptions);
 
-    if (data.contentRules !== undefined) parseFeedContentRules(data.contentRules);
+    if (data.contentRules !== undefined) data.contentRules = normalizeFeedContentRules(data.contentRules);
 
     const READER_FONT_SIZES = new Set(["small", "medium", "large", "xl"]);
     const READER_WIDTHS = new Set(["normal", "wide", "full"]);

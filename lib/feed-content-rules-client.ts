@@ -26,6 +26,7 @@ export async function applyFeedContentRules(items: { title: string; html: string
     if (remaining <= 0) { skip(start, end, "feed_budget"); return; }
     try {
       const output = await runHtmlTask("feedContentRules", { rules, removeSelectors, items: guarded.slice(start, end) }, { ...run, timeoutMs: Math.max(1, Math.min(TASK_BUDGET_MS, Math.floor(remaining))) });
+      if (output.some(item => item.rulesSkipped === "invalid_rules")) skip(start, end, "invalid_rules");
       output.forEach((item, i) => Object.assign(results[start + i], item));
     } catch (error) {
       if (!isTooComplexError(error)) throw error;

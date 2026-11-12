@@ -36,6 +36,12 @@ describe("content rule worker fallback", () => {
     expect(mocks.run).toHaveBeenCalledTimes(1);
     expect(out.every(x => x.html === "sanitized:body" && x.rulesSkipped === "feed_budget")).toBe(true);
   });
+  it("logs an attention note when the worker reports invalid stored rules", async () => {
+    mocks.run.mockResolvedValue([{ html: "safe", excerpt: "safe", allowed: true, rulesSkipped: "invalid_rules" }]);
+    const [out] = await applyFeedContentRules([{ title: "T", html: "body" }], "invalid");
+    expect(out).toMatchObject({ html: "safe", allowed: true, rulesSkipped: "invalid_rules" });
+    expect(mocks.warn).toHaveBeenCalledWith(expect.stringContaining("invalid_rules"));
+  });
   it("keeps unavailable workers retryable rather than admitting unsanitized input", async () => {
     mocks.run.mockRejectedValue(new HtmlWorkerError("unavailable", "missing worker"));
     await expect(applyFeedContentRules([{ title: "", html: "body" }], "{}")).rejects.toMatchObject({ reason: "unavailable" });

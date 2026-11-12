@@ -57,3 +57,16 @@ export function parseFeedContentRules(raw: unknown): FeedContentRules {
   }
   return config;
 }
+
+/** Empty valid configurations are disabled on every persistence surface. */
+export function normalizeFeedContentRules(raw: unknown): string | null {
+  const config = parseFeedContentRules(raw);
+  return config.transforms.length || config.gates.length ? raw as string : null;
+}
+
+/** Legacy empty JSON uses the normal ingestion path. Invalid stored rules must
+ * reach the worker so it can return an explicit invalid_rules fallback. */
+export function hasFeedContentRules(raw: string | null | undefined): boolean {
+  try { return normalizeFeedContentRules(raw) !== null; }
+  catch { return true; }
+}

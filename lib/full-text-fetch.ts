@@ -1,3 +1,4 @@
+import { hasFeedContentRules } from "./feed-content-rules";
 import { applyFeedContentRules } from "./feed-content-rules-client";
 import { assessExtraction } from "./extraction-quality";
 import { FEED_CLIENT_SELECT } from "@/lib/feed-secrets";
@@ -112,7 +113,7 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
     }
 
     const feed = await db.feed.findFirst({ where: { id: article.feedId, userId }, select: { contentRules: true, fullTextRemoveSelectors: true } });
-    if (feed && feed.contentRules) {
+    if (feed && hasFeedContentRules(feed.contentRules)) {
         const [clean] = await applyFeedContentRules([{ title: article.title, html: result.html }], feed.contentRules, feed.fullTextRemoveSelectors);
         result = { ...result, html: clean.html, excerpt: clean.excerpt, quality: assessExtraction(clean.html) };
     }

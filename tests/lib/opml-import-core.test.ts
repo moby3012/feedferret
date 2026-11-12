@@ -236,6 +236,11 @@ describe("XML safety (XXE, billion laughs, depth/size bombs)", () => {
 
 
 describe("content rule import policy", () => {
+  it("normalizes an empty imported rules configuration to null", async () => {
+    const outlines = await parseOpml(generateOpml([{ name: "Synthetic", url: "https://example.com/feed", contentRules: "{}" }]));
+    expect(planOpmlImport(outlines, { trust: "local" }).feeds[0].data.contentRules).toBeNull();
+  });
+
   it("maps local rules, rejects unsafe patterns and blocks remote rules", async () => {
     const rules = JSON.stringify({ transforms: [{ type: "strip_text_after", marker: "Footer" }] });
     const outlines = await parseOpml(generateOpml([{ name: "Synthetic", url: "https://example.com/feed", contentRules: rules }]));

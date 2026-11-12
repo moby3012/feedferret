@@ -1,10 +1,18 @@
 // Worker-only evaluator: never run publisher HTML or user regex on the request thread.
-import { parseFeedContentRules } from "./feed-content-rules";
+import { parseFeedContentRules, type FeedContentRules } from "./feed-content-rules";
 import { removeSelectorsFromFragments } from "./selector-extract";
+import { sanitizeFeedItemsInProcess } from "./feed-item-sanitize";
 import { getSanitizer } from "./sanitize-html";
 
 export async function evaluateFeedContentRules(input: { rules?: string | null; items: { title: string; html: string }[]; removeSelectors?: string | null }) {
-  const config = parseFeedContentRules(input.rules);
+  let config: FeedContentRules;
+  try { config = parseFeedContentRules(input.rules); }
+  catch {
+    // A tightened policy or a direct DB edit must not turn a stored rule into
+    // repeated sync failures/auto-muting. Return the normal sanitized body.
+    const defaults = await sanitizeFeedItemsInProcess({ items: input.items.map(item => item.html), removeSelectors: input.removeSelectors });
+    return defaults.map(item => ({ ...item, allowed: true, rulesSkipped: "invalid_rules" }));
+  }
   const sanitizer = await getSanitizer();
   return input.items.map(({ title, html }) => {
     // Gates inspect original visible content; cleaning a footer must not remove its score.
@@ -26,6 +34,6 @@ export async function evaluateFeedContentRules(input: { rules?: string | null; i
       }
     }
     html = sanitizer.sanitize(html);
-    return { html, allowed, excerpt: sanitizer.sanitize(html, { ALLOWED_TAGS: [] }).slice(0, 200) };
+    return { html, allowed, rulesSkipped: null, excerpt: sanitizer.sanitize(html, { ALLOWED_TAGS: [] }).slice(0, 200) };
   });
 }

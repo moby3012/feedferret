@@ -1,4 +1,4 @@
-import { parseFeedContentRules } from "@/lib/feed-content-rules";
+import { normalizeFeedContentRules } from "@/lib/feed-content-rules";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -514,7 +514,7 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
     const owned = await db.category.findFirst({ where: { id: String(data.categoryId), userId: user.id }, select: { id: true } });
     if (!owned) return apiError("Invalid category", 422);
   }
-  try { if (data.contentRules !== undefined) parseFeedContentRules(data.contentRules); } catch { return apiError("Invalid or unsafe content rules", 422); }
+  try { if (data.contentRules !== undefined) data.contentRules = normalizeFeedContentRules(data.contentRules); } catch { return apiError("Invalid or unsafe content rules", 422); }
   clampFeedLimits(data);
   if (typeof data.httpOptions === "string" && data.httpOptions.includes(HTTP_OPTION_KEEP)) {
     const stored = await db.feed.findFirst({ where: { id: feedId, userId: user.id }, select: { httpOptions: true } });
