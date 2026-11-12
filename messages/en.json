@@ -758,6 +758,7 @@
     "topicFeeds": "News & search feeds for this topic — pick one",
     "resolverNoResult": "Nothing found for that. Try the site's address or a feed URL.",
     "hints": {
+      "genericPlatform": "Platform",
       "publicPreviewUnavailable": "This channel has no accessible public web preview. It may be private or no longer exist.",
       "needsRsshub": "Requires RSSHub – configure under Settings › Server",
       "rateLimited": "Try again later",
@@ -767,7 +768,7 @@
       "partial": "The search was stopped early (time or request limit) before it found a feed. Try again later or enter the feed address directly.",
       "blockedButFound": "The page blocks automated access – feed found anyway: {via}",
       "blockedButFoundPlain": "The page blocks automated access – feed found anyway.",
-      "needsTwitch": "Enable Twitch or check the saved credentials: Admin → Server settings → Twitch. Create an app at dev.twitch.tv/console (redirect http://localhost, category Website Integration), then save Client ID and Client Secret. Alternatively configure RSSHub."
+      "needsApiCredentials": "Enable {platform} or check its saved credentials: Admin → Server settings → {platform}. Follow the setup guide there and save the app credentials. Alternatively configure RSSHub."
     },
     "kinds": {
       "videos": "Videos",
@@ -2575,6 +2576,8 @@
       "searching": "Looking for feeds on {site}…",
       "none": "No other feed was found on the site.",
       "noneHint": {
+        "needs-api-credentials": "Enable the platform or check its saved API credentials under Admin → Server settings.",
+        "public-preview-unavailable": "This channel has no accessible public web preview. It may be private or no longer exist.",
         "needs-rsshub": "This site needs RSSHub.",
         "rate-limited": "The site throttles automated access.",
         "blocked": "The site blocks automated access.",

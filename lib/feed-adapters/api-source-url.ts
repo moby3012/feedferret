@@ -3,11 +3,13 @@
 export const API_PLATFORM_SOURCES = [{
   id: "twitch", name: "Twitch", hosts: ["twitch.tv", "www.twitch.tv", "m.twitch.tv"],
   apiOrigin: "https://api.twitch.tv",
-  setupHint: "needs-twitch",
   account: /^[a-z0-9_]{1,25}$/,
   route: /^\/([a-z0-9_]{1,25})(?:\/(?:videos|clips))?\/?$/i,
-  variants: ["live", "videos", "clips"],
-  labels: { de: ["Live-Status", "Videos (VODs/Highlights)", "Clips"], en: ["Live status", "Videos (VODs/Highlights)", "Clips"] },
+  variants: [
+    { id: "live", label: { de: "Live-Status", en: "Live status" } },
+    { id: "videos", label: { de: "Videos (VODs/Highlights)", en: "Videos (VODs/Highlights)" } },
+    { id: "clips", label: { de: "Clips", en: "Clips" } },
+  ],
 }] as const;
 
 /** Parses an internal API-source URL. Scheme, source id and account are
@@ -21,7 +23,7 @@ export function parseApiSourceUrl(raw: string) {
     const parts = url.pathname.toLowerCase().split("/");
     if (url.protocol !== "feedferret:" || !source || url.username || url.password || url.port || url.search || url.hash || parts.length !== 3) return null;
     const [, account, variant] = parts;
-    if (!source.account.test(account) || !(source.variants as readonly string[]).includes(variant)) return null;
+    if (!source.account.test(account) || !source.variants.some((v) => v.id === variant)) return null;
     return { source, account, variant };
   } catch { return null; }
 }

@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 describe("official Twitch API platform source", () => {
   it.each(["", "/videos", "/clips"])("matches channel route %s and offers registered variants", (suffix) => {
-    expect(matchApiPlatform(new URL(`https://www.twitch.tv/example${suffix}`))?.source.variants).toEqual(["live", "videos", "clips"]);
+    expect(matchApiPlatform(new URL(`https://www.twitch.tv/example${suffix}`))?.source.variants.map((v) => v.id)).toEqual(["live", "videos", "clips"]);
     expect(matchApiPlatform(new URL("https://twitch.tv.example.com/example"))).toBeNull();
   });
   it("keeps internal feeds strict and round-trips through OPML", async () => {
@@ -33,6 +33,14 @@ describe("official Twitch API platform source", () => {
       expect((await parseOpml(generateOpml([{ name: variant, url }])))[0].xmlUrl).toBe(url);
     }
     for (const url of ["feedferret://evil/example/live", "feedferret://twitch/example/live?secret=x", "feedferret://twitch/example/unknown", "feedferret://twitch/a:b/live"]) expect(parseApiSourceUrl(url)).toBeNull();
+  });
+  it("imports mixed-case OPML URLs with the same identity as a native subscription", async () => {
+    const { planOpmlImport } = await import("../../lib/import/opml-import");
+    const outlines = await parseOpml(generateOpml([{ name: "Synthetic", url: "FEEDFERRET://Twitch/Example/LIVE" }]));
+    const plan = planOpmlImport(outlines);
+    expect(plan.errors).toEqual([]);
+    expect(plan.feeds[0].url).toBe("feedferret://twitch/example/live");
+    expect(plan.feeds[0].url).toBe(canonicalApiSourceUrl("feedferret://twitch/example/live"));
   });
   it("returns nothing while offline and caches the app token", async () => {
     expect((await fetchTwitchFeed("example", "live")).articles).toEqual([]);
@@ -93,9 +101,18 @@ describe("official Twitch API platform source", () => {
   it("mints one token for N concurrent requests and never uses a caller's abort signal", async () => {
     const creds = { clientId: "single-flight", clientSecret: "secret" };
     const first = new AbortController();
-    const calls = Promise.all([twitchRequest("users", {}, creds, first.signal), ...Array.from({ length: 4 }, () => twitchRequest("users", {}, creds))]);
+    const transport = mocks.fetch.getMockImplementation()!;
+    // Honor cancellation on Helix requests so the joining callers prove that
+    // an aborted leader cannot cancel their shared token mint.
+    mocks.fetch.mockImplementation(async (url: string, init: RequestInit) => {
+      init.signal?.throwIfAborted();
+      return transport(url, init);
+    });
+    const calls = Promise.allSettled([twitchRequest("users", {}, creds, first.signal), ...Array.from({ length: 4 }, () => twitchRequest("users", {}, creds))]);
     first.abort();
-    await calls.catch(() => undefined);
+    const results = await calls;
+    expect(results[0].status).toBe("rejected");
+    expect(results.slice(1).every((r) => r.status === "fulfilled")).toBe(true);
     const tokens = mocks.fetch.mock.calls.filter(([url]) => url.includes("oauth2/token"));
     expect(tokens).toHaveLength(1);
     expect(tokens[0][1].signal).not.toBe(first.signal);
@@ -243,14 +260,14 @@ it("discovers three native variants without reading the Twitch website", async (
 it("shows setup guidance without Twitch credentials or RSSHub", async () => {
   mocks.settings.mockResolvedValue(null); mocks.decrypt.mockReturnValue(null);
   const { discoverFeeds } = await import("../../lib/feed-discovery");
-  expect(await discoverFeeds("https://twitch.tv/example/clips")).toMatchObject({ feeds: [], hint: "needs-twitch" });
+  expect(await discoverFeeds("https://twitch.tv/example/clips")).toMatchObject({ feeds: [], hint: "needs-api-credentials", hintPlatform: "Twitch" });
   expect(mocks.fetch).not.toHaveBeenCalled();
 });
 
 it("rejected credentials give setup guidance and still try the RSSHub fallback", async () => {
   mocks.fetch.mockImplementation(async (url: string) => url.includes("oauth2/token") ? reply({}, 400) : reply({ data: [] }));
   const { discoverFeeds } = await import("../../lib/feed-discovery");
-  expect(await discoverFeeds("https://twitch.tv/example")).toMatchObject({ feeds: [], hint: "needs-twitch" });
+  expect(await discoverFeeds("https://twitch.tv/example")).toMatchObject({ feeds: [], hint: "needs-api-credentials", hintPlatform: "Twitch" });
   const rsshub = await import("../../lib/rsshub");
   const config = vi.spyOn(rsshub, "getRsshubConfig").mockResolvedValue({ baseUrl: "https://rsshub.example.com", apiKey: null });
   const validate = vi.spyOn(rsshub, "validateRsshubRoute").mockResolvedValue({ ok: true, title: "Example", itemCount: 1, sampleTitles: ["Synthetic"] });
