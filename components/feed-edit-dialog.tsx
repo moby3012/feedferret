@@ -951,7 +951,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   value={scraperConfig}
                   disabled={!editConfigLoaded}
                   onChange={(e) => setScraperConfig(e.target.value)}
-                  placeholder='{\"xpath\":{\"xPathItem\":\"//article\",\"xPathItemTitle\":\".//h2\"}}'
+                  placeholder='{\"xpath\":{\"xPathItem\":\"//article\",\"xPathItemTitle\":\".//h2\",\"xPathItemTimestamp\":\".//time\",\"xPathItemTimeFormat\":\"d.m.Y H:i\"}}'
                   className="min-h-28 rounded-panel border-border/70 bg-background/70 font-mono text-footnote"
                 />
               </div>
