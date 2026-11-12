@@ -3,6 +3,8 @@
 // article pages with jsdom, so production code runs these functions only in
 // the HTML worker pool (lib/html-worker); they are pure (no I/O).
 
+import { isJavaScriptShell } from "@/lib/extraction-shell-core";
+import { trimEdgeBoilerplate } from "@/lib/extraction-trim-core";
 import { JSDOM } from "jsdom";
 import { getSanitizer } from "@/lib/sanitize-html";
 import { normalizeLazyMedia } from "@/lib/lazy-media";
@@ -96,6 +98,9 @@ const plainText = (element: Element) => (element.textContent || "").replace(/\s+
 /** Selector / heuristic full-text extraction. Throws on an invalid configured selector. */
 export async function extractBySelector(input: SelectorExtractInput): Promise<SelectorExtractOutput> {
   const { url, mode } = input;
+  if (mode === "sync" && isJavaScriptShell(input.html, url)) {
+    return { html: null, plainLength: 0, quality: { ...assessExtraction(""), reason: "js_shell" }, candidates: [] };
+  }
   const dom = new JSDOM(input.html, { url });
   try {
     const document = dom.window.document;
@@ -166,7 +171,8 @@ export async function extractBySelector(input: SelectorExtractInput): Promise<Se
       const plain = DOMPurify.sanitize(sanitized, { ALLOWED_TAGS: [] }).replace(/\s+/g, " ").trim();
       return { html: sanitized, plainLength: plain.length, quality: null, candidates: top };
     }
-    return { html: sanitized, plainLength: 0, quality: assessExtraction(sanitized), candidates: top };
+    const trimmed = trimEdgeBoilerplate(sanitized);
+    return { html: trimmed, plainLength: 0, quality: assessExtraction(trimmed), candidates: top };
   } finally {
     dom.window.close();
   }

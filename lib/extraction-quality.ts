@@ -182,10 +182,16 @@ export function decideFullText(
     candidate: ExtractionQuality | null | undefined,
     baselineHtml: string | null | undefined,
     mode: "auto" | "manual" = "auto",
+    candidateHtml?: string | null,
 ): FullTextDecision {
-    if (!candidate || candidate.verdict === "empty") return { accept: false, reason: "empty" };
+    if (!candidate || candidate.verdict === "empty") return { accept: false, reason: candidate?.reason ?? "empty" };
     if (candidate.verdict !== "good") return { accept: false, reason: candidate.reason };
-    const baseline = htmlToPlainText(baselineHtml ?? "").length;
+    const baselineText = htmlToPlainText(baselineHtml ?? "");
+    const baseline = baselineText.length;
+    if (mode === "auto" && candidateHtml && baseline >= 300 &&
+        (leadCoverage(baselineHtml ?? "", candidateHtml, candidate) ?? 1) < 0.3) {
+        return { accept: false, reason: "lead_mismatch" };
+    }
     if (mode === "manual") {
         return candidate.textLength > baseline ? { accept: true, reason: "ok" } : { accept: false, reason: "not_longer" };
     }
@@ -193,4 +199,31 @@ export function decideFullText(
     // re-renders the feed item (plus a byline and a share bar) is not "full text".
     if (candidate.textLength < baseline * 1.2 + 100) return { accept: false, reason: "teaser" };
     return { accept: true, reason: "ok" };
+}
+
+/** Unicode words, shared by lead matching and bounded cross-item fingerprints. */
+export function textWords(text: string): string[] {
+    return text.normalize("NFKC").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+// One extraction result is checked repeatedly during escalation and storage.
+// Weak keys release the cached words with the result rather than retaining pages.
+const leadMemo = new WeakMap<ExtractionQuality, { baseline: string; html: string; coverage: number | null }>();
+export function leadCoverage(baseline: string, html: string, quality?: ExtractionQuality): number | null {
+    const cached = quality && leadMemo.get(quality);
+    if (cached && cached.baseline === baseline && cached.html === html) return cached.coverage;
+    let coverage: number | null = null;
+    if (htmlToPlainText(baseline).length >= 300) {
+        const lead = textWords(htmlToPlainText(baseline)).slice(0, 40).filter((word) => word.length >= 4);
+        const words = textWords(htmlToPlainText(html)).slice(0, 200);
+        if (lead.length >= 8) {
+            coverage = 0;
+            for (let i = 0; i < words.length; i += 10) {
+                const window = new Set(words.slice(i, i + 60));
+                coverage = Math.max(coverage, lead.filter((word) => window.has(word)).length / lead.length);
+            }
+        }
+    }
+    if (quality) leadMemo.set(quality, { baseline, html, coverage });
+    return coverage;
 }

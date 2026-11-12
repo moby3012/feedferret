@@ -19,7 +19,7 @@ export const PARSER_PACKAGES = [
   "turndown", "parse5", "cheerio", "@xmldom/xmldom", "xpath",
 ];
 export const WORKER_ONLY_MODULES = [
-  "readability-core", "extraction-trim-core", "ftr-site-config", "lazy-media", "html-to-markdown", "sanitize-html",
+  "readability-core", "extraction-trim-core", "extraction-shell-core", "ftr-site-config", "lazy-media", "html-to-markdown", "sanitize-html",
   "feed-parse-core", "page-feed-suggest-core", "page-digest", "selector-extract", "newsletter-html", "feed-item-sanitize",
   "opml-parse-core", "catalog-opml-core", "markdown-render-core", "html-worker/tasks",
 ];

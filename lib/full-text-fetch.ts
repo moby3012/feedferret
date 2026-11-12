@@ -110,7 +110,7 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
     }
 
     const existingPlainLength = (article.content || "").replace(/<[^>]*>?/gm, "").length;
-    const decision = decideFullText(result.quality, article.content, "manual");
+    const decision = decideFullText(result.quality, article.content, "manual", result.html);
     if (!decision.accept) {
         if (result.quality?.verdict === "wall") {
             throw new Error("The page only showed a cookie consent, subscription or bot-check screen instead of the article.");
