@@ -10,7 +10,7 @@ import { useOwnedOverlay } from "@/features/reader/nav/use-owned-overlay";
 import { nav } from "@/features/reader/nav/store";
 import { useNewsletterDialogs } from "@/components/newsletter/newsletter-actions";
 import { isWebLink } from "@/lib/newsletter-constants";
-import { useAiSettings, useBuildObsidianExportLink, useExportArticleToWallabag, useExportSettings } from "@/hooks/use-rss-data";
+import { useAiSettings, useBuildObsidianExportLink, useExportArticleToWallabag, useExportArticleToReadeck, useExportArticleToLinkwarden, useExportSettings } from "@/hooks/use-rss-data";
 import type { Article } from "@/lib/rss-data";
 import { SUMMARIZE_EVENT } from "./reader-events";
 import { ChromeButton, type ReaderNavProps } from "./chrome-button";
@@ -54,7 +54,14 @@ function ReaderMoreMenu(p: ReaderMoreMenuProps) {
   const { data: exportSettings } = useExportSettings();
   const buildObsidianLink = useBuildObsidianExportLink();
   const exportToWallabag = useExportArticleToWallabag();
-  const canExport = Boolean(exportSettings?.obsidianConfigured || exportSettings?.wallabagConfigured);
+  const exportToReadeck = useExportArticleToReadeck();
+  const exportToLinkwarden = useExportArticleToLinkwarden();
+  const canExport = Boolean(
+    exportSettings?.obsidianConfigured ||
+    exportSettings?.wallabagConfigured ||
+    exportSettings?.readeckConfigured ||
+    exportSettings?.linkwardenConfigured
+  );
   const labelIds = article.labels?.map((item) => item.label.id) ?? [];
 
   const sendToObsidian = useCallback(async () => {
@@ -76,6 +83,24 @@ function ReaderMoreMenu(p: ReaderMoreMenuProps) {
     }
     toast.success(t("sendToWallabagSuccess"));
   }, [article.id, exportToWallabag, t]);
+
+  const sendToReadeck = useCallback(async () => {
+    const result = await exportToReadeck.mutateAsync(article.id);
+    if (!result.success) {
+      toast.error(result.error || t("sendToFailed"));
+      return;
+    }
+    toast.success(t("sendToReadeckSuccess"));
+  }, [article.id, exportToReadeck, t]);
+
+  const sendToLinkwarden = useCallback(async () => {
+    const result = await exportToLinkwarden.mutateAsync(article.id);
+    if (!result.success) {
+      toast.error(result.error || t("sendToFailed"));
+      return;
+    }
+    toast.success(t("sendToLinkwardenSuccess"));
+  }, [article.id, exportToLinkwarden, t]);
 
   const [open, setOpen] = useOwnedOverlay("reader-menu");
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -145,6 +170,8 @@ function ReaderMoreMenu(p: ReaderMoreMenuProps) {
             children: [
               ...(exportSettings?.obsidianConfigured ? [{ id: "obsidian", label: t("sendToObsidian"), disabled: buildObsidianLink.isPending, onSelect: () => void sendToObsidian() }] : []),
               ...(exportSettings?.wallabagConfigured ? [{ id: "wallabag", label: t("sendToWallabag"), disabled: exportToWallabag.isPending, onSelect: () => void sendToWallabag() }] : []),
+              ...(exportSettings?.readeckConfigured ? [{ id: "readeck", label: t("sendToReadeck"), disabled: exportToReadeck.isPending, onSelect: () => void sendToReadeck() }] : []),
+              ...(exportSettings?.linkwardenConfigured ? [{ id: "linkwarden", label: t("sendToLinkwarden"), disabled: exportToLinkwarden.isPending, onSelect: () => void sendToLinkwarden() }] : []),
             ],
           },
         ]

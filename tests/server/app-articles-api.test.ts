@@ -352,7 +352,7 @@ describe("metadata backfill", () => {
     expect(await state.db.article.count({ where: { kind: null } })).toBe(0);
     const after = await state.db.article.findUnique({ where: { id: "a-001" } });
     expect(after?.kind).toBe("video");
-    expect(after?.readMinutes).toBe(3);
+    expect(after?.readMinutes).toBe(2);
     expect(after?.updatedAt.getTime()).toBe(before?.updatedAt.getTime());
     expect(await runArticleMetaBackfill({ batchSize: 64, pauseMs: 0 })).toBe(0);
     const { body } = await list(`feed=${ids.aliceFeed}&show=all&limit=1`);

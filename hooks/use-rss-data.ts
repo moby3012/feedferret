@@ -6,7 +6,7 @@ import { useTranslations } from "next-intl"
 import { getFeeds, getCategories, refreshAllFeeds, refreshFeed, importOpml, exportOpml, exportUserData, addFeed, deleteFeed, updateFeed, addCategory, updateCategory, deleteCategory, updateCategoryOrder, updateFeedOrder, getLabels, createLabel, updateLabel, deleteLabel, getSavedSearches, createSavedSearch, updateSavedSearch, deleteSavedSearch, setSavedSearchSharing, getFeedHealth, applyRetentionPolicies, getAutoReadRules, createAutoReadRule, updateAutoReadRule, deleteAutoReadRule, applyAutoReadRulesNow, previewAutoReadRule, migrateKeywordAlertsToRules, getKeywordAlerts, createKeywordAlert, updateKeywordAlert, deleteKeywordAlert, previewKeywordAlertMatches, testKeywordAlert, getNotifications, markNotificationRead, markAllNotificationsRead, dismissNotification, clearAllNotifications, previewFeedExtraction, summarizeArticle, releaseArticleSpoiler, releaseAllSpoilers, suggestFeedFromUrl, createFeedFromPage, proposeAiFeedConfig, proposeAiFullTextSelector, getRsshubStatus, previewRsshubFeed, getChangedetectionStatus, createChangedetectionFeed } from "@/app/actions/feeds"
 import { previewGoogleNewsFeed, addGoogleNewsFeed, updateGoogleNewsFeedQuery, getGoogleNewsFeedSearch } from "@/app/actions/google-news"
 import { updateProfile, getEmailChangeMailStatus, changePassword, updateGlobalSettings, getReadingPreferences, getDigestSettings, updateDigestSettings, sendTestDigest, previewDigest, getTwoFactorStatus, beginTwoFactorSetup, confirmTwoFactorSetup, disableTwoFactor, getAiSettings, updateAiSettings, testAiConnection, getContentFetchSettings, updateContentFetchSettings, testContentFetchConnection, getNotificationChannels, updateNotificationChannels, testNotificationChannel, getNotificationChannelStatus } from "@/app/actions/settings"
-import { getExportSettings, updateExportSettings, testWallabagExportConnection, buildObsidianExportLink, exportArticleToWallabag } from "@/app/actions/export"
+import { getExportSettings, updateExportSettings, testWallabagExportConnection, buildObsidianExportLink, exportArticleToWallabag, testReadeckExportConnection, exportArticleToReadeck, testLinkwardenExportConnection, exportArticleToLinkwarden } from "@/app/actions/export"
 import { updateUiLanguage } from "@/app/actions/locale"
 import { updateDisplayTimezone } from "@/app/actions/timezone"
 import { toast } from "sonner"
@@ -423,7 +423,7 @@ export function useUpdateGlobalSettings() {
             }
         },
         onSuccess: (_result, data) => {
-            if (data.mediaProxyImages !== undefined) {
+            if (Object.keys(data).some(key => key.startsWith("media"))) {
                 queryClient.invalidateQueries({ queryKey: ["list"] })
                 queryClient.invalidateQueries({ queryKey: ["article"] })
             }
@@ -1055,6 +1055,30 @@ export function useBuildObsidianExportLink() {
 export function useExportArticleToWallabag() {
     return useMutation({
         mutationFn: (articleId: string) => exportArticleToWallabag(articleId),
+    })
+}
+
+export function useTestReadeckExportConnection() {
+    return useMutation({
+        mutationFn: (overrides?: Parameters<typeof testReadeckExportConnection>[0]) => testReadeckExportConnection(overrides),
+    })
+}
+
+export function useExportArticleToReadeck() {
+    return useMutation({
+        mutationFn: (articleId: string) => exportArticleToReadeck(articleId),
+    })
+}
+
+export function useTestLinkwardenExportConnection() {
+    return useMutation({
+        mutationFn: (overrides?: Parameters<typeof testLinkwardenExportConnection>[0]) => testLinkwardenExportConnection(overrides),
+    })
+}
+
+export function useExportArticleToLinkwarden() {
+    return useMutation({
+        mutationFn: (articleId: string) => exportArticleToLinkwarden(articleId),
     })
 }
 

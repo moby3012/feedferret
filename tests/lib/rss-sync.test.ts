@@ -15,6 +15,7 @@ type FakeArticle = {
   link: string;
   externalId: string | null;
   dedupeKey: string | null;
+  upstreamContentHash?: string | null;
   contentHash: string | null;
   content: string;
   excerpt: string | null;
@@ -77,6 +78,7 @@ const db = {
         link: d.link,
         externalId: d.externalId ?? null,
         dedupeKey: d.dedupeKey ?? null,
+        upstreamContentHash: d.upstreamContentHash ?? null,
         contentHash: d.contentHash ?? null,
         content: d.content,
         excerpt: d.excerpt ?? null,
@@ -159,6 +161,7 @@ type ArticleSyncInput = {
   link: string;
   externalId: string | null;
   dedupeKey: string;
+  upstreamContentHash?: string | null;
   contentHash: string | null;
   content: string;
   excerpt: string;
@@ -191,6 +194,17 @@ describe("upsertArticleBatch", () => {
     idCounter = 0;
     createdAtCounter = 0;
     vi.clearAllMocks();
+  });
+
+  it("does not rewrite articles or updatedAt when only cleaning rules change", async () => {
+    const { upsertArticleBatch } = await import("../../lib/rss-sync");
+    await upsertArticleBatch([makeInput({ upstreamContentHash: "upstream-v1" })]);
+    vi.clearAllMocks();
+    await upsertArticleBatch([makeInput({ upstreamContentHash: "upstream-v1", content: "cleaned differently", excerpt: "different" })]);
+    expect(store[0].content).toBe("<p>content</p>");
+    expect(db.article.update).not.toHaveBeenCalled();
+    await upsertArticleBatch([makeInput({ upstreamContentHash: "upstream-v2", content: "publisher update" })]);
+    expect(store[0].content).toBe("publisher update");
   });
 
   it("inserts genuinely-new articles and reports them as created", async () => {
