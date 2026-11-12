@@ -48,8 +48,8 @@ test("Reddit click-to-load media is allowed by enforced and report-only CSP", as
   });
   try {
     const response = await page.request.get("/");
-    expect(response.headers()["content-security-policy"]).toContain("media-src 'self' https://v.redd.it");
-    expect(response.headers()["content-security-policy-report-only"]).toContain("media-src 'self' https://v.redd.it");
+    expect(response.headers()["content-security-policy"]).toContain("media-src 'self' https: https://v.redd.it");
+    expect(response.headers()["content-security-policy-report-only"]).toContain("media-src 'self' https: https://v.redd.it");
     await app.open();
     await app.activate(app.row(1));
     await page.evaluate(() => {

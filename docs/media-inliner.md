@@ -32,7 +32,7 @@ Custom frontend destinations and arbitrary PeerTube instances open in a new
 tab with noopener/noreferrer. They deliberately do not use iframes: neither the
 static enforced legacy CSP nor a future enforced nonce CSP can enumerate
 per-user or per-article origins safely. Both policies have the same explicit
-frame-src list for fixed providers and media-src allowing self and v.redd.it. The nonce policy remains report-only.
+frame-src list for fixed providers and media-src allowing self, https and v.redd.it. The nonce policy remains report-only.
 Adding arbitrary https: to frame-src would weaken that restriction.
 
 Reddit RSS gallery/preview links to preview.redd.it and i.redd.it become inline

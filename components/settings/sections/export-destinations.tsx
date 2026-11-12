@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { Send, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useExportSettings, useUpdateExportSettings, useTestWallabagExportConnection } from "@/hooks/use-rss-data";
+import { useExportSettings, useUpdateExportSettings, useTestWallabagExportConnection, useTestReadeckExportConnection, useTestLinkwardenExportConnection } from "@/hooks/use-rss-data";
 import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { AiSummarySection } from "@/components/settings/sections/ai-summary";
@@ -15,6 +15,8 @@ export function ExportDestinationsSection() {
   const { data: exportSettings } = useExportSettings();
   const updateExport = useUpdateExportSettings();
   const testWallabag = useTestWallabagExportConnection();
+  const testReadeck = useTestReadeckExportConnection();
+  const testLinkwarden = useTestLinkwardenExportConnection();
 
   const [obsidianVault, setObsidianVault] = useState("");
   const [wallabagUrl, setWallabagUrl] = useState("");
@@ -24,12 +26,22 @@ export function ExportDestinationsSection() {
   const [wallabagPassword, setWallabagPassword] = useState("");
   const [wallabagTestResult, setWallabagTestResult] = useState<{ success: boolean; error?: string } | null>(null);
 
+  const [readeckUrl, setReadeckUrl] = useState("");
+  const [readeckApiKey, setReadeckApiKey] = useState("");
+  const [readeckTestResult, setReadeckTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+  const [linkwardenUrl, setLinkwardenUrl] = useState("");
+  const [linkwardenApiKey, setLinkwardenApiKey] = useState("");
+  const [linkwardenTestResult, setLinkwardenTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+
   useEffect(() => {
     if (!exportSettings) return;
     setObsidianVault(exportSettings.obsidianVault ?? "");
     setWallabagUrl(exportSettings.wallabagUrl ?? "");
     setWallabagClientId(exportSettings.wallabagClientId ?? "");
     setWallabagUsername(exportSettings.wallabagUsername ?? "");
+    setReadeckUrl(exportSettings.readeckUrl ?? "");
+    setLinkwardenUrl(exportSettings.linkwardenUrl ?? "");
   }, [exportSettings]);
 
   const handleSaveObsidian = () => {
@@ -59,6 +71,70 @@ export function ExportDestinationsSection() {
       ...(wallabagPassword ? { wallabagPassword } : {}),
     });
     setWallabagTestResult(result);
+  };
+
+  const handleSaveReadeck = () => {
+    setReadeckTestResult(null);
+    updateExport.mutate({
+      readeckUrl: readeckUrl.trim() || null,
+      ...(readeckApiKey ? { readeckApiKey } : {}),
+    });
+  };
+
+  const handleClearReadeckToken = () => {
+    setReadeckApiKey("");
+    setReadeckTestResult(null);
+    updateExport.mutate({ clearReadeckApiKey: true });
+  };
+
+  const handleTestReadeck = async () => {
+    setReadeckTestResult(null);
+    const trimmedUrl = readeckUrl.trim();
+    const urlChanged = trimmedUrl !== (exportSettings?.readeckUrl || "");
+    if (urlChanged && !readeckApiKey && exportSettings?.hasReadeckApiKey) {
+      setReadeckTestResult({
+        success: false,
+        error: t("tokenRequiredForNewUrl"),
+      });
+      return;
+    }
+    const result = await testReadeck.mutateAsync({
+      readeckUrl: trimmedUrl,
+      ...(readeckApiKey ? { readeckApiKey } : {}),
+    });
+    setReadeckTestResult(result);
+  };
+
+  const handleSaveLinkwarden = () => {
+    setLinkwardenTestResult(null);
+    updateExport.mutate({
+      linkwardenUrl: linkwardenUrl.trim() || null,
+      ...(linkwardenApiKey ? { linkwardenApiKey } : {}),
+    });
+  };
+
+  const handleClearLinkwardenToken = () => {
+    setLinkwardenApiKey("");
+    setLinkwardenTestResult(null);
+    updateExport.mutate({ clearLinkwardenApiKey: true });
+  };
+
+  const handleTestLinkwarden = async () => {
+    setLinkwardenTestResult(null);
+    const trimmedUrl = linkwardenUrl.trim();
+    const urlChanged = trimmedUrl !== (exportSettings?.linkwardenUrl || "");
+    if (urlChanged && !linkwardenApiKey && exportSettings?.hasLinkwardenApiKey) {
+      setLinkwardenTestResult({
+        success: false,
+        error: t("tokenRequiredForNewUrl"),
+      });
+      return;
+    }
+    const result = await testLinkwarden.mutateAsync({
+      linkwardenUrl: trimmedUrl,
+      ...(linkwardenApiKey ? { linkwardenApiKey } : {}),
+    });
+    setLinkwardenTestResult(result);
   };
 
   return (
@@ -202,6 +278,170 @@ export function ExportDestinationsSection() {
               className="rounded-panel h-9"
             >
               {testWallabag.isPending ? t("testing") : t("testConnection")}
+            </Button>
+          </div>
+        </div>
+
+        {/* Readeck */}
+        <div className="space-y-3 rounded-panel border border-border/60 p-4">
+          <div>
+            <h3 className="text-body-sm font-semibold">{t("readeckTitle")}</h3>
+            <p className="mt-0.5 text-footnote text-muted-foreground">{t("readeckDescription")}</p>
+          </div>
+
+          <div className="grid gap-1.5">
+            <label className="text-body-sm font-medium" htmlFor="export-readeck-url-input">{t("readeckUrlLabel")}</label>
+            <Input
+              id="export-readeck-url-input"
+              placeholder={t("readeckUrlPlaceholder")}
+              value={readeckUrl}
+              onChange={(e) => setReadeckUrl(e.target.value)}
+              className="h-10 rounded-panel"
+            />
+          </div>
+
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-body-sm font-medium" htmlFor="export-readeck-token-input">
+                {t("readeckApiKeyLabel")}
+                {exportSettings?.hasReadeckApiKey && !readeckApiKey && (
+                  <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("currentlySet")})</span>
+                )}
+              </label>
+              {exportSettings?.hasReadeckApiKey && (
+                <button
+                  type="button"
+                  onClick={handleClearReadeckToken}
+                  disabled={updateExport.isPending}
+                  className="text-caption text-muted-foreground transition hover:text-destructive hover:underline"
+                >
+                  {t("removeToken")}
+                </button>
+              )}
+            </div>
+            <Input
+              id="export-readeck-token-input"
+              type="password"
+              placeholder={exportSettings?.hasReadeckApiKey ? t("leaveBlankToKeep") : undefined}
+              value={readeckApiKey}
+              onChange={(e) => setReadeckApiKey(e.target.value)}
+              className="h-10 rounded-panel font-mono text-body-sm"
+            />
+          </div>
+
+          {readeckTestResult && (
+            <div className={cn(
+              "flex items-center gap-2 rounded-panel border px-4 py-3 text-body-sm",
+              readeckTestResult.success
+                ? "border-success/30 bg-success/10 text-success"
+                : "border-destructive/30 bg-destructive/10 text-destructive"
+            )}>
+              {readeckTestResult.success
+                ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                : <XCircle className="h-4 w-4 shrink-0" />}
+              <span>{readeckTestResult.success ? t("connectionSuccessful") : readeckTestResult.error}</span>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Button
+              onClick={handleSaveReadeck}
+              disabled={updateExport.isPending}
+              size="sm"
+              className="rounded-panel h-9"
+            >
+              {updateExport.isPending ? t("saving") : t("save")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleTestReadeck}
+              disabled={testReadeck.isPending}
+              size="sm"
+              className="rounded-panel h-9"
+            >
+              {testReadeck.isPending ? t("testing") : t("testConnection")}
+            </Button>
+          </div>
+        </div>
+
+        {/* Linkwarden */}
+        <div className="space-y-3 rounded-panel border border-border/60 p-4">
+          <div>
+            <h3 className="text-body-sm font-semibold">{t("linkwardenTitle")}</h3>
+            <p className="mt-0.5 text-footnote text-muted-foreground">{t("linkwardenDescription")}</p>
+          </div>
+
+          <div className="grid gap-1.5">
+            <label className="text-body-sm font-medium" htmlFor="export-linkwarden-url-input">{t("linkwardenUrlLabel")}</label>
+            <Input
+              id="export-linkwarden-url-input"
+              placeholder={t("linkwardenUrlPlaceholder")}
+              value={linkwardenUrl}
+              onChange={(e) => setLinkwardenUrl(e.target.value)}
+              className="h-10 rounded-panel"
+            />
+          </div>
+
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-body-sm font-medium" htmlFor="export-linkwarden-token-input">
+                {t("linkwardenApiKeyLabel")}
+                {exportSettings?.hasLinkwardenApiKey && !linkwardenApiKey && (
+                  <span className="ms-2 text-footnote font-normal text-muted-foreground">({t("currentlySet")})</span>
+                )}
+              </label>
+              {exportSettings?.hasLinkwardenApiKey && (
+                <button
+                  type="button"
+                  onClick={handleClearLinkwardenToken}
+                  disabled={updateExport.isPending}
+                  className="text-caption text-muted-foreground transition hover:text-destructive hover:underline"
+                >
+                  {t("removeToken")}
+                </button>
+              )}
+            </div>
+            <Input
+              id="export-linkwarden-token-input"
+              type="password"
+              placeholder={exportSettings?.hasLinkwardenApiKey ? t("leaveBlankToKeep") : undefined}
+              value={linkwardenApiKey}
+              onChange={(e) => setLinkwardenApiKey(e.target.value)}
+              className="h-10 rounded-panel font-mono text-body-sm"
+            />
+          </div>
+
+          {linkwardenTestResult && (
+            <div className={cn(
+              "flex items-center gap-2 rounded-panel border px-4 py-3 text-body-sm",
+              linkwardenTestResult.success
+                ? "border-success/30 bg-success/10 text-success"
+                : "border-destructive/30 bg-destructive/10 text-destructive"
+            )}>
+              {linkwardenTestResult.success
+                ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+                : <XCircle className="h-4 w-4 shrink-0" />}
+              <span>{linkwardenTestResult.success ? t("connectionSuccessful") : linkwardenTestResult.error}</span>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <Button
+              onClick={handleSaveLinkwarden}
+              disabled={updateExport.isPending}
+              size="sm"
+              className="rounded-panel h-9"
+            >
+              {updateExport.isPending ? t("saving") : t("save")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleTestLinkwarden}
+              disabled={testLinkwarden.isPending}
+              size="sm"
+              className="rounded-panel h-9"
+            >
+              {testLinkwarden.isPending ? t("testing") : t("testConnection")}
             </Button>
           </div>
         </div>

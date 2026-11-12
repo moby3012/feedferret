@@ -98,5 +98,8 @@ export function withDetail<T extends Article>(article: T, detail: ArticleDetail 
     aiSummarizedAt: detail.aiSummarizedAt,
     readAt: detail.readAt,
     newsletter: detail.newsletter ?? null,
+    kind: detail.kind ?? article.kind ?? "article",
+    media: detail.media ?? article.media ?? null,
+    readTime: detail.readMinutes ?? article.readTime ?? null,
   };
 }

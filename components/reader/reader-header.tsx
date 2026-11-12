@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import Image from "next/image";
 import { ExternalLink, MailCheck, ShieldAlert } from "lucide-react";
 import { useFormatter, useTranslations } from "next-intl";
@@ -9,6 +9,7 @@ import { markTitlePainted } from "@/features/reader/perf-marks";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { FeedFavicon } from "./feed-favicon";
+import { estimateReadMinutes, htmlToPlainText, markdownToPlainText } from "@/lib/article-kind";
 
 /**
  * Feed line → headline → meta → labels → hero (spec §4.7). Painted from the
@@ -32,6 +33,17 @@ export function ReaderHeader({ article, hideImage, onOpenFeed }: { article: Arti
   })();
   // Failed sender check: the banner stays, but without the primary call to action.
   const senderFailed = newsletter?.auth === "fail";
+  const isAudioOrVideo = article.kind === "audio" || article.kind === "video";
+  const fallbackReadMinutes = useMemo(() => {
+    if (article.readTime != null) return article.readTime;
+    if (!article.content) return null;
+    return estimateReadMinutes(
+      article.contentFormat === "markdown"
+        ? markdownToPlainText(article.content)
+        : htmlToPlainText(article.content),
+    );
+  }, [article.readTime, article.content, article.contentFormat]);
+  const readMinutes = isAudioOrVideo ? null : fallbackReadMinutes;
 
   useLayoutEffect(() => {
     markTitlePainted(article.id);
@@ -65,10 +77,10 @@ export function ReaderHeader({ article, hideImage, onOpenFeed }: { article: Arti
             </>
           )}
           <time dateTime={article.publishedAt}>{format.dateTime(new Date(article.publishedAt), { dateStyle: "medium", timeStyle: "short" })}</time>
-          {article.readTime != null && (
+          {readMinutes != null && (
             <>
               <span aria-hidden="true">·</span>
-              <span>{t("readTime", { minutes: article.readTime })}</span>
+              <span>{t("readTime", { minutes: readMinutes })}</span>
             </>
           )}
         </p>
@@ -81,10 +93,10 @@ export function ReaderHeader({ article, hideImage, onOpenFeed }: { article: Arti
           </>
         )}
         <time dateTime={article.publishedAt}>{format.dateTime(new Date(article.publishedAt), { dateStyle: "medium" })}</time>
-        {article.readTime != null && (
+        {readMinutes != null && (
           <>
             <span aria-hidden="true">·</span>
-            <span>{t("readTime", { minutes: article.readTime })}</span>
+            <span>{t("readTime", { minutes: readMinutes })}</span>
           </>
         )}
       </p>

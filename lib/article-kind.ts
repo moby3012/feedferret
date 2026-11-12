@@ -132,14 +132,16 @@ export function markdownToPlainText(md: string | null | undefined): string {
 }
 
 const CJK = /[぀-ヿ㐀-䶿一-鿿가-힯豈-﫿]/g;
-const WORDS_PER_MINUTE = 200;
+const WORDS_PER_MINUTE = 220;
+const CJK_CHARS_PER_MINUTE = 500;
 
-/** Minutes at 200 wpm (CJK characters count as words), rounded up; `null` for empty text. */
+/** Minutes at 220 wpm (CJK characters at 500 cpm), rounded up; `null` for empty text. */
 export function estimateReadMinutes(text: string): number | null {
   const cjk = text.match(CJK)?.length ?? 0;
-  const words = text.replace(CJK, " ").split(/\s+/).filter(Boolean).length + cjk;
-  if (words === 0) return null;
-  return Math.max(1, Math.ceil(words / WORDS_PER_MINUTE));
+  const words = text.replace(CJK, " ").split(/\s+/).filter(Boolean).length;
+  if (words === 0 && cjk === 0) return null;
+  const minutes = words / WORDS_PER_MINUTE + cjk / CJK_CHARS_PER_MINUTE;
+  return Math.max(1, Math.ceil(minutes));
 }
 
 /** iTunes duration: "3723", "62:03", "1:02:03" (or a number of seconds). */

@@ -165,3 +165,165 @@ export async function testWallabagConfig(config: WallabagConfig): Promise<Wallab
   if (!auth.ok) return { success: false, error: auth.error };
   return { success: true };
 }
+
+export type ExportOutcome = { success: boolean; error?: string };
+
+// ---------------------------------------------------------------- Readeck
+
+export type ReadeckConfig = {
+  baseUrl: string;
+  apiKey: string;
+};
+
+export type ReadeckArticleInput = {
+  url: string;
+  title?: string;
+  tags?: string[];
+};
+
+/** Lightweight reachability/token check for Readeck (GET /api/profile). */
+export async function testReadeckConfig(config: ReadeckConfig, timeoutMs = 15_000): Promise<ExportOutcome> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const allowInternal = await isTrustedFeedFetchingAllowed();
+    await assertSafeFetchUrl(config.baseUrl, { context: "Readeck export", allowInternal });
+
+    const base = config.baseUrl.replace(/\/$/, "");
+    const res = await safeFetch(`${base}/api/profile`, {
+      redirect: "manual",
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    }, { allowInternal });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return { success: false, error: `Readeck connection failed (HTTP ${res.status})` };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Posts a single article to Readeck (POST /api/bookmarks). */
+export async function sendToReadeck(config: ReadeckConfig, article: ReadeckArticleInput, timeoutMs = 20_000): Promise<ExportOutcome> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const allowInternal = await isTrustedFeedFetchingAllowed();
+    await assertSafeFetchUrl(config.baseUrl, { context: "Readeck export", allowInternal });
+
+    const base = config.baseUrl.replace(/\/$/, "");
+    const res = await safeFetch(`${base}/api/bookmarks`, {
+      redirect: "manual",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        url: article.url,
+        title: article.title || undefined,
+        labels: article.tags?.length ? article.tags : undefined,
+      }),
+      signal: controller.signal,
+    }, { allowInternal });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return { success: false, error: `Readeck rejected the bookmark (HTTP ${res.status})` };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------- Linkwarden
+
+export type LinkwardenConfig = {
+  baseUrl: string;
+  apiKey: string;
+};
+
+export type LinkwardenArticleInput = {
+  url: string;
+  title?: string;
+  description?: string;
+  tags?: string[];
+};
+
+/** Lightweight reachability/token check for Linkwarden (GET /api/v1/collections). */
+export async function testLinkwardenConfig(config: LinkwardenConfig, timeoutMs = 15_000): Promise<ExportOutcome> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const allowInternal = await isTrustedFeedFetchingAllowed();
+    await assertSafeFetchUrl(config.baseUrl, { context: "Linkwarden export", allowInternal });
+
+    const base = config.baseUrl.replace(/\/$/, "");
+    const res = await safeFetch(`${base}/api/v1/collections`, {
+      redirect: "manual",
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    }, { allowInternal });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return { success: false, error: `Linkwarden connection failed (HTTP ${res.status})` };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Posts a single article to Linkwarden (POST /api/v1/links). */
+export async function sendToLinkwarden(config: LinkwardenConfig, article: LinkwardenArticleInput, timeoutMs = 20_000): Promise<ExportOutcome> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const allowInternal = await isTrustedFeedFetchingAllowed();
+    await assertSafeFetchUrl(config.baseUrl, { context: "Linkwarden export", allowInternal });
+
+    const base = config.baseUrl.replace(/\/$/, "");
+    const res = await safeFetch(`${base}/api/v1/links`, {
+      redirect: "manual",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        url: article.url,
+        name: article.title || undefined,
+        description: article.description || undefined,
+        tags: article.tags?.length ? article.tags.map((name) => ({ name })) : undefined,
+      }),
+      signal: controller.signal,
+    }, { allowInternal });
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return { success: false, error: `Linkwarden rejected the link (HTTP ${res.status})` };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+}

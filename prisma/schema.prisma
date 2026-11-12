@@ -144,6 +144,12 @@ model User {
   exportWallabagClientSecret String?                    // encrypted at rest
   exportWallabagUsername     String?
   exportWallabagPassword     String?                    // encrypted at rest
+  // Readeck: self-hosted bookmarking service (Bearer token auth)
+  exportReadeckUrl           String?
+  exportReadeckApiKey        String?                    // encrypted at rest
+  // Linkwarden: self-hosted bookmarking service (Bearer token auth)
+  exportLinkwardenUrl        String?
+  exportLinkwardenApiKey     String?                    // encrypted at rest
   role          String    @default("USER")
   // N1 newsletter-to-feed: per-user inbound addresses (lib/inbound-email.ts).
   newsletterAddresses NewsletterAddress[]
