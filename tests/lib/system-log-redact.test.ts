@@ -24,3 +24,17 @@ describe("SystemLog never stores newsletter tokens (N1)", () => {
     expect(redactLogMetadata({ to: "me@example.org", subject: "Hi +ff" })).toEqual({ to: "me@example.org", subject: "Hi +ff" });
   });
 });
+
+describe("SystemLog masks credentials in free text and metadata", () => {
+  it("masks authorization=…, Authorization headers and access_token pairs before storing", async () => {
+    create.mockClear();
+    await writeSystemLog("warn", "sync", "fetch failed: authorization=Bearer s3cr3tA https://h.test/f?access_token=s3cr3tB&x=1", {
+      header: "Authorization: Basic c3VwZXJzZWNyZXQ=",
+      nested: [{ apikey: "k", note: "api_key=s3cr3tC" }],
+    });
+    const { data } = create.mock.calls[0][0];
+    expect(data.message).toBe("fetch failed: authorization=Bearer *** https://h.test/f?access_token=***&x=1");
+    expect(data.metadata).not.toMatch(/s3cr3t/);
+    expect(JSON.parse(data.metadata!)).toEqual({ header: "Authorization: Basic ***", nested: [{ apikey: "k", note: "api_key=***" }] });
+  });
+});

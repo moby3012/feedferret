@@ -1,11 +1,20 @@
 import { redactEncodedParamValues, redactUrlUserinfo } from "@/lib/linear-text";
 
+// Secret-looking `name=value` pairs anywhere in text (query strings, log lines, `key=value` fragments).
+// The key is the whole `[\w.-]` run before "=", so `x-api-key`, `access_token`, `apikey` match by suffix;
+// the lookbehind pins each match to the run start, which keeps the scan linear (no re-scan per character).
+// An auth scheme after the separator (`authorization=Bearer xyz`) stays visible, the credential does not.
+const SECRET_PAIR_RE = /((?<![\w.-])[\w.-]*(?:key|token|secret|passw(?:or)?d|pwd|auth|authorization|sig(?:nature)?)=(?:(?:bearer|basic|digest|negotiate|token)[ \t]+)?)[^&#\s"',]*/gi;
+// `Authorization: Basic xyz` / `Proxy-Authorization:Bearer xyz` as written in headers and log text.
+const AUTH_HEADER_RE = /((?<![\w.-])[\w.-]*auth(?:orization)?:[ \t]*(?:(?:bearer|basic|digest|negotiate|token)[ \t]+)?)[^&#\s"',]*/gi;
+
 /** Scrub credentials from arbitrary diagnostic text, including encoded URLs. */
 export function redact(text: string): string {
   const stage1 = text
     .replace(/\/account\/confirm-email\?[^\s"'<>#]*/gi, url => url.replace(/((?:\?|&amp;|&)(?:t|c)=)[^&#\s"']*/gi, "$1***"))
     .replace(/(?:%2f|\/)account(?:%2f|\/)confirm-email%3f(?:(?!%23)[^\s"'<>#])*/gi, url => url.replace(/((?:%3f|%26)(?:t|c)%3d)(?:(?!%26|%23)[^&#\s"'])*/gi, "$1***"))
-    .replace(/((?:[?&#;]|&amp;)[\w.-]*(?:key|token|secret|passw(?:or)?d|pwd|auth|sig(?:nature)?)=)[^&#\s"']*/gi, "$1***");
+    .replace(SECRET_PAIR_RE, "$1***")
+    .replace(AUTH_HEADER_RE, "$1***");
   // The last two steps are hand-written linear scans (lib/linear-text.ts): their regex forms were
   // O(n²) on "%23%23%23…" / "aaaa…" in the arbitrary text this function is fed.
   return redactUrlUserinfo(redactEncodedParamValues(stage1));
