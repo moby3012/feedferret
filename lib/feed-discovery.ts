@@ -1,3 +1,4 @@
+import { canonicalApiSourceUrl, matchApiPlatform, parseApiSourceUrl } from "./feed-adapters/api-source-url";
 import { fetchTextWithSsrfProtection, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { parseHttpLinkHeader } from "./http-link-header";
 import { hintForFetchError } from "./fetch-error-hint";
@@ -30,7 +31,7 @@ export type DiscoveredFeed = {
 
 export type FeedVia = { family: AdapterFamily | "rsshub"; name: string };
 
-export type DiscoveryHint = "needs-rsshub" | "rate-limited" | "blocked" | "tls-error";
+export type DiscoveryHint = "needs-twitch" | "needs-rsshub" | "rate-limited" | "blocked" | "tls-error";
 
 export type DiscoveryResult = {
   /** "topic" = the input was a plain phrase and `feeds` are search-engine feeds to pick from. */
@@ -1095,6 +1096,8 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
   // Pasted junk around an address (`<https://…>`, "example.com/feed.") is
   // cleaned first; phrases stay phrases.
   const cleaned = cleanUrlInput(input);
+  const internal = parseApiSourceUrl(cleaned);
+  if (internal) return { mode: "url", feeds: [{ url: canonicalApiSourceUrl(cleaned) ?? cleaned, title: `${internal.source.name} · ${internal.account} · ${internal.variant}`, type: "json", source: "resolver", platform: internal.source.id }] };
   const parsed = parseSourceInput(cleaned);
   if (parsed.type === "empty") return { mode: "empty", feeds: [] };
   if (parsed.type === "topic") {
@@ -1107,6 +1110,25 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
   // One deadline + request budget for every stage below (lib/discovery-budget.ts).
   const budget = new DiscoveryBudget(options.limits);
   try {
+    const api = matchApiPlatform(parsed.url);
+    if (api) {
+      try {
+        const { verifyApiPlatformAccount } = await import("./api-platform-source");
+        const state = await verifyApiPlatformAccount(api.source.id, api.account, AbortSignal.any([budget.signal, AbortSignal.timeout(10_000)]));
+        if (state === "ready") {
+          const labels = api.source.labels[options.locale?.startsWith("de") ? "de" : "en"];
+          return { mode: "url", pageUrl, feeds: api.source.variants.map((variant, i) => ({ url: `feedferret://${api.source.id}/${api.account}/${variant}`, title: `${api.source.name} · ${api.account} · ${labels[i]}`, type: "json", source: "resolver", kind: variant, platform: api.source.id })) };
+        }
+        if (state === "missing") return { mode: "url", pageUrl, feeds: [] };
+        const fallbackUrl = new URL(pageUrl);
+        fallbackUrl.pathname = `/${api.account}`;
+        const radar = await resolveWithRadarRules(fallbackUrl.href, budget);
+        return { mode: "url", pageUrl, feeds: radar.feeds, ...(radar.feeds.length ? {} : { hint: api.source.setupHint }) };
+      } catch {
+        const { hostRateLimitRemainingMs } = await import("./host-backoff");
+        return { mode: "url", pageUrl, feeds: [], hint: hostRateLimitRemainingMs(api.source.apiOrigin) ? "rate-limited" : "blocked" };
+      }
+    }
     return await discoverUrl(cleaned, parsed.url, pageUrl, httpFallback, budget);
   } finally {
     budget.dispose();

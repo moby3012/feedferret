@@ -13,6 +13,8 @@ import { renderWithConfigDetailed } from "@/lib/render-sidecar";
 import { validateRsshubRoute } from "@/lib/rsshub";
 import { testChangedetectionConnection as runChangedetectionTest } from "@/lib/changedetection";
 import { logger } from "@/lib/logger";
+import { isApiSourceDeferredError } from "@/lib/api-source-errors";
+import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /** Single source of the admin gate: lib/admin-auth.ts (also used by the newsletter wizard). */
 async function checkAdmin() {
@@ -48,6 +50,7 @@ const ENCRYPTED_FIELDS = [
   "sendgridApiKey",
   "renderSidecarToken",
   "rsshubApiKey",
+  "twitchClientSecret",
   "changedetectionApiKey",
   "changedetectionRssToken",
 ] as const;
@@ -137,6 +140,8 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
     next.renderSidecarUrl = value || null;
   }
 
+  if ("twitchClientId" in data) next.twitchClientId = String(data.twitchClientId || "").trim() || null;
+
   // RSSHub connector (M5a)
   if (typeof data.rsshubEnabled === "boolean") next.rsshubEnabled = data.rsshubEnabled;
   if ("rsshubBaseUrl" in data) {
@@ -162,7 +167,7 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
   for (const field of ENCRYPTED_FIELDS) {
     if (field in data) {
       const val = String(data[field] || "").trim();
-      if (val) {
+      if (val && val !== "__encrypted__") {
         next[field] = encryptIfValue(val);
       }
       // If empty, skip — preserve existing encrypted value
@@ -271,8 +276,11 @@ export async function getGlobalSettings() {
     ? settings.mailProvider
     : "smtp";
 
+  // Process-level "last Twitch credential rejection" for the admin section.
+  const { getTwitchCredentialError } = await import("@/lib/twitch");
   return {
     ...decryptSettingsForDisplay(settings),
+    twitchCredentialError: getTwitchCredentialError(),
     mailProvider: normalizedMailProvider,
     availableMailProviders,
     starterPacks: await getStarterPacksFromSettings(settings.starterPacksJson),
@@ -300,6 +308,12 @@ export async function updateGlobalSettings(data: Record<string, unknown>) {
   if (Object.keys(sanitized).some((key) => key.startsWith("rsshub") || key.startsWith("changedetection"))) {
     const { resetConnectorSecretRulesCache } = await import("@/lib/connector-secrets");
     resetConnectorSecretRulesCache();
+  }
+
+  // New/removed Twitch credentials make a remembered rejection stale.
+  if ("twitchClientId" in sanitized || "twitchClientSecret" in sanitized) {
+    const { clearTwitchCredentialError } = await import("@/lib/twitch");
+    clearTwitchCredentialError();
   }
 
   const session = await auth();
@@ -399,7 +413,10 @@ export async function testRenderSidecar(config: { url?: string; token?: string; 
 const RSSHUB_TEST_ROUTE = "/github/repos/DIYgod/RSSHub/releases";
 
 export async function testRsshubConnection(config: { baseUrl?: string; apiKey?: string; testRoute?: string }) {
-  await checkAdmin();
+  const admin = await checkAdmin();
+  if (!checkRateLimit(`user:${admin.user.id}`, RATE_LIMITS.adminConnectionTest).success) {
+    return { success: false as const, error: "Too many connection tests. Try again in a minute." };
+  }
   const baseUrl = String(config.baseUrl || "").trim();
   if (!/^https?:\/\//i.test(baseUrl)) {
     return { success: false as const, error: "RSSHub base URL must start with http:// or https://" };
@@ -549,4 +566,29 @@ export async function getStorageStats() {
     aiSummaries: summaryMap.get(u.id) ?? 0,
     labeledArticles: labelMap.get(u.id) ?? 0,
   }));
+}
+
+export async function testTwitchConnection(input: { clientId: string; clientSecret: string }) {
+  const admin = await checkAdmin();
+  if (!checkRateLimit(`user:${admin.user.id}`, RATE_LIMITS.adminConnectionTest).success) {
+    return { success: false as const, error: "Too many connection tests. Try again in a minute." };
+  }
+  const { getTwitchCredentials, twitchRequest } = await import("@/lib/twitch");
+  try {
+    const clientId = String(input.clientId ?? "").trim();
+    // Sentinel = "untouched": test against the stored secret, never echo it back.
+    const clientSecret = input.clientSecret === "__encrypted__" ? (await getTwitchCredentials())?.clientSecret : String(input.clientSecret ?? "").trim();
+    if (!clientId || !clientSecret) return { success: false as const, error: "Client ID and Client Secret required" };
+    // Ephemeral: the unsaved test credentials must not enter the shared token cache.
+    await twitchRequest("users", { login: "twitch" }, { clientId, clientSecret }, undefined, { ephemeral: true });
+    return { success: true as const };
+  } catch (error) {
+    const status = (error as { status?: unknown } | null)?.status;
+    logger.warn(`[admin] Twitch connection test failed${typeof status === "number" ? ` (HTTP ${status})` : ""}`);
+    if (isApiSourceDeferredError(error) && error.reason === "rate-limited") {
+      const retryAfterSecs = Math.max(1, Math.ceil((error.retryAfterMs ?? 60_000) / 1000));
+      return { success: false as const, rateLimited: true as const, retryAfterSecs, error: `Twitch is rate-limited. Retry in ${retryAfterSecs} s.` };
+    }
+    return { success: false as const, error: "Twitch connection failed. Check credentials or retry after the API rate limit resets." };
+  }
 }

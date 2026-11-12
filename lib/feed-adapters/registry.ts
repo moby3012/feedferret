@@ -35,6 +35,10 @@
 // Each entry has fixture tests in tests/lib/feed-adapters.test.ts (a guard
 // test fails when an entry has none).
 
+// API-backed synthetic sources are registered in api-source-url.ts; their
+// providers return FetchedFeed through api-platform-source.ts (no RSS probe).
+export { API_PLATFORM_SOURCES } from "./api-source-url";
+
 import type { FeedKind } from "../smart-url-resolver";
 
 export type AdapterFamily = "platform" | "forum" | "blog" | "wiki";
@@ -411,6 +415,5 @@ export const RSSHUB_ONLY_PLATFORMS: Array<{ name: string; hosts: string[] }> = [
   { name: "TikTok", hosts: ["tiktok.com"] },
   { name: "Threads", hosts: ["threads.net", "threads.com"] },
   { name: "Telegram", hosts: ["t.me"] },
-  { name: "Twitch", hosts: ["twitch.tv"] },
   { name: "Blizzard News", hosts: ["news.blizzard.com"] },
 ];

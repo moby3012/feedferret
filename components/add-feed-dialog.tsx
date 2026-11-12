@@ -201,7 +201,9 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
       setDiscoveredFeeds(feeds);
       if (feeds.length === 0) {
         let message = t("sidebar.resolverNoResult");
-        if (data.hint === "needs-rsshub") {
+        if (data.hint === "needs-twitch") {
+          message = t("sidebar.hints.needsTwitch");
+        } else if (data.hint === "needs-rsshub") {
           message = typeof data.hintPlatform === "string" && data.hintPlatform
             ? t("sidebar.hints.needsRsshubFor", { platform: data.hintPlatform })
             : t("sidebar.hints.needsRsshub");

@@ -1,4 +1,5 @@
 import Parser from "rss-parser";
+import { parseApiSourceUrl } from "./feed-adapters/api-source-url";
 import {
   BLOCKED_REQUEST_HEADERS,
   MAX_FEED_REDIRECTS,
@@ -350,6 +351,10 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
 }
 
 export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedFeed> {
+  if (parseApiSourceUrl(feed.url)) {
+    const { fetchApiPlatformSource } = await import("./api-platform-source");
+    return fetchApiPlatformSource(feed.url, feed.signal);
+  }
   const sourceType = normalizeSourceType(feed.sourceType);
   const scraperConfig = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
 

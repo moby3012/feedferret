@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { apiSourceAttentionReason } from "@/lib/api-source-errors";
 import { CheckCircle2, Eye, Loader2, Sparkles } from "lucide-react";
 import { useUpdateFeed, usePreviewFeedExtraction, useProposeAiFullTextSelector, useAiSettings } from "@/hooks/use-rss-data";
 import { resolveFullTextMode, type FullTextMode } from "@/lib/full-text-mode";
@@ -87,6 +88,7 @@ interface FeedEditDialogProps {
 
 export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps) {
   const t = useTranslations("feedEdit");
+  const tCommon = useTranslations("common");
   const format = useFormatter();
   const updateFeed = useUpdateFeed();
   const previewExtraction = usePreviewFeedExtraction();
@@ -398,18 +400,23 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const lastStatus = feed.lastStatus ?? "pending";
   const lastFetchedAt = feed.lastFetchedAt ? new Date(feed.lastFetchedAt) : null;
   const consecutiveFailures = feed.consecutiveFailureCount ?? 0;
+  const attention = apiSourceAttentionReason(feed);
   const statusLabel =
     lastStatus === "ok"
       ? t("fetch.transparency.statusOk")
       : lastStatus === "error"
         ? t("fetch.transparency.statusError")
-        : t("fetch.transparency.statusPending");
+        : attention
+          ? tCommon("apiSourceAttention.status")
+          : t("fetch.transparency.statusPending");
   const statusToneClass =
     lastStatus === "ok"
       ? "bg-success"
       : lastStatus === "error"
         ? "bg-destructive"
-        : "bg-muted-foreground";
+        : attention
+          ? "bg-warning"
+          : "bg-muted-foreground";
 
   return (
     <>
@@ -639,6 +646,11 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                 {consecutiveFailures > 0 && (
                   <p className="text-footnote text-destructive">
                     {t("fetch.transparency.consecutiveFailures", { count: consecutiveFailures })}
+                  </p>
+                )}
+                {attention && (
+                  <p className="rounded-row bg-warning/10 px-3 py-2 text-footnote text-warning break-words">
+                    {tCommon(`apiSourceAttention.${attention}`)}
                   </p>
                 )}
                 {feed.lastError && lastStatus === "error" && (

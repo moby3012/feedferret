@@ -765,7 +765,8 @@
       "needsRsshubFor": "{platform} has no feed of its own – requires RSSHub (configure under Settings › Server)",
       "partial": "The search was stopped early (time or request limit) before it found a feed. Try again later or enter the feed address directly.",
       "blockedButFound": "The page blocks automated access – feed found anyway: {via}",
-      "blockedButFoundPlain": "The page blocks automated access – feed found anyway."
+      "blockedButFoundPlain": "The page blocks automated access – feed found anyway.",
+      "needsTwitch": "Enable Twitch or check the saved credentials: Admin → Server settings → Twitch. Create an app at dev.twitch.tv/console (redirect http://localhost, category Website Integration), then save Client ID and Client Secret. Alternatively configure RSSHub."
     },
     "kinds": {
       "videos": "Videos",
@@ -1147,6 +1148,11 @@
     "feedsInCategory": "{count} feeds"
   },
   "common": {
+    "apiSourceAttention": {
+      "status": "Needs attention",
+      "unconfigured": "Twitch is not set up (or was disabled). An admin must save a Client ID and Client Secret under Admin → Server settings → Twitch. This feed resumes automatically afterwards.",
+      "auth": "Twitch rejected the saved credentials (revoked or changed secret?). An admin must check them under Admin → Server settings → Twitch. This feed resumes automatically afterwards."
+    },
     "signOutNeedsConnection": "Signing out needs a connection",
     "signOutFailed": "Sign-out failed – please try again",
     "save": "Save",
@@ -1839,7 +1845,16 @@
       "changedetectionRssToken": "RSS access token",
       "changedetectionHint": "Two different secrets are required: the API key is under Settings → API in your changedetection.io instance; the RSS access token is a separate value that changedetection.io never shows as a copyable field — click \"Test connection\" below with the API key filled in and it will be auto-detected and filled in for you. A freshly created watch's feed has no items until changedetection.io has checked the page at least twice, so a new \"monitor this page\" feed can look empty for a while — this is expected, not an error.",
       "changedetectionTest": "Test",
-      "save": "Save"
+      "save": "Save",
+      "testConnection": "Test connection",
+      "twitchCredentialError": "Last credential error: {when} (HTTP {status})",
+      "twitchTestRateLimited": "Twitch is rate-limited. Retry in {seconds} s.",
+      "twitchClientId": "Twitch Client ID",
+      "twitchClientSecret": "Twitch Client Secret",
+      "twitchGuide": "Create an app at dev.twitch.tv/console: OAuth redirect http://localhost, category “Website Integration”. Copy the Client ID and Client Secret here and save. Twitch provides live status, videos and top clips from the last 7 days.",
+      "twitchTestOk": "Twitch connected.",
+      "twitchTestFailed": "Twitch connection failed. Check credentials or retry after the API rate limit resets.",
+      "twitchDisableHint": "Clear the Client ID and save to disable Twitch. An empty secret field preserves the stored secret."
     },
     "discovery": {
       "title": "Feed Discovery Catalog",

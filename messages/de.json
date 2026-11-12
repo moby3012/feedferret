@@ -765,7 +765,8 @@
       "needsRsshubFor": "{platform} bietet keinen eigenen Feed – braucht RSSHub (unter Einstellungen › Server einrichten)",
       "partial": "Die Suche wurde vorzeitig beendet (Zeit- oder Anfragelimit), bevor ein Feed gefunden wurde. Versuche es später erneut oder gib die Feed-Adresse direkt ein.",
       "blockedButFound": "Die Seite blockiert den automatischen Abruf – Feed trotzdem gefunden: {via}",
-      "blockedButFoundPlain": "Die Seite blockiert den automatischen Abruf – Feed trotzdem gefunden."
+      "blockedButFoundPlain": "Die Seite blockiert den automatischen Abruf – Feed trotzdem gefunden.",
+      "needsTwitch": "Twitch aktivieren bzw. gespeicherte Zugangsdaten prüfen: Admin → Server-Einstellungen → Twitch. Unter dev.twitch.tv/console eine App erstellen (Redirect http://localhost, Kategorie Website Integration), Client ID und Client Secret speichern. Alternativ RSSHub konfigurieren."
     },
     "kinds": {
       "videos": "Videos",
@@ -1147,6 +1148,11 @@
     "feedsInCategory": "{count} Feeds"
   },
   "common": {
+    "apiSourceAttention": {
+      "status": "Braucht Aufmerksamkeit",
+      "unconfigured": "Twitch ist nicht eingerichtet (oder wurde deaktiviert). Ein Admin muss unter Admin → Server-Einstellungen → Twitch Client ID und Client Secret speichern. Der Feed läuft danach automatisch weiter.",
+      "auth": "Twitch hat die gespeicherten Zugangsdaten abgelehnt (Secret widerrufen oder geändert?). Ein Admin muss sie unter Admin → Server-Einstellungen → Twitch prüfen. Der Feed läuft danach automatisch weiter."
+    },
     "signOutNeedsConnection": "Abmelden erfordert eine Verbindung",
     "signOutFailed": "Abmelden fehlgeschlagen – bitte erneut versuchen",
     "save": "Speichern",
@@ -1839,7 +1845,16 @@
       "changedetectionRssToken": "RSS-Zugriffs-Token",
       "changedetectionHint": "Zwei unterschiedliche Geheimnisse werden benötigt: der API-Schlüssel steht unter Einstellungen → API in deiner changedetection.io-Instanz; das RSS-Zugriffs-Token ist ein separater Wert, den changedetection.io nirgends als kopierbares Feld anzeigt — klicke unten mit ausgefülltem API-Schlüssel auf „Testen“, dann wird es automatisch erkannt und eingetragen. Der Feed eines frisch angelegten Watches hat keine Einträge, bis changedetection.io die Seite mindestens zweimal geprüft hat — ein neuer „Seite beobachten“-Feed kann also eine Weile leer aussehen, das ist normal, kein Fehler.",
       "changedetectionTest": "Testen",
-      "save": "Speichern"
+      "save": "Speichern",
+      "testConnection": "Verbindung testen",
+      "twitchCredentialError": "Letzter Zugangsdaten-Fehler: {when} (HTTP {status})",
+      "twitchTestRateLimited": "Twitch ist ratenbegrenzt. Erneut versuchen in {seconds} s.",
+      "twitchClientId": "Twitch Client ID",
+      "twitchClientSecret": "Twitch Client Secret",
+      "twitchGuide": "Erstelle unter dev.twitch.tv/console eine App: OAuth-Redirect http://localhost, Kategorie „Website Integration“. Kopiere Client ID und Client Secret hierher und speichere sie. Twitch liefert Live-Status, Videos und die Top-Clips der letzten 7 Tage.",
+      "twitchTestOk": "Twitch verbunden.",
+      "twitchTestFailed": "Twitch-Verbindung fehlgeschlagen. Zugangsdaten prüfen oder nach dem API-Limit erneut versuchen.",
+      "twitchDisableHint": "Client ID leeren und speichern, um Twitch zu deaktivieren. Ein leeres Secret-Feld behält das gespeicherte Secret."
     },
     "discovery": {
       "title": "Feed-Entdeckungskatalog",

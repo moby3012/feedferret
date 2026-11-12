@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
+import { apiSourceAttentionReason } from "@/lib/api-source-errors";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useBrokenFeedCount } from "@/hooks/use-broken-feeds";
@@ -1136,6 +1137,11 @@ function SimpleFeedItem({ feed, isSelected, onSelect, hideUnreadBadge }: any) {
       {feed.lastStatus === "error" && (
         <span title={feed.lastError || t("sidebar.lastSyncFailed")}>
           <AlertCircle className={cn("h-3.5 w-3.5 shrink-0 text-destructive", isSelected && "text-primary-foreground/70")} />
+        </span>
+      )}
+      {apiSourceAttentionReason(feed) && (
+        <span title={t(`common.apiSourceAttention.${apiSourceAttentionReason(feed)}`)}>
+          <AlertCircle className={cn("h-3.5 w-3.5 shrink-0 text-warning", isSelected && "text-primary-foreground/70")} />
         </span>
       )}
       {!hideUnreadBadge && showsCount(countDisplay, "feed") && (

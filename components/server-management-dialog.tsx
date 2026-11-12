@@ -69,6 +69,7 @@ import {
   sendTestEmail,
   testRenderSidecar,
   testRsshubConnection,
+  testTwitchConnection,
   testChangedetectionConnection,
   getPushDiagnostics,
   generateVapidKeyPair,
@@ -230,6 +231,29 @@ export function ServerManagementDialog({
     // "__encrypted__" sentinel (that would re-encrypt the placeholder string).
     if (token && token !== "__encrypted__") payload.renderSidecarToken = token;
     await handleUpdateSettings(payload);
+  };
+
+  const handleSaveTwitch = async () => {
+    setIsSaving(true);
+    try {
+      await updateGlobalSettings({
+        twitchClientId: settings?.twitchClientId ?? null,
+        ...(settings?.twitchClientSecret && settings.twitchClientSecret !== "__encrypted__" ? { twitchClientSecret: settings.twitchClientSecret } : {}),
+      });
+      setSettings(await getGlobalSettings());
+      toast.success(t("toast.settingsSaved"));
+    } catch { toast.error(t("toast.failedToUpdateSettings")); }
+    finally { setIsSaving(false); }
+  };
+  const handleTestTwitch = async () => {
+    setIsSaving(true);
+    try {
+      const result = await testTwitchConnection({ clientId: settings?.twitchClientId ?? "", clientSecret: settings?.twitchClientSecret ?? "" });
+      if (result.success) toast.success(t("sync.twitchTestOk"));
+      else if ("rateLimited" in result && result.rateLimited) toast.error(t("sync.twitchTestRateLimited", { seconds: result.retryAfterSecs }));
+      else toast.error(t("sync.twitchTestFailed"));
+    } catch { toast.error(t("sync.twitchTestFailed")); }
+    finally { setIsSaving(false); }
   };
 
   const handleSaveRsshub = async () => {
@@ -1357,6 +1381,27 @@ export function ServerManagementDialog({
                       </div>
                     )}
 
+                    <div data-testid="twitch-settings" className="p-6 rounded-panel bg-card border border-border space-y-4">
+                      <h4 className="text-title-sm font-semibold tracking-title">Twitch</h4>
+                      <p className="text-footnote text-muted-foreground">{t("sync.twitchGuide")}</p>
+                      <a className="text-footnote text-primary underline" href="https://dev.twitch.tv/console" target="_blank" rel="noopener noreferrer">dev.twitch.tv/console</a>
+                      <SettingsField label={t("sync.twitchClientId")} placeholder="" field="twitchClientId" settings={settings} setSettings={setSettings} />
+                      <SettingsField label={t("sync.twitchClientSecret")} placeholder="••••••••" field="twitchClientSecret" settings={settings} setSettings={setSettings} type="password" isSecret />
+                      <p className="text-footnote text-muted-foreground">{t("sync.twitchDisableHint")}</p>
+                      {settings?.twitchCredentialError && (
+                        <p data-testid="twitch-credential-error" className="rounded-row bg-warning/10 px-3 py-2 text-footnote text-warning">
+                          {t("sync.twitchCredentialError", {
+                            when: format.dateTime(new Date(settings.twitchCredentialError.at), { dateStyle: "medium", timeStyle: "short" }),
+                            status: settings.twitchCredentialError.status ?? "–",
+                          })}
+                        </p>
+                      )}
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button variant="outline" onClick={handleTestTwitch} disabled={isSaving}>{t("sync.testConnection")}</Button>
+                        <Button onClick={handleSaveTwitch} disabled={isSaving}>{t("sync.save")}</Button>
+                      </div>
+                    </div>
+
                     {/* ── changedetection.io connector (M5b) ── */}
                     <div className="flex flex-col gap-4 p-6 rounded-panel bg-card border border-border/60 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pe-6">
@@ -1717,8 +1762,9 @@ function SettingsField({
 
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label htmlFor={`server-${field}`}>{label}</Label>
       <Input
+        id={`server-${field}`}
         type={isSecret ? "password" : type}
         placeholder={hasStoredValue ? "••••••••  (stored — enter new value to change)" : placeholder}
         className="rounded-panel bg-background/70 border-border/70"

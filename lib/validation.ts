@@ -1,3 +1,4 @@
+import { parseApiSourceUrl } from "./feed-adapters/api-source-url";
 // Shared input-validation constants and helpers used by server actions and API routes.
 
 import { z } from "zod";
@@ -11,6 +12,7 @@ export const MAX_SAVED_SEARCH_NAME = 255;
 
 export function validateFeedUrl(url: string): string | null {
   if (url.length > MAX_FEED_URL_LENGTH) return "Feed URL exceeds maximum length";
+  if (parseApiSourceUrl(url)) return null;
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) return "Feed URL must use http or https";
