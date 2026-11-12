@@ -21,9 +21,7 @@ import { isPrivateIp } from "@/lib/private-ip";
 import { isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
 import { readPlainColumnState, sealSecret } from "@/lib/secret-box";
 import { ingestRawEmail, isNewsletterToken, MAX_NEWSLETTER_MAILS_PER_DAY, MAX_RAW_EMAIL_BYTES, quotaDay, type IngestResult } from "@/lib/inbound-email";
-import { applyAutoReadRules } from "@/lib/auto-read-rules";
-import { applyKeywordAlerts } from "@/lib/keyword-alerts";
-import { queueNewArticleNotifications } from "@/lib/notifications";
+import { afterIngest } from "@/lib/newsletter-after-ingest";
 import { detectImapPreset, emailDomain, getImapPreset, trustedAuthservIdForPreset, type ImapPreset } from "@/lib/newsletter-imap-presets";
 import { isAddressRun, matchAddressRuns } from "@/lib/linear-text";
 
@@ -563,17 +561,6 @@ async function claimSource(source: SourceRow, force: boolean, now: Date): Promis
     data: { lastCheckedAt: leaseEnd },
   });
   return claimed.count === 1 ? leaseEnd : null;
-}
-
-/** Auto-read rules, keyword alerts and push for newly ingested newsletter items (like rss-sync). */
-async function afterIngest(created: { userId: string; articleId: string }[]) {
-  const byUser = new Map<string, string[]>();
-  for (const c of created) byUser.set(c.userId, [...(byUser.get(c.userId) ?? []), c.articleId]);
-  for (const [userId, ids] of byUser) {
-    await applyAutoReadRules(userId, { onlyArticleIds: ids }).catch((e) => logger.error("[newsletter-imap] auto-read rules failed:", e));
-    await applyKeywordAlerts(userId, ids).catch((e) => logger.error("[newsletter-imap] keyword alerts failed:", e));
-    await queueNewArticleNotifications(userId, ids).catch((e) => logger.error("[newsletter-imap] push queue failed:", e));
-  }
 }
 
 function keywordsAllowed(client: ImapClientLike): boolean {

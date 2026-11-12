@@ -30,6 +30,8 @@ const h = vi.hoisted(() => {
     (where.isActive === undefined || a.isActive === where.isActive) &&
     (where.id === undefined || (typeof where.id === "string" ? a.id === where.id : a.id !== where.id.not)) &&
     (where.token?.in === undefined || where.token.in.includes(a.token));
+  const kindMatches = (kind: string, where: any) =>
+    where === undefined || (typeof where === "string" ? kind === where : where.in ? where.in.includes(kind) : where.not ? kind !== where.not : true);
   const db = {
     user: { findUnique: vi.fn(async ({ where }: any) => store.users[where.id] ?? null) },
     globalSettings: { findUnique: vi.fn(async () => ({ require2FAForAdmins: false })) },
@@ -42,10 +44,10 @@ const h = vi.hoisted(() => {
     adminAuditLog: { create: vi.fn(async () => ({})) },
     inboundMailSource: {
       findFirst: vi.fn(async ({ where, select }: any) => {
-        const row = store.rows.find((r) => !where?.kind || r.kind === where.kind);
+        const row = store.rows.find((r) => kindMatches(r.kind, where?.kind));
         return row ? pick(row, select) : null;
       }),
-      findMany: vi.fn(async ({ where }: any = {}) => store.rows.filter((r) => !where?.kind?.not || r.kind !== where.kind.not)),
+      findMany: vi.fn(async ({ where }: any = {}) => store.rows.filter((r) => kindMatches(r.kind, where?.kind))),
       create: vi.fn(async ({ data, select }: any) => {
         const row = { id: `src${store.rows.length + 1}`, createdAt: new Date(), updatedAt: new Date(), lastReceivedAt: null, lastCheckedAt: null, ...data };
         store.rows.push(row);
@@ -58,7 +60,7 @@ const h = vi.hoisted(() => {
       }),
       deleteMany: vi.fn(async ({ where }: any) => {
         const before = store.rows.length;
-        store.rows = store.rows.filter((r) => r.kind !== where.kind);
+        store.rows = store.rows.filter((r) => !kindMatches(r.kind, where.kind));
         return { count: before - store.rows.length };
       }),
     },
@@ -134,6 +136,7 @@ describe("admin wizard actions", () => {
     ["checkNewsletterTestMail", () => admin.checkNewsletterTestMail({ since: new Date().toISOString(), marker: "FF-TEST-AAAAAAAA" })],
     ["setNewsletterInboundPaused", () => admin.setNewsletterInboundPaused({ paused: true })],
     ["disconnectNewsletterInbound", () => admin.disconnectNewsletterInbound({ confirm: true })],
+    ["saveNewsletterDomainSource", () => admin.saveNewsletterDomainSource({ kind: "cloudflare", domain: "news.example.org" })],
   ];
 
   it.each(calls)("%s rejects non-admins and anonymous callers", async (_name, call) => {
@@ -277,6 +280,109 @@ describe("admin wizard actions", () => {
     expect(await admin.setNewsletterInboundPaused({ paused: "yes" })).toEqual({ ok: false });
     expect(await admin.disconnectNewsletterInbound({ confirm: true })).toEqual({ ok: true });
     expect(h.store.source).toBeNull();
+  });
+});
+
+describe("webhook ways (Cloudflare / Postmark / Mailgun)", () => {
+  const save = (over: Record<string, unknown> = {}) => admin.saveNewsletterDomainSource({ kind: "cloudflare", domain: "News.Example.org", ...over });
+
+  it("stores the normalized domain and a sealed secret, and returns the secret exactly once", async () => {
+    const res = await save({ paused: true, errorCount: 9, credentials: "evil" });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.secret).toMatch(/^[0-9a-f]{64}$/);
+    const data = h.db.inboundMailSource.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ kind: "cloudflare", address: "news.example.org", credentials: null, paused: false, errorCount: 0 });
+    expect(data.webhookSecret).not.toContain(res.secret);
+    expect(Buffer.from(data.webhookSecret.slice(4), "base64").toString()).toBe(res.secret);
+    expect(res.source).toMatchObject({ kind: "cloudflare", address: "news.example.org", hasSecret: true, hasPassword: false, server: null, webhookPath: "/api/webhooks/inbound-email/src1" });
+    // Neither the view nor a later state read carries the secret or its sealed form.
+    for (const text of [JSON.stringify(res.source), JSON.stringify(await admin.getNewsletterInboundState())]) {
+      expect(text).not.toContain(res.secret);
+      expect(text).not.toContain(data.webhookSecret);
+    }
+  });
+
+  it("validates way and domain", async () => {
+    expect(await save({ kind: "imap" })).toEqual({ ok: false, code: "invalid-way" });
+    expect(await save({ kind: undefined })).toEqual({ ok: false, code: "invalid-way" });
+    for (const domain of ["", "localhost", "a@b.example", "https://news.example.org", "192.168.0.1", "-bad.example", "news.example.org/path", "x".repeat(300) + ".org", 42]) {
+      expect(await save({ domain })).toEqual({ ok: false, code: "invalid-domain" });
+    }
+    expect((await save({ domain: "@news.example.org" })).ok).toBe(true);
+    expect(h.db.inboundMailSource.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives users <token>@domain addresses and the admin a test address on it", async () => {
+    await save();
+    as("bob");
+    const inbox = await user.getMyNewsletterInbox();
+    expect(inbox.available).toBe(true);
+    expect(inbox.addresses[0].address).toMatch(/^[a-z2-7]{26}@news\.example\.org$/);
+    as("admin");
+    const test = (await admin.startNewsletterTest({})) as { address: string; marker: string; startedAt: string };
+    expect(test.address).toMatch(/^[a-z2-7]{26}@news\.example\.org$/);
+    // Webhook mail is pushed: checking never polls a mailbox.
+    h.db.article.rows.push({ userId: "admin", title: `Testmail ${test.marker}`, createdAt: new Date(Date.now() + 1000) });
+    expect((await admin.checkNewsletterTestMail({ since: test.startedAt, marker: test.marker })).arrived).toBe(true);
+    expect(h.poller.pollInboundSourceNow).not.toHaveBeenCalled();
+  });
+
+  it("setting up again rotates the secret; a different domain or way asks for confirmation once addresses exist", async () => {
+    const first = (await save()) as { ok: true; secret: string };
+    const second = (await save()) as { ok: true; secret: string };
+    expect(second.secret).not.toBe(first.secret);
+    expect(h.store.rows).toHaveLength(1);
+    expect(h.db.inboundMailSource.create).toHaveBeenCalledTimes(1);
+
+    as("bob");
+    await user.getMyNewsletterInbox();
+    as("admin");
+    expect(await save({ domain: "mail.example.org" })).toEqual({ ok: false, code: "confirm-address-change" });
+    expect(h.store.rows[0].address).toBe("news.example.org");
+    // Same domain, other webhook flavour: addresses stay.
+    expect((await save({ kind: "webhook" })).ok).toBe(true);
+    expect(h.store.rows[0].kind).toBe("webhook");
+    expect((await save({ domain: "mail.example.org", confirmAddressChange: true })).ok).toBe(true);
+    expect(h.store.rows[0].address).toBe("mail.example.org");
+
+    // Back to a mailbox: plus-addresses replace <token>@domain.
+    expect(await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p" })).toMatchObject({ ok: false, code: "confirm-address-change" });
+    const imap = await admin.saveNewsletterImap({ email: "box@gmail.com", password: "p", confirmAddressChange: true });
+    expect(imap.ok).toBe(true);
+    expect(h.store.rows).toHaveLength(1);
+    expect(h.store.rows[0]).toMatchObject({ kind: "imap", webhookSecret: null });
+    expect(await save()).toEqual({ ok: false, code: "confirm-address-change" });
+  });
+
+  it("setting up again keeps a paused source paused, for rotation and for the other webhook flavour", async () => {
+    await save();
+    await admin.setNewsletterInboundPaused({ paused: true });
+    const rotated = await save();
+    expect(rotated.ok && rotated.source.paused).toBe(true);
+    expect(h.store.rows[0].paused).toBe(true);
+    const other = await save({ kind: "webhook" });
+    expect(other.ok && other.source.paused).toBe(true);
+    expect(h.store.rows[0].paused).toBe(true);
+  });
+
+  it("pauses and disconnects like a mailbox: secret wiped, reconnecting the same domain keeps addresses", async () => {
+    await save();
+    expect((await admin.setNewsletterInboundPaused({ paused: true })).source?.paused).toBe(true);
+    as("bob");
+    await user.getMyNewsletterInbox();
+    as("admin");
+    expect(await admin.disconnectNewsletterInbound({ confirm: true })).toEqual({ ok: true });
+    expect(h.store.rows).toEqual([expect.objectContaining({ kind: "cloudflare-disconnected", address: "news.example.org", webhookSecret: null, credentials: null })]);
+    expect((await admin.getNewsletterInboundState()).source).toBeNull();
+    as("bob");
+    expect((await user.getMyNewsletterInbox()).available).toBe(false);
+    as("admin");
+
+    expect((await save()).ok).toBe(true);
+    expect(h.store.rows.map((r) => r.kind)).toEqual(["cloudflare"]);
+    await admin.disconnectNewsletterInbound({ confirm: true });
+    expect(await save({ domain: "other.example.org" })).toEqual({ ok: false, code: "confirm-address-change" });
   });
 });
 

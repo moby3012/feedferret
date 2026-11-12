@@ -27,6 +27,8 @@ const ROUTE_SCOPED_FILES = new Set([
   "app/server-settings/client.tsx",
   "components/server-management-dialog.tsx",
   "components/newsletter/inbound-wizard.tsx", // rendered only by server-management-dialog (newsletter tab)
+  "components/newsletter/inbound-domain-setup.tsx", // rendered only by inbound-wizard
+  "components/newsletter/copy-button.tsx", // rendered only by inbound-wizard / inbound-domain-setup
   "app/setup/page.tsx",
 ]);
 /** Directories rendered only inside a wrapped route (the settings sections, split out of settings-form). */

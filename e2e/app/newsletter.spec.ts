@@ -1,12 +1,15 @@
+import { createHmac } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { test, expect } from "../helpers/test";
 import { manifest } from "../helpers/db";
 
-// N1 PR B: admin wizard (choose → connect → end-to-end test) and the user's
+// N1 PR B/C: admin wizard (choose → connect → end-to-end test) and the user's
 // newsletter settings. IMAP is the harness-gated fake mailbox
 // (lib/inbound-email-fake-imap.ts): a spool dir next to the e2e DB, no network.
+// The Cloudflare / webhook way is driven over real HTTP: the test plays the
+// Cloudflare Worker (same HMAC as the generated script) against the running server.
 
 const spool = () => `${manifest().dbPath}.imap-spool`;
 
@@ -69,9 +72,9 @@ test.describe("newsletter inbox", () => {
     const wizard = page.getByTestId("newsletter-inbound");
     await expect(wizard).toBeVisible({ timeout: 20_000 });
 
-    // Step 1: IMAP recommended, the other ways are visible but not yet available.
-    await expect(wizard.getByTestId("nl-path-cloudflare")).toBeDisabled();
-    await expect(wizard.getByTestId("nl-path-webhook")).toBeDisabled();
+    // Step 1: IMAP recommended; the Cloudflare and webhook ways are offered next to it.
+    await expect(wizard.getByTestId("nl-path-cloudflare")).toBeEnabled();
+    await expect(wizard.getByTestId("nl-path-webhook")).toBeEnabled();
     await wizard.getByTestId("nl-path-imap").click();
 
     // Step 2: the provider is detected from the address, with its app-password link.
@@ -176,5 +179,161 @@ test.describe("newsletter inbox", () => {
     await expect(page.getByTestId("nl-confirm-change")).toHaveCount(0);
     await page.goto("/settings?tab=newsletter");
     await expect(page.getByTestId("newsletter-address")).toHaveText(address, { timeout: 20_000 });
+  });
+
+  test("Cloudflare way: the secret is shown once, a signed worker request becomes an article, rotation and pause lock the old script out", async ({ app, page, request }) => {
+    test.skip(app.isMobile, "one instance-wide wizard run is enough (desktop)");
+    test.setTimeout(120_000);
+    // Each attempt (retries!) is its own "client" for the webhook's per-IP limits.
+    const client = () => ({ "x-forwarded-for": `198.51.100.${1 + Math.floor(Math.random() * 250)}` });
+
+    await page.goto("/server-settings?tab=newsletter");
+    const wizard = page.getByTestId("newsletter-inbound");
+    await expect(wizard).toBeVisible({ timeout: 20_000 });
+    await wizard.getByTestId("nl-path-cloudflare").click();
+
+    // A bad domain is refused with a hint; nothing is stored.
+    await wizard.getByLabel("Domain for the newsletter addresses").fill("https://nope");
+    await wizard.getByTestId("nl-save").click();
+    await expect(wizard.getByTestId("nl-connect-result")).toContainText("Please enter a domain like");
+    await wizard.getByLabel("Domain for the newsletter addresses").fill("News.E2E.example");
+    await wizard.getByTestId("nl-save").click();
+
+    // The worker script comes with URL and secret already filled in; the secret is shown once.
+    await expect(wizard.getByTestId("nl-secret-once")).toBeVisible();
+    await expect(wizard.getByTestId("nl-cf-steps").locator("li")).toHaveCount(4);
+    const script = (await wizard.getByTestId("nl-worker-script").textContent())!;
+    expect(script).not.toContain("__FEEDFERRET");
+    const endpoint = /const WEBHOOK_URL = "([^"]+)";/.exec(script)![1];
+    const secret = /const WEBHOOK_SECRET = "([0-9a-f]{64})";/.exec(script)![1];
+    expect(endpoint).toMatch(/\/api\/webhooks\/inbound-email\/[a-z0-9]+$/);
+    await wizard.getByTestId("nl-setup-continue").click();
+
+    const step = wizard.getByTestId("nl-test-step");
+    const address = (await step.getByTestId("nl-test-address").textContent())!.trim();
+    expect(address).toMatch(/^[a-z2-7]{26}@news\.e2e\.example$/);
+    const marker = (await step.getByTestId("nl-test-marker").textContent())!.trim();
+
+    const sign = (key: string, body: string, to: string, ts = Math.floor(Date.now() / 1000)) => ({
+      "content-type": "message/rfc822",
+      "x-feedferret-timestamp": String(ts),
+      "x-feedferret-recipient": to,
+      "x-feedferret-signature": `sha256=${createHmac("sha256", key).update(`${ts}\n${to}\n${body}`).digest("hex")}`,
+    });
+    const mail = (to: string, subject: string, id: string) =>
+      [
+        "From: Weekly Ferret <hello@weekly-ferret.example>",
+        `To: ${to}`,
+        "List-Id: Weekly Ferret <weekly.ferret.example>",
+        `Subject: ${subject}`,
+        `Message-ID: <${id}@weekly-ferret.example>`,
+        `Date: ${new Date().toUTCString()}`,
+        "MIME-Version: 1.0",
+        "Content-Type: text/html; charset=utf-8",
+        "",
+        `<p>${subject} - pushed by the worker.</p>`,
+        "",
+      ].join("\r\n");
+    const post = (body: string, headers: Record<string, string>) => request.post(endpoint, { headers: { ...client(), ...headers }, data: Buffer.from(body) });
+
+    // Outsiders: no / wrong / forged / replayed signatures never get a mail in.
+    const probe = mail(address, "Should not arrive", "probe-1");
+    expect((await post(probe, { "content-type": "message/rfc822" })).status()).toBe(401);
+    expect((await post(probe, sign("00".repeat(32), probe, address))).status()).toBe(401);
+    expect((await post(probe, { ...sign(secret, probe, address), "x-feedferret-recipient": "other@news.e2e.example" })).status()).toBe(401);
+    const stale = await post(probe, sign(secret, probe, address, Math.floor(Date.now() / 1000) - 3600));
+    expect(stale.status()).toBe(401);
+    expect(await stale.json()).toEqual({ error: "timestamp-out-of-window" });
+
+    // The worker's request: stored, deduplicated, counted in the status card.
+    const testMail = mail(address, `Test ${marker}`, "marker-1");
+    const ok = await post(testMail, sign(secret, testMail, address));
+    expect(ok.status()).toBe(200);
+    expect(await ok.json()).toMatchObject({ ok: true, status: "created" });
+    expect(await (await post(testMail, sign(secret, testMail, address))).json()).toMatchObject({ status: "duplicate" });
+    await step.getByTestId("nl-manual-sent").click();
+    await expect(step.getByTestId("nl-test-arrived")).toBeVisible({ timeout: 45_000 });
+
+    const db = new Database(manifest().dbPath);
+    try {
+      const rows = db
+        .prepare('SELECT a.title, f.sourceType, c.name AS folder FROM "Article" a JOIN "Feed" f ON f.id = a.feedId LEFT JOIN "Category" c ON c.id = f.categoryId WHERE a.userId = ?  AND f.sourceType = \'newsletter\'')
+        .all(app.user.userId);
+      expect(rows).toEqual([{ title: `Test ${marker}`, sourceType: "newsletter", folder: "Newsletter" }]);
+    } finally {
+      db.close();
+    }
+
+    // Postmark-style: JSON + the secret as Basic password in the URL.
+    const postmark = JSON.stringify({ From: "News <news@postmark-news.example>", OriginalRecipient: address, Subject: "Via Postmark", TextBody: "hello", HtmlBody: "<p>hello</p>", MessageID: "11111111-2222-3333-4444-555555555555" });
+    const basic = (pw: string) => `Basic ${Buffer.from(`feedferret:${pw}`).toString("base64")}`;
+    const wrong = await request.post(endpoint, { headers: { ...client(), "content-type": "application/json", authorization: basic("nope") }, data: postmark });
+    expect(wrong.status()).toBe(401);
+    const viaBasic = await request.post(endpoint, { headers: { ...client(), "content-type": "application/json", authorization: basic(secret) }, data: postmark });
+    expect(viaBasic.status()).toBe(200);
+    expect(await viaBasic.json()).toMatchObject({ status: "created", format: "postmark" });
+
+    // Status card: way, domain, endpoint (no secret), activity.
+    await step.getByTestId("nl-test-skip").click();
+    const status = wizard.getByTestId("nl-status-card");
+    await expect(status.getByTestId("nl-status-path")).toHaveText("Cloudflare Email Routing");
+    await expect(status.getByTestId("nl-status-badge")).toHaveText("Running");
+    await expect(status.getByTestId("nl-last-mail")).not.toHaveText("never");
+    await expect(status.getByTestId("nl-status-endpoint")).toHaveText(endpoint);
+    expect(await page.content()).not.toContain(secret);
+    await page.reload();
+    await expect(wizard.getByTestId("nl-status-card")).toBeVisible({ timeout: 20_000 });
+    expect(await page.content()).not.toContain(secret);
+
+    // Users get <token>@domain addresses.
+    await page.goto("/settings?tab=newsletter");
+    await expect(page.getByTestId("newsletter-address")).toHaveText(address, { timeout: 20_000 });
+
+    // Paused: the endpoint answers 403 (Postmark stops retrying), resumed: works again.
+    await page.goto("/server-settings?tab=newsletter");
+    await wizard.getByTestId("nl-status-pause").click();
+    await expect(wizard.getByTestId("nl-status-badge")).toHaveText("Paused");
+    const paused = mail(address, "While paused", "paused-1");
+    expect((await post(paused, sign(secret, paused, address))).status()).toBe(403);
+    await wizard.getByTestId("nl-status-pause").click();
+    await expect(wizard.getByTestId("nl-status-badge")).toHaveText("Running");
+
+    // Rotation: the old script is locked out, the new one works, addresses stay.
+    await wizard.getByTestId("nl-status-edit").click();
+    await expect(wizard.getByTestId("nl-rotate-warning")).toBeVisible();
+    await wizard.getByTestId("nl-save").click();
+    const fresh = /const WEBHOOK_SECRET = "([0-9a-f]{64})";/.exec((await wizard.getByTestId("nl-worker-script").textContent())!)![1];
+    expect(fresh).not.toBe(secret);
+    const later = mail(address, "After rotation", "rot-1");
+    expect((await post(later, sign(secret, later, address))).status()).toBe(401);
+    expect((await post(later, sign(fresh, later, address))).status()).toBe(200);
+    await wizard.getByTestId("nl-setup-continue").click();
+    await wizard.getByTestId("nl-test-skip").click();
+
+    // Disconnect wipes the secret: even the right one is refused now.
+    await wizard.getByTestId("nl-status-disconnect").click();
+    await page.getByTestId("nl-disconnect-confirm").click();
+    await expect(wizard.getByTestId("nl-path-cloudflare")).toBeVisible();
+    const gone = mail(address, "After disconnect", "gone-1");
+    expect((await post(gone, sign(fresh, gone, address))).status()).toBe(404);
+  });
+
+  test("webhook way shows the endpoint, both Basic-auth and plain URL, and Postmark / Mailgun steps", async ({ app, page }) => {
+    test.skip(app.isMobile, "one instance-wide wizard run is enough (desktop)");
+    await page.goto("/server-settings?tab=newsletter");
+    const wizard = page.getByTestId("newsletter-inbound");
+    await expect(wizard).toBeVisible({ timeout: 20_000 });
+    await wizard.getByTestId("nl-path-webhook").click();
+    await wizard.getByLabel("Domain for the newsletter addresses").fill("inbox.e2e.example");
+    await wizard.getByTestId("nl-save").click();
+    const withAuth = (await wizard.getByTestId("nl-webhook-url-auth").textContent())!;
+    const plain = (await wizard.getByTestId("nl-webhook-url").textContent())!;
+    expect(plain).toMatch(/\/api\/webhooks\/inbound-email\/[a-z0-9]+$/);
+    expect(withAuth).toMatch(/^https?:\/\/feedferret:[0-9a-f]{64}@/);
+    expect(withAuth.replace(/\/\/feedferret:[0-9a-f]{64}@/, "//")).toBe(plain);
+    await expect(wizard.getByTestId("nl-setup-webhook")).toContainText("Postmark");
+    await expect(wizard.getByTestId("nl-setup-webhook")).toContainText("Mailgun");
+    await wizard.getByTestId("nl-setup-continue").click();
+    await expect(wizard.getByTestId("nl-test-step")).toBeVisible();
   });
 });

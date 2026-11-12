@@ -79,6 +79,7 @@ Full guide including reverse proxy (Nginx, Caddy, Traefik), updates, and backup:
 | MCP endpoint (AI agents) | [`docs/mcp.md`](docs/mcp.md) |
 | Google Reader API (Reeder, NNW, FeedMe) | [`docs/google-reader-api.md`](docs/google-reader-api.md) |
 | Outbound webhooks | [`docs/webhooks.md`](docs/webhooks.md) |
+| Newsletter inbox (IMAP, Cloudflare, Postmark/Mailgun) | [`docs/newsletter.md`](docs/newsletter.md) |
 | Full-text extraction & page→feed builder (Scout Studio) | [`docs/scout-studio.md`](docs/scout-studio.md) |
 | Example feeds/pages to smoke-test every fetch path | [`docs/testing-feeds.md`](docs/testing-feeds.md) |
 | Security | [`docs/security.md`](docs/security.md) |

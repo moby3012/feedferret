@@ -1,9 +1,12 @@
 "use server";
 
-// N1 PR B: admin wizard for the newsletter inbox (spec §10). Admin-only.
+// N1 PR B/C: admin wizard for the newsletter inbox (spec §10). Admin-only.
 // Credentials are sealed (ff2, purpose inboundMailSource.credentials) and
 // never returned; the client sees `hasPassword` and sends "__keep__" (or "")
-// to reuse the stored password.
+// to reuse the stored password. Webhook sources (Cloudflare / Postmark /
+// Mailgun) keep a sealed HMAC secret (purpose inboundMailSource.webhookSecret)
+// that is returned exactly once, by the action that creates it.
+// One way in per instance: switching ways replaces the source.
 
 import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
@@ -12,6 +15,16 @@ import { requireAdmin, logAdminAction } from "@/lib/admin-auth";
 import { pickFields } from "@/lib/pick-fields";
 import { isMailServiceEnabled, sendSystemEmail } from "@/lib/mail";
 import { addressString, ensurePrimaryNewsletterAddress } from "@/lib/newsletter-addresses";
+import {
+  DISCONNECTED_KINDS,
+  INBOUND_KINDS,
+  isWebhookKind,
+  sourceAddressesChange,
+  webhookPathFor,
+  WEBHOOK_KINDS,
+  type WebhookKind,
+} from "@/lib/newsletter-constants";
+import { generateWebhookSecret, sealWebhookSecret } from "@/lib/inbound-email-webhook";
 import { detectImapPreset, getImapPreset, isPlausibleMailbox, type PlusAddressing } from "@/lib/newsletter-imap-presets";
 import {
   discoverImapServer,
@@ -19,7 +32,6 @@ import {
   parseImapSettings,
   pollInboundSourceNow,
   PROCESSED_FOLDER,
-  DISCONNECTED_IMAP_KIND,
   sealImapCredentials,
   storedErrorCode,
   testImapConnection,
@@ -30,7 +42,19 @@ import {
 const KEEP = "__keep__";
 const HOST_RE = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$|^\[?[0-9a-f:.]+\]?$/i;
 
-export type WizardErrorCode = ImapErrorCode | "invalid-email" | "no-server" | "password-required" | "invalid-server" | "no-source" | "confirm-address-change";
+export type WizardErrorCode =
+  | ImapErrorCode
+  | "invalid-email"
+  | "no-server"
+  | "password-required"
+  | "invalid-server"
+  | "no-source"
+  | "confirm-address-change"
+  | "invalid-domain"
+  | "invalid-way"
+  | "mail-unparseable"
+  | "mail-too-large"
+  | "payload-unsupported";
 
 /** Subject marker of the end-to-end test mail ("FF-TEST-XXXXXX"). */
 const TEST_MARKER_RE = /^FF-TEST-[A-Z2-7]{8}$/;
@@ -64,6 +88,10 @@ export interface InboundSourceView {
   preset: PresetView | null;
   paused: boolean;
   hasPassword: boolean;
+  /** Webhook ways only: a secret is stored (never returned). */
+  hasSecret: boolean;
+  /** Webhook ways only: path of the endpoint; the browser prefixes its own origin. */
+  webhookPath: string | null;
   lastReceivedAt: string | null;
   lastCheckedAt: string | null;
   errorCount: number;
@@ -85,6 +113,7 @@ type SourceRow = {
   address: string | null;
   settings: string | null;
   credentials: string | null;
+  webhookSecret: string | null;
   paused: boolean;
   lastReceivedAt: Date | null;
   lastCheckedAt: Date | null;
@@ -99,6 +128,7 @@ const SOURCE_SELECT = {
   address: true,
   settings: true,
   credentials: true,
+  webhookSecret: true,
   paused: true,
   lastReceivedAt: true,
   lastCheckedAt: true,
@@ -108,7 +138,7 @@ const SOURCE_SELECT = {
 } as const;
 
 function toView(row: SourceRow): InboundSourceView {
-  const settings = parseImapSettings(row.settings);
+  const settings = row.kind === "imap" ? parseImapSettings(row.settings) : null;
   const code = storedErrorCode(row.lastError);
   return {
     id: row.id,
@@ -118,6 +148,8 @@ function toView(row: SourceRow): InboundSourceView {
     preset: presetView(settings?.presetId),
     paused: row.paused,
     hasPassword: !!row.credentials,
+    hasSecret: !!row.webhookSecret,
+    webhookPath: isWebhookKind(row.kind) ? webhookPathFor(row.id) : null,
     lastReceivedAt: row.lastReceivedAt?.toISOString() ?? null,
     // While a poll runs, lastCheckedAt holds the end of its lease (future): show "now".
     lastCheckedAt: row.lastCheckedAt ? new Date(Math.min(row.lastCheckedAt.getTime(), Date.now())).toISOString() : null,
@@ -128,16 +160,17 @@ function toView(row: SourceRow): InboundSourceView {
   };
 }
 
-async function lastDisconnectedRow(): Promise<{ address: string | null } | null> {
-  return db.inboundMailSource.findFirst({ where: { kind: DISCONNECTED_IMAP_KIND }, orderBy: { updatedAt: "desc" }, select: { address: true } });
+async function lastDisconnectedRow(): Promise<{ kind: string; address: string | null } | null> {
+  return db.inboundMailSource.findFirst({ where: { kind: { in: DISCONNECTED_KINDS } }, orderBy: { updatedAt: "desc" }, select: { kind: true, address: true } });
 }
 
-async function imapSourceRow(): Promise<SourceRow | null> {
-  return db.inboundMailSource.findFirst({ where: { kind: "imap" }, orderBy: { createdAt: "asc" }, select: SOURCE_SELECT });
+/** The instance's single way in (whatever kind), or null. */
+async function primarySourceRow(): Promise<SourceRow | null> {
+  return db.inboundMailSource.findFirst({ where: { kind: { in: [...INBOUND_KINDS] } }, orderBy: { createdAt: "asc" }, select: SOURCE_SELECT });
 }
 
 async function adminTestAddress(userId: string): Promise<string | null> {
-  const source = await imapSourceRow();
+  const source = await primarySourceRow();
   if (!source?.address) return null;
   const primary = await ensurePrimaryNewsletterAddress(userId);
   return addressString({ id: source.id, kind: source.kind, address: source.address, paused: source.paused }, primary.token);
@@ -147,7 +180,7 @@ async function adminTestAddress(userId: string): Promise<string | null> {
 
 export async function getNewsletterInboundState(): Promise<{ source: InboundSourceView | null; mailAvailable: boolean; testAddress: string | null }> {
   const session = await requireAdmin();
-  const row = await imapSourceRow();
+  const row = await primarySourceRow();
   return {
     source: row ? toView(row) : null,
     mailAvailable: await isMailServiceEnabled(),
@@ -193,13 +226,13 @@ async function resolveConnectInput(input: unknown): Promise<Resolved> {
     server = found;
   }
 
-  const existing = await imapSourceRow();
-  const existingSettings = parseImapSettings(existing?.settings);
+  const existing = await primarySourceRow();
+  const existingSettings = existing?.kind === "imap" ? parseImapSettings(existing.settings) : null;
   let password = typeof data.password === "string" ? data.password : "";
   if (password === "" || password === KEEP) {
     // The stored password is reused only for the SAME mailbox on the SAME
     // server: it must never be sent to a host the admin just typed in.
-    const sameTarget = existing?.address === mailbox && existingSettings?.host === server.host && existingSettings?.port === server.port;
+    const sameTarget = existing?.kind === "imap" && existing.address === mailbox && existingSettings?.host === server.host && existingSettings?.port === server.port;
     const stored = sameTarget ? openImapCredentials(existing?.credentials) : null;
     if (!stored) return { ok: false, code: "password-required" };
     password = stored.pass;
@@ -253,7 +286,7 @@ export async function saveNewsletterImap(input: unknown): Promise<TestResult & {
   // Only relevant when user addresses exist at all. After a disconnect the
   // last mailbox is remembered, so reconnecting the SAME one needs no confirm.
   const previous = resolved.existing ?? (await lastDisconnectedRow());
-  const changesAddresses = previous?.address !== resolved.mailbox && (await db.newsletterAddress.count()) > 0;
+  const changesAddresses = sourceAddressesChange(previous, { kind: "imap", address: resolved.mailbox }) && (await db.newsletterAddress.count()) > 0;
   if (changesAddresses && confirmAddressChange !== true) {
     return { ok: false, code: "confirm-address-change", server: resolved.server, preset };
   }
@@ -266,6 +299,8 @@ export async function saveNewsletterImap(input: unknown): Promise<TestResult & {
     address: resolved.mailbox,
     settings: JSON.stringify(resolved.settings),
     credentials: sealImapCredentials({ user: resolved.mailbox, pass: resolved.password }),
+    // Switching from a webhook way: its secret goes away with it.
+    webhookSecret: null,
     paused: false,
     errorCount: 0,
     lastError: null,
@@ -275,7 +310,7 @@ export async function saveNewsletterImap(input: unknown): Promise<TestResult & {
     ? await db.inboundMailSource.update({ where: { id: resolved.existing.id }, data, select: SOURCE_SELECT })
     : await db.inboundMailSource.create({ data, select: SOURCE_SELECT });
   // The remembered mailbox of an earlier disconnect is no longer needed.
-  if (!resolved.existing) await db.inboundMailSource.deleteMany({ where: { kind: DISCONNECTED_IMAP_KIND } });
+  if (!resolved.existing) await db.inboundMailSource.deleteMany({ where: { kind: { in: DISCONNECTED_KINDS } } });
   await logAdminAction(session.user.id, "newsletter.inbound.save", { kind: "imap", host: resolved.server.host, presetId: resolved.server.presetId });
   return { ok: true, server: resolved.server, preset, folderCount: result.folders.length, processedFolderExists: result.processedFolderExists, source: toView(row) };
 }
@@ -323,15 +358,16 @@ export async function checkNewsletterTestMail(input: unknown): Promise<{ arrived
   if (!sinceDate || Number.isNaN(sinceDate.getTime()) || typeof marker !== "string" || !TEST_MARKER_RE.test(marker)) {
     return { arrived: false, seconds: null, errorCode: null };
   }
-  const source = await imapSourceRow();
+  const source = await primarySourceRow();
   if (!source) return { arrived: false, seconds: null, errorCode: "no-source" };
-  if (!source.paused) await pollInboundSourceNow(source.id).catch(() => null);
+  // Webhook ways push; only a mailbox has to be polled.
+  if (source.kind === "imap" && !source.paused) await pollInboundSourceNow(source.id).catch(() => null);
   const article = await db.article.findFirst({
     where: { userId: session.user.id, title: { contains: marker }, createdAt: { gte: new Date(sinceDate.getTime() - 15 * 60_000) } },
     orderBy: { createdAt: "asc" },
     select: { createdAt: true },
   });
-  const fresh = await imapSourceRow();
+  const fresh = await primarySourceRow();
   return {
     arrived: !!article,
     seconds: article ? Math.max(0, Math.round((article.createdAt.getTime() - sinceDate.getTime()) / 1000)) : null,
@@ -343,7 +379,7 @@ export async function setNewsletterInboundPaused(input: unknown): Promise<{ ok: 
   const session = await requireAdmin();
   const { paused } = pickFields((input ?? {}) as { paused?: unknown }, ["paused"]);
   if (typeof paused !== "boolean") return { ok: false };
-  const existing = await imapSourceRow();
+  const existing = await primarySourceRow();
   if (!existing) return { ok: false };
   const row = await db.inboundMailSource.update({
     where: { id: existing.id },
@@ -364,15 +400,73 @@ export async function disconnectNewsletterInbound(input?: unknown): Promise<{ ok
   const session = await requireAdmin();
   const { confirm } = pickFields((input ?? {}) as { confirm?: unknown }, ["confirm"]);
   if (confirm !== true) return { ok: false, code: "confirm-required" };
-  const existing = await imapSourceRow();
+  const existing = await primarySourceRow();
   if (!existing) return { ok: true };
-  // Credentials and secrets are wiped; only the base mailbox is remembered
-  // (see DISCONNECTED_IMAP_KIND) so reconnecting it keeps every user address.
-  await db.inboundMailSource.deleteMany({ where: { kind: DISCONNECTED_IMAP_KIND } });
+  // Credentials and secrets are wiped; only the base address is remembered
+  // ("<kind>-disconnected") so reconnecting it keeps every user address.
+  await db.inboundMailSource.deleteMany({ where: { kind: { in: DISCONNECTED_KINDS } } });
   await db.inboundMailSource.update({
     where: { id: existing.id },
-    data: { kind: DISCONNECTED_IMAP_KIND, credentials: null, webhookSecret: null, paused: true, errorCount: 0, lastError: null },
+    data: { kind: `${existing.kind}-disconnected`, credentials: null, webhookSecret: null, paused: true, errorCount: 0, lastError: null },
   });
   await logAdminAction(session.user.id, "newsletter.inbound.disconnect");
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Webhook ways (Cloudflare Email Worker, Postmark / Mailgun / any relay)
+
+const DOMAIN_RE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+
+/** "News.Example.com", "@news.example.com" → "news.example.com"; null when not a plain domain name. */
+function normalizeNewsletterDomain(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const domain = value.trim().toLowerCase().replace(/^@/, "");
+  return DOMAIN_RE.test(domain) ? domain : null;
+}
+
+export type DomainSaveResult =
+  | { ok: true; /** Shown once: never returned again. */ secret: string; source: InboundSourceView }
+  | { ok: false; code: WizardErrorCode };
+
+/**
+ * Step 2 for "cloudflare" / "webhook": stores the routed domain and a NEW
+ * secret (also when the same way is set up again = rotation). The secret is in
+ * this response only; afterwards the server keeps just the sealed value.
+ */
+export async function saveNewsletterDomainSource(input: unknown): Promise<DomainSaveResult> {
+  const session = await requireAdmin();
+  const data = pickFields((input ?? {}) as { kind?: unknown; domain?: unknown; confirmAddressChange?: unknown }, ["kind", "domain", "confirmAddressChange"]);
+  const kind = (WEBHOOK_KINDS as readonly unknown[]).includes(data.kind) ? (data.kind as WebhookKind) : null;
+  if (!kind) return { ok: false, code: "invalid-way" };
+  const domain = normalizeNewsletterDomain(data.domain);
+  if (!domain) return { ok: false, code: "invalid-domain" };
+
+  const existing = await primarySourceRow();
+  // User addresses derive from the base address: a different domain (or a switch
+  // from mailbox plus-addressing) changes all of them. Enforced here, not only in the UI.
+  const previous = existing ?? (await lastDisconnectedRow());
+  if (sourceAddressesChange(previous, { kind, address: domain }) && (await db.newsletterAddress.count()) > 0 && data.confirmAddressChange !== true) {
+    return { ok: false, code: "confirm-address-change" };
+  }
+
+  const secret = generateWebhookSecret();
+  const fields = {
+    kind,
+    name: kind === "cloudflare" ? "Cloudflare Email Routing" : "Webhook",
+    address: domain,
+    settings: null,
+    credentials: null,
+    webhookSecret: sealWebhookSecret(secret),
+    // Setting up again (rotation, other flavour) must not quietly resume a paused source.
+    paused: existing?.paused ?? false,
+    errorCount: 0,
+    lastError: null,
+  };
+  const row = existing
+    ? await db.inboundMailSource.update({ where: { id: existing.id }, data: fields, select: SOURCE_SELECT })
+    : await db.inboundMailSource.create({ data: fields, select: SOURCE_SELECT });
+  if (!existing) await db.inboundMailSource.deleteMany({ where: { kind: { in: DISCONNECTED_KINDS } } });
+  await logAdminAction(session.user.id, "newsletter.inbound.save", { kind, domain });
+  return { ok: true, secret, source: toView(row) };
 }
