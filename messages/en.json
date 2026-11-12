@@ -758,6 +758,7 @@
     "topicFeeds": "News & search feeds for this topic — pick one",
     "resolverNoResult": "Nothing found for that. Try the site's address or a feed URL.",
     "hints": {
+      "genericPlatform": "Platform",
       "publicPreviewUnavailable": "This channel has no accessible public web preview. It may be private or no longer exist.",
       "needsRsshub": "Requires RSSHub – configure under Settings › Server",
       "rateLimited": "Try again later",
@@ -2575,6 +2576,8 @@
       "searching": "Looking for feeds on {site}…",
       "none": "No other feed was found on the site.",
       "noneHint": {
+        "needs-api-credentials": "Enable the platform or check its saved API credentials under Admin → Server settings.",
+        "public-preview-unavailable": "This channel has no accessible public web preview. It may be private or no longer exist.",
         "needs-rsshub": "This site needs RSSHub.",
         "rate-limited": "The site throttles automated access.",
         "blocked": "The site blocks automated access.",

@@ -41,7 +41,7 @@ export type DiscoveryResult = {
   mode: "url" | "topic" | "empty";
   feeds: DiscoveredFeed[];
   hint?: DiscoveryHint;
-  /** With `needs-rsshub`: the platform that has no native feed ("X/Twitter"). */
+  /** Platform name for `needs-rsshub` ("X/Twitter") or `needs-api-credentials` ("Twitch"). */
   hintPlatform?: string;
   /** URL mode: the page address actually read (after redirects / http fallback). */
   pageUrl?: string;

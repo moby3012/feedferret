@@ -202,7 +202,7 @@ export function AddFeedDialog({ open, onOpenChange, subscribedUrls, initialUrl, 
       if (feeds.length === 0) {
         let message = t("sidebar.resolverNoResult");
         if (data.hint === "needs-api-credentials") {
-          message = t("sidebar.hints.needsApiCredentials", { platform: data.hintPlatform || "API" });
+          message = t("sidebar.hints.needsApiCredentials", { platform: data.hintPlatform || t("sidebar.hints.genericPlatform") });
         } else if (data.hint === "public-preview-unavailable") {
           message = t("sidebar.hints.publicPreviewUnavailable");
         } else if (data.hint === "needs-rsshub") {
