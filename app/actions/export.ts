@@ -17,6 +17,12 @@ import {
   sendToWallabag,
   testWallabagConfig,
   type WallabagConfig,
+  sendToReadeck,
+  testReadeckConfig,
+  type ReadeckConfig,
+  sendToLinkwarden,
+  testLinkwardenConfig,
+  type LinkwardenConfig,
 } from "@/lib/export-destinations";
 
 async function requireUser() {
@@ -36,6 +42,10 @@ export async function getExportSettings() {
       exportWallabagClientSecret: true,
       exportWallabagUsername: true,
       exportWallabagPassword: true,
+      exportReadeckUrl: true,
+      exportReadeckApiKey: true,
+      exportLinkwardenUrl: true,
+      exportLinkwardenApiKey: true,
     },
   });
 
@@ -47,6 +57,16 @@ export async function getExportSettings() {
     user?.exportWallabagPassword
   );
 
+  const readeckConfigured = !!(
+    user?.exportReadeckUrl &&
+    user?.exportReadeckApiKey
+  );
+
+  const linkwardenConfigured = !!(
+    user?.exportLinkwardenUrl &&
+    user?.exportLinkwardenApiKey
+  );
+
   return {
     obsidianVault: user?.exportObsidianVault ?? null,
     obsidianConfigured: !!user?.exportObsidianVault,
@@ -56,6 +76,12 @@ export async function getExportSettings() {
     hasWallabagClientSecret: !!user?.exportWallabagClientSecret,
     hasWallabagPassword: !!user?.exportWallabagPassword,
     wallabagConfigured,
+    readeckUrl: user?.exportReadeckUrl ?? null,
+    hasReadeckApiKey: !!user?.exportReadeckApiKey,
+    readeckConfigured,
+    linkwardenUrl: user?.exportLinkwardenUrl ?? null,
+    hasLinkwardenApiKey: !!user?.exportLinkwardenApiKey,
+    linkwardenConfigured,
   };
 }
 
@@ -68,6 +94,12 @@ export async function updateExportSettings(data: {
   wallabagUsername?: string | null;
   wallabagPassword?: string | null;
   clearWallabagPassword?: boolean;
+  readeckUrl?: string | null;
+  readeckApiKey?: string | null;
+  clearReadeckApiKey?: boolean;
+  linkwardenUrl?: string | null;
+  linkwardenApiKey?: string | null;
+  clearLinkwardenApiKey?: boolean;
 }) {
   const session = await requireUser();
   const updateData: Record<string, unknown> = {};
@@ -87,6 +119,20 @@ export async function updateExportSettings(data: {
     updateData.exportWallabagPassword = null;
   } else if (data.wallabagPassword) {
     updateData.exportWallabagPassword = encryptIfValue(data.wallabagPassword, "user.exportWallabagPassword");
+  }
+
+  if ("readeckUrl" in data) updateData.exportReadeckUrl = data.readeckUrl?.trim() || null;
+  if (data.clearReadeckApiKey) {
+    updateData.exportReadeckApiKey = null;
+  } else if (data.readeckApiKey) {
+    updateData.exportReadeckApiKey = encryptIfValue(data.readeckApiKey);
+  }
+
+  if ("linkwardenUrl" in data) updateData.exportLinkwardenUrl = data.linkwardenUrl?.trim() || null;
+  if (data.clearLinkwardenApiKey) {
+    updateData.exportLinkwardenApiKey = null;
+  } else if (data.linkwardenApiKey) {
+    updateData.exportLinkwardenApiKey = encryptIfValue(data.linkwardenApiKey);
   }
 
   await db.user.update({ where: { id: session.user.id }, data: updateData });
@@ -209,4 +255,115 @@ export async function exportArticleToWallabag(
     content: await articleAsMarkdown(article),
     tags: ["feedferret"],
   });
+}
+
+export async function testReadeckExportConnection(overrides?: {
+  readeckUrl?: string;
+  readeckApiKey?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      exportReadeckUrl: true,
+      exportReadeckApiKey: true,
+    },
+  });
+
+  const baseUrl = (overrides?.readeckUrl !== undefined ? overrides.readeckUrl : user?.exportReadeckUrl)?.trim();
+  const isNewUrl = overrides?.readeckUrl !== undefined && overrides.readeckUrl.trim() !== (user?.exportReadeckUrl || "").trim();
+  const apiKey = overrides?.readeckApiKey?.trim() || (!isNewUrl && user?.exportReadeckApiKey ? decryptIfValue(user.exportReadeckApiKey, "user.exportReadeckApiKey") : null);
+
+  if (!baseUrl || !apiKey) {
+    if (isNewUrl && !overrides?.readeckApiKey) {
+      return { success: false, error: "API token is required when testing a new or modified URL" };
+    }
+    return { success: false, error: "Fill in the instance URL and API token first" };
+  }
+
+  return testReadeckConfig({ baseUrl, apiKey });
+}
+
+export async function exportArticleToReadeck(
+  articleId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      exportReadeckUrl: true,
+      exportReadeckApiKey: true,
+    },
+  });
+
+  const apiKey = decryptIfValue(user?.exportReadeckApiKey, "user.exportReadeckApiKey");
+  if (!user?.exportReadeckUrl || !apiKey) {
+    return { success: false, error: "Readeck is not fully configured" };
+  }
+
+  const article = await loadArticleForExport(session.user.id, articleId);
+  return sendToReadeck(
+    { baseUrl: user.exportReadeckUrl, apiKey },
+    {
+      url: article.link,
+      title: article.title,
+      tags: ["feedferret"],
+    },
+  );
+}
+
+export async function testLinkwardenExportConnection(overrides?: {
+  linkwardenUrl?: string;
+  linkwardenApiKey?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      exportLinkwardenUrl: true,
+      exportLinkwardenApiKey: true,
+    },
+  });
+
+  const baseUrl = (overrides?.linkwardenUrl !== undefined ? overrides.linkwardenUrl : user?.exportLinkwardenUrl)?.trim();
+  const isNewUrl = overrides?.linkwardenUrl !== undefined && overrides.linkwardenUrl.trim() !== (user?.exportLinkwardenUrl || "").trim();
+  const apiKey = overrides?.linkwardenApiKey?.trim() || (!isNewUrl && user?.exportLinkwardenApiKey ? decryptIfValue(user.exportLinkwardenApiKey, "user.exportLinkwardenApiKey") : null);
+
+  if (!baseUrl || !apiKey) {
+    if (isNewUrl && !overrides?.linkwardenApiKey) {
+      return { success: false, error: "API token is required when testing a new or modified URL" };
+    }
+    return { success: false, error: "Fill in the instance URL and API token first" };
+  }
+
+  return testLinkwardenConfig({ baseUrl, apiKey });
+}
+
+export async function exportArticleToLinkwarden(
+  articleId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const session = await requireUser();
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: {
+      exportLinkwardenUrl: true,
+      exportLinkwardenApiKey: true,
+    },
+  });
+
+  const apiKey = decryptIfValue(user?.exportLinkwardenApiKey, "user.exportLinkwardenApiKey");
+  if (!user?.exportLinkwardenUrl || !apiKey) {
+    return { success: false, error: "Linkwarden is not fully configured" };
+  }
+
+  const article = await loadArticleForExport(session.user.id, articleId);
+  return sendToLinkwarden(
+    { baseUrl: user.exportLinkwardenUrl, apiKey },
+    {
+      url: article.link,
+      title: article.title,
+      description: article.content ? (await articleAsMarkdown(article)).slice(0, 500) : undefined,
+      tags: ["feedferret"],
+    },
+  );
 }

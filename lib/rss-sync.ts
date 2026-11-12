@@ -1,3 +1,7 @@
+import { hasFeedContentRules } from "./feed-content-rules";
+import { createHash } from "node:crypto";
+import { assessExtraction } from "./extraction-quality";
+import { applyFeedContentRules } from "./feed-content-rules-client";
 import { writeSystemLog } from "./system-log";
 import { db } from "./db";
 import { applyAutoReadRules } from "./auto-read-rules";
@@ -65,8 +69,15 @@ export interface ArticleSyncInput {
      * (`legacyDedupeKeys`). A row found only under one of them is re-keyed in place.
      */
     legacyDedupeKeys?: string[];
+    upstreamContentHash?: string | null;
     contentHash: string | null;
     content: string;
+    /**
+     * Not persisted. Set when `content` carries embed links the sanitizer used to strip (known video-provider
+     * iframes → plain links, lib/feed-item-sanitize.ts): the body this item sanitized to before that existed.
+     * A stored body equal to it means upstream did not change, so the row is left alone (see upsertArticleBatch).
+     */
+    legacyContent?: string;
     excerpt: string;
     author: string | null;
     publishedAt: Date;
@@ -137,6 +148,7 @@ export interface UpsertArticleBatchOptions {
 // update payload can't drift apart.
 function updatableFields(article: ArticleSyncInput) {
     return {
+        ...(article.upstreamContentHash ? { upstreamContentHash: article.upstreamContentHash } : {}),
         title: article.title,
         link: article.link,
         externalId: article.externalId,
@@ -174,6 +186,7 @@ function enrichFields(article: ArticleSyncInput) {
 }
 
 const EXISTING_ROW_SELECT = {
+    upstreamContentHash: true,
     id: true,
     dedupeKey: true,
     title: true,
@@ -190,6 +203,10 @@ const EXISTING_ROW_SELECT = {
     fullTextStatus: true,
     fullTextAttempts: true,
     fullTextFetchedAt: true,
+    kind: true,
+    mediaUrl: true,
+    mediaType: true,
+    mediaDurationSecs: true,
 } as const;
 
 type ExistingArticleRow = { id: string; dedupeKey: string | null; updatedAt: Date };
@@ -364,6 +381,23 @@ export async function upsertArticleBatch(
             article = { ...article, publishedAt: existing.publishedAt };
         }
 
+        // A changed cleaning configuration is never an upstream edit. Adopt hashes
+        // conservatively for legacy rows; apply rules on their next publisher edit.
+        const legacyFullTextCandidate = !existing.upstreamContentHash && article.upstreamContentHash && options.fullTextActive && existing.feedContent == null &&
+            existing.fullTextStatus === null && existing.content !== article.content &&
+            htmlToPlainText(existing.content).length > htmlToPlainText(article.content).length * 1.2 + 100;
+        if (article.upstreamContentHash && !legacyFullTextCandidate &&
+            (!existing.upstreamContentHash || existing.upstreamContentHash === article.upstreamContentHash)) {
+            article = { ...article, content: existing.feedContent ?? existing.content, excerpt: existing.excerpt ?? "" };
+        }
+        // Embed links (known video iframes → plain links) only ever apply to new rows and to rows whose upstream
+        // content really changed. A stored body that equals what this item sanitized to BEFORE embed links existed
+        // is the same upstream content: compare and keep it as stored, or every item with an iframe would be
+        // rewritten (updatedAt bump, full-text reset) once after the deploy that introduced them. Checked against
+        // `feedContent` when full text replaced the body, as for the change check below.
+        if (article.legacyContent !== undefined && (existing.feedContent ?? existing.content) === article.legacyContent) {
+            article = { ...article, content: article.legacyContent };
+        }
         const next = updatableFields(article);
         const linkChanged = existing.link !== next.link;
         // Optional enrichment missing this run: the content-derived fields of the
@@ -402,7 +436,11 @@ export async function upsertArticleBatch(
             existing.publishedAt.getTime() !== next.publishedAt.getTime() ||
             (!keep && (existing.imageUrl ?? null) !== next.imageUrl) ||
             (!keep && (existing.enclosures ?? null) !== next.enclosures) ||
-            existing.title !== next.title;
+            existing.title !== next.title ||
+            (!!article.upstreamContentHash && !keep && article.kind !== undefined && (
+                (existing.kind != null && existing.kind !== next.kind) || existing.mediaUrl !== next.mediaUrl ||
+                existing.mediaType !== next.mediaType || existing.mediaDurationSecs !== next.mediaDurationSecs
+            ));
 
         // Fields an update writes: with stored full text the feed's content goes
         // to feedContent and content/excerpt/readMinutes stay the full text's.
@@ -437,13 +475,14 @@ export async function upsertArticleBatch(
                 data: { ...writable, ...fullTextReset, ...legacyAdopt, ...(cosmeticTitle ? { title: cosmeticTitle } : {}) },
             });
             if (upsertedIds.length % 25 === 0) await yieldToLoop();
-        } else if (linkChanged || cosmeticTitle || legacyFullText) {
+        } else if (linkChanged || cosmeticTitle || legacyFullText || (article.upstreamContentHash && article.upstreamContentHash !== existing.upstreamContentHash)) {
             // Synthetic / resolved-redirect link rewrite, legacy placeholder
             // title upgrade and/or adopting legacy full text only: store it,
             // keep updatedAt.
             await db.article.update({
                 where: { id: existing.id },
                 data: {
+                    ...(article.upstreamContentHash && article.upstreamContentHash !== existing.upstreamContentHash ? { upstreamContentHash: article.upstreamContentHash } : {}),
                     ...(linkChanged ? { link: next.link } : {}),
                     ...(linkChanged && article.linkCosmetic && article.contentHash ? { contentHash: article.contentHash } : {}),
                     ...(cosmeticTitle ? { title: cosmeticTitle } : {}),
@@ -491,6 +530,7 @@ export async function upsertArticleBatch(
                     externalId: article.externalId,
                     dedupeKey: article.dedupeKey,
                     contentHash: article.contentHash,
+                    ...(article.upstreamContentHash ? { upstreamContentHash: article.upstreamContentHash } : {}),
                     content: article.content,
                     excerpt: article.excerpt,
                     author: article.author,
@@ -527,6 +567,7 @@ export async function upsertArticleBatch(
                         externalId: article.externalId,
                         dedupeKey: article.dedupeKey,
                         contentHash: article.contentHash,
+                        ...(article.upstreamContentHash ? { upstreamContentHash: article.upstreamContentHash } : {}),
                         content: article.content,
                         excerpt: article.excerpt,
                         author: article.author,
@@ -709,11 +750,16 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
         // worker pool on bounded input, never on the main thread. The feed's
         // remove-selectors (FreshRSS `cssContentFilter`) run in the same worker
         // task, on the feed's own content too — not only on downloaded full text.
-        const sanitizedItems = await sanitizeFeedItemBodies(itemContents, { removeSelectors: feed.fullTextRemoveSelectors });
+        const contentRules = hasFeedContentRules(feed.contentRules) ? feed.contentRules : null;
+        // Known video-provider iframes become plain links on the plain path (the render-time inliner then shows
+        // click-to-load placeholders); feeds with content rules keep the default profile (they hash its output).
+        const sanitizedItems: { html: string; excerpt: string; defaultHtml?: string; legacyHtml?: string; allowed?: boolean }[] = contentRules
+            ? await applyFeedContentRules(remoteFeed.articles.map((item, index) => ({ title: item.title || "", html: itemContents[index] })), contentRules, feed.fullTextRemoveSelectors)
+            : await sanitizeFeedItemBodies(itemContents, { removeSelectors: feed.fullTextRemoveSelectors, embedLinks: true });
 
         const articles = remoteFeed.articles.map((item, index) => {
             const content = itemContents[index];
-            const { excerpt, html: sanitizedContent } = sanitizedItems[index];
+            const { excerpt, html: sanitizedContent, legacyHtml } = sanitizedItems[index];
 
             const externalId = item.externalId || item.link || null;
             // Google News: identity was fixed in the pre-pass from the raw item
@@ -743,7 +789,8 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             // for title-less items — see resolveItemTitle().
             const title = item.title || UNTITLED;
             const meta = computeArticleMeta({
-                content: sanitizedContent,
+                // Meta (reading time, media) from the stable form: the added embed link must not change it.
+                content: sanitizedItems[index].defaultHtml ?? legacyHtml ?? sanitizedContent,
                 contentFormat: "html",
                 title,
                 link,
@@ -766,8 +813,10 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 externalId,
                 dedupeKey,
                 ...(legacyKeys.length ? { legacyDedupeKeys: legacyKeys } : {}),
+                ...(contentRules ? { upstreamContentHash: createHash("sha256").update(sanitizedItems[index].defaultHtml!).digest("hex") } : {}),
                 contentHash: computeContentHash(link),
                 content: sanitizedContent,
+                ...(legacyHtml !== undefined ? { legacyContent: legacyHtml } : {}),
                 excerpt: excerpt,
                 author: item.author || null,
                 publishedAt: item.publishedAt || new Date(),
@@ -785,11 +834,19 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             };
         });
 
+        const acceptedArticles = articles.filter((_, index) => !("allowed" in sanitizedItems[index]) || sanitizedItems[index].allowed);
+        // Held items still participate in identity-only migration. Otherwise the
+        // feed marker could disable their legacy lookup before gates are relaxed.
+        const heldArticles = articles.filter((_, index) => "allowed" in sanitizedItems[index] && !sanitizedItems[index].allowed);
+        if (heldArticles.some(article => article.legacyDedupeKeys?.length)) {
+            const found = await db.article.findMany({ where: { userId, feedId: feed.id, dedupeKey: { in: heldArticles.map(article => article.dedupeKey) } }, select: EXISTING_ROW_SELECT });
+            await rekeyLegacyRows(userId, feed.id, heldArticles, found);
+        }
         const fullTextMode = resolveFullTextMode(feed);
-        const { createdArticleIds, fullTextCandidateIds } = await upsertArticleBatch(articles, {
+        const { createdArticleIds, fullTextCandidateIds } = await upsertArticleBatch(acceptedArticles, {
             fullTextActive: fullTextMode !== "off",
         });
-        // Every item of this fetch went through rekeyLegacyRows: later syncs skip the lookup.
+        // Accepted and held items both went through legacy identity migration.
         if (isFreshRssHashedCriteria(feed.unicityCriteria) && feed.dedupeRekeyedFor !== feed.unicityCriteria) {
             feedPatch.dedupeRekeyedFor = feed.unicityCriteria;
         }
@@ -1009,6 +1066,9 @@ function duplicateGuard(userId: string, feedId: string) {
         observed.set(article.id, html);
         if (observed.size > RECENT_FULL_TEXT_LIMIT) observed.delete(observed.keys().next().value!);
         if (!matches.length) return false;
+        // Shared footers may dominate a short article. A page demonstrably
+        // containing this item's own feed lead is not a wrong generic page.
+        if ((leadCoverage(feedBaseline(article), html) ?? 0) >= 0.3) return false;
         const siblings = await db.article.findMany({
             where: { userId, feedId, id: { in: matches } },
             select: FULL_TEXT_STATE_SELECT,
@@ -1051,6 +1111,7 @@ async function autoFetchFullTextViaEngine(
         id: string;
         defaultContentFormat?: string | null;
         fullTextSelector?: string | null;
+        contentRules?: string | null;
         fullTextRemoveSelectors?: string | null;
     },
     mode: "auto" | "ai" | "selector" = "auto",
@@ -1135,11 +1196,19 @@ async function autoFetchFullTextViaEngine(
                 await recordParseAborted(article, result.parseAborted);
                 continue;
             }
+            if (result.html && hasFeedContentRules(feed.contentRules)) {
+                const [clean] = await applyFeedContentRules([{ title: "", html: result.html }], feed.contentRules, feed.fullTextRemoveSelectors);
+                result = { ...result, html: clean.html, excerpt: clean.excerpt, markdown: null, quality: assessExtraction(clean.html) };
+            }
             const decision = decideFullText(result.quality, baselineHtml, "auto", result.html);
             if ((!decision.accept || !result.html) && result.budgetSkipped) {
                 // Escalation was cut short by the per-sync budget: retry next sync
                 // instead of recording a final "rejected".
                 await recordFullTextMiss(article, "deferred", "budget");
+                continue;
+            }
+            if ((!decision.accept || !result.html) && result.renderDeferred) {
+                await recordFullTextMiss(article, "deferred", "render_unavailable");
                 continue;
             }
             if (!decision.accept || !result.html) {

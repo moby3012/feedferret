@@ -20,7 +20,7 @@ export const PARSER_PACKAGES = [
 ];
 export const WORKER_ONLY_MODULES = [
   "readability-core", "extraction-trim-core", "extraction-shell-core", "ftr-site-config", "lazy-media", "html-to-markdown", "sanitize-html",
-  "telegram-preview-core", "feed-parse-core", "page-feed-suggest-core", "page-digest", "selector-extract", "newsletter-html", "feed-item-sanitize",
+  "feed-content-rules-core", "media-rewrite-core", "telegram-preview-core", "feed-parse-core", "page-feed-suggest-core", "page-digest", "selector-extract", "newsletter-html", "feed-item-sanitize",
   "opml-parse-core", "catalog-opml-core", "markdown-render-core", "html-worker/tasks",
 ];
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\/]/g, (ch) => (ch === "/" ? "\\x2F" : `\\${ch}`));

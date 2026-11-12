@@ -1,4 +1,4 @@
-import type { NewsletterArticleMeta } from "@/features/articles/types"
+import type { NewsletterArticleMeta, ArticleKind, ArticleMedia } from "@/features/articles/types"
 
 export interface FeedSource {
   id: string
@@ -24,6 +24,8 @@ export interface Article {
   feedIcon: string
   title: string
   link: string
+  /** Private frontend destination, used only by open-original actions. */
+  openLink?: string
   excerpt: string
   content: string
   contentFormat?: "html" | "markdown"
@@ -32,6 +34,8 @@ export interface Article {
   author: string
   publishedAt: string
   publishedAtRaw?: number
+  kind?: ArticleKind
+  media?: ArticleMedia | null
   /** Estimated minutes; null/undefined when unknown (not computed yet). */
   readTime?: number | null
   isRead: boolean

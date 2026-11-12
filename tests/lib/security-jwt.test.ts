@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ config: null as any, user: vi.fn(), settings: vi.fn(), count: vi.fn(), init: vi.fn() }));
-vi.mock("next-auth", () => ({ default: (config: any) => { mocks.config = config; return {}; } }));
+vi.mock("next-auth", () => ({ default: (config: any) => { mocks.config = config; return {}; }, CredentialsSignin: class CredentialsSignin extends Error {} }));
 vi.mock("@auth/prisma-adapter", () => ({ PrismaAdapter: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: { user: { findUnique: mocks.user, count: mocks.count }, globalSettings: { findUnique: mocks.settings, upsert: mocks.init } } }));
 vi.mock("@/lib/mail", () => ({ sendSignInEmail: vi.fn() }));

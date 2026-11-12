@@ -74,12 +74,14 @@ describe("helpers", () => {
     expect(parseDurationSecs("0")).toBeNull();
   });
 
-  it("estimates reading time at 200 wpm, null for empty text", () => {
+  it("estimates reading time at 220 wpm and CJK at 500 cpm, null for empty text", () => {
     expect(estimateReadMinutes("")).toBeNull();
     expect(estimateReadMinutes("one two three")).toBe(1);
-    expect(estimateReadMinutes(Array(401).fill("w").join(" "))).toBe(3);
-    // CJK characters count as words.
-    expect(estimateReadMinutes("漢".repeat(450))).toBe(3);
+    expect(estimateReadMinutes(Array(441).fill("w").join(" "))).toBe(3);
+    // CJK characters count at 500 chars/min
+    expect(estimateReadMinutes("漢".repeat(500))).toBe(1);
+    expect(estimateReadMinutes("漢".repeat(501))).toBe(2);
+    expect(estimateReadMinutes("漢".repeat(1001))).toBe(3);
   });
 
   it("strips tags/scripts and decodes entities", () => {

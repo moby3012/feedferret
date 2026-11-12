@@ -75,7 +75,7 @@ Instead of an `.env` file, the variables are entered under *Environment Variable
 | `AUTH_SECRET` | Session key (32+ characters) | `openssl rand -base64 32` |
 | `AUTH_URL` | Public URL of the instance | `https://rss.example.com` |
 | `AUTH_TRUST_HOST` | Must be `true` behind Coolify's Traefik | `true` |
-| `TRUSTED_PROXY_COUNT` | Number of reverse proxies in front of the app. Coolify's Traefik is exactly one: use `1` (`2` if Cloudflare sits in front of Traefik). Per-IP rate limits and the sign-in IP throttle key on the client IP taken from the right-most trusted `X-Forwarded-For` hop; if the value is unset or wrong, FeedFerret logs a warning and clients may be able to spoof their IP. `0` = no proxy (exposed directly). See [reverse proxy](reverse-proxy.md#trusted-proxy-count) | `1` |
+| `TRUSTED_PROXY_COUNT` | Number of reverse proxies in front of the app. Coolify's Traefik is exactly one: use `1` (`2` if Cloudflare sits in front of Traefik). Per-IP rate limits and the sign-in IP throttle key on the client IP taken from the right-most trusted `X-Forwarded-For` hop; `X-Forwarded-For` is only believed from a private/loopback peer (or the peers in `TRUSTED_PROXIES`, which replaces that default). If the value is unset or wrong, FeedFerret logs a prominent warning and, on an instance reachable without a proxy, clients can spoof their IP. `0` = no proxy (exposed directly). See [reverse proxy](reverse-proxy.md#trusted-proxy-count) | `1` |
 | `POSTGRES_PASSWORD` | DB password (PostgreSQL mode) | random string |
 
 Optional variables (OAuth, email, VAPID) can also be set here — all fields from the *Environment Variables* section further below work identically.

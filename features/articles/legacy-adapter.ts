@@ -50,6 +50,7 @@ export function toLegacyArticle(item: ArticleListItem, ctx: LegacyContext): Lega
     feedIsNewsletter: isNewsletterFeed(feed),
     title: item.title,
     link: item.link,
+    ...(item.openLink ? { openLink: item.openLink } : {}),
     excerpt: item.excerpt,
     content: "",
     author: item.author ?? "",
@@ -89,6 +90,7 @@ export function withDetail<T extends Article>(article: T, detail: ArticleDetail 
   return {
     ...article,
     content: detail.html,
+    openLink: detail.openLink,
     // `content` is already render-ready HTML (Markdown is rendered + sanitized on the server).
     contentFormat: "html",
     htmlFallback: detail.htmlFallback === true,
@@ -96,5 +98,8 @@ export function withDetail<T extends Article>(article: T, detail: ArticleDetail 
     aiSummarizedAt: detail.aiSummarizedAt,
     readAt: detail.readAt,
     newsletter: detail.newsletter ?? null,
+    kind: detail.kind ?? article.kind ?? "article",
+    media: detail.media ?? article.media ?? null,
+    readTime: detail.readMinutes ?? article.readTime ?? null,
   };
 }

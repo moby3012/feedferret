@@ -1,3 +1,4 @@
+import { presentMedia } from "@/lib/media-proxy";
 export const dynamic = "force-dynamic";
 
 import { appError, appJson, resolveSessionUser } from "@/lib/api-auth";
@@ -19,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     const detail = await getClusterDetail(user.id, id);
     if (!detail) return appError("Not found", 404);
-    return await appJson(detail, { request });
+    return await appJson({ ...detail, members: await presentMedia(detail.members, user.id) }, { request });
   } catch (error) {
     logger.error("[api/app/clusters/:id] detail failed:", error);
     return appError("Could not load cluster", 500);

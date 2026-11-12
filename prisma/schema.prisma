@@ -90,6 +90,11 @@ model User {
   // clusterReadMode: "story" = marking a story's lead read marks its sources read, "article" = only that row.
   storyClustering         Boolean   @default(true)
   clusterReadMode         String    @default("story")    // "story" | "article" — "story" since the story card UI (PR 6)
+  mediaProxyImages Boolean @default(false)
+  mediaYoutubeInstance String @default("")
+  mediaRedditFrontend String @default("")
+  mediaTwitterInstance String @default("")
+
   markReadOnScroll        Boolean   @default(false)
   markReadOnAdvance       Boolean   @default(false)     // end-of-list "Weiter zu …" also marks the current view read
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"
@@ -139,6 +144,12 @@ model User {
   exportWallabagClientSecret String?                    // encrypted at rest
   exportWallabagUsername     String?
   exportWallabagPassword     String?                    // encrypted at rest
+  // Readeck: self-hosted bookmarking service (Bearer token auth)
+  exportReadeckUrl           String?
+  exportReadeckApiKey        String?                    // encrypted at rest
+  // Linkwarden: self-hosted bookmarking service (Bearer token auth)
+  exportLinkwardenUrl        String?
+  exportLinkwardenApiKey     String?                    // encrypted at rest
   role          String    @default("USER")
   // N1 newsletter-to-feed: per-user inbound addresses (lib/inbound-email.ts).
   newsletterAddresses NewsletterAddress[]
@@ -386,6 +397,7 @@ model Feed {
   // "Enable automatic full text for this feed?" suggestion (shown after a manual
   // fetch reveals the feed is truncated) was declined — don't ask again.
   fullTextAutoSuggestDismissed Boolean @default(false)
+  contentRules            String?
   filtersActionRead        String?
   hideFromAllFeeds         Boolean  @default(false)
   hideArticleImage         Boolean  @default(false)
@@ -407,6 +419,7 @@ model Feed {
 }
 
 model Article {
+  upstreamContentHash String?
   // Fixed-width decimal numeric identity; nullable only during startup backfill.
   extId String? @unique
   id          String   @id @default(cuid())
@@ -674,6 +687,7 @@ model GlobalSettings {
   totpIssuer          String?
   backgroundSyncEnabled          Boolean @default(true)
   backgroundSyncIntervalMinutes  Int     @default(5)
+  mediaProxyMode String @default("off")
   allowInternalFeedUrls          Boolean @default(false)
   // Optional browser-render sidecar (M7-T2): an admin-configured external
   // service that renders JS-heavy / client-only pages and returns HTML, used

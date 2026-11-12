@@ -63,6 +63,16 @@ export function KeyboardShortcutsDialog({
       title: t("help"),
       items: [{ keys: ["?"], description: t("toggleHelp") }],
     },
+    {
+      title: t("audio"),
+      items: [
+        { keys: ["k"], description: t("audioPlayPause") },
+        { keys: ["Space"], description: t("audioPauseOnly") },
+        { keys: ["←"], description: t("audioSkipBack15") },
+        { keys: ["Shift", "←"], description: t("audioSkipBack30") },
+        { keys: ["→"], description: t("audioSkipForward30") },
+      ],
+    },
   ];
 
   return (

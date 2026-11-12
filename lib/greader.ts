@@ -72,7 +72,7 @@ export async function authenticateGReaderPassword(request: Request, email: strin
   let failReason: string | undefined;
   let reserved = false;
   let reservedAccount = false;
-  let reservedDb = false;
+  let reservedDb: Date | null = null;
   // `chargeAccount` is false for addresses without an account: invented addresses must not create
   // entries in the per-address store (only the IP budget is charged).
   const reserve = (chargeAccount = true) => {
@@ -129,7 +129,7 @@ export async function authenticateGReaderPassword(request: Request, email: strin
       releaseRateLimit(ip, ipConfig);
       if (reservedAccount) releaseRateLimit(identity, emailConfig);
     }
-    if (reservedDb && user) await releaseLoginAttempt(user.id, "api");
+    if (reservedDb && user) await releaseLoginAttempt(user.id, "api", reservedDb);
     return user;
   }
   // N12: no audit row while rate-limited — otherwise anonymous steady traffic

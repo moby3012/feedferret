@@ -1,35 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
 
-import { checkRateLimit, getClientIdentifier, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
-
-export async function POST(request: Request) {
-  const limit = checkRateLimit(getClientIdentifier(request), { ...RATE_LIMITS.authSignIn, prefix: "credentials-status" });
-  if (!limit.success) return rateLimitResponse(limit);
-  try {
-    const { email } = await request.json();
-
-    if (!email) {
-      return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
-    }
-
-    const user = await db.user.findUnique({
-      where: { email: String(email).trim() },
-      select: {
-        password: true,
-        twoFactorEnabled: true,
-      },
-    });
-
-    // No user or no password (OAuth-only) → generic error, no hint
-    if (!user?.password) {
-      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
-    }
-
-    return NextResponse.json({
-      requiresTwoFactor: !!user.twoFactorEnabled,
-    });
-  } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
-  }
+/**
+ * DEPRECATED, remove in the next release. This used to answer 401 for unknown addresses and 200 plus a
+ * two-factor flag for known ones, which let anyone enumerate accounts and see who uses 2FA. The login
+ * form no longer calls it (the sign-in itself asks for the code once the password verified). It stays
+ * for one release only so login pages that were open during the upgrade keep working for accounts
+ * without 2FA; it looks at nothing and answers every request the same.
+ */
+export async function POST() {
+  return NextResponse.json({ requiresTwoFactor: false }, { headers: { "Cache-Control": "no-store" } });
 }

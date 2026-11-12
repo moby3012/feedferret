@@ -280,6 +280,8 @@ function KindGlyph({ kind }: { kind: LegacyArticle["kind"] }) {
 function SourceLine({ article, faviconSize = 14, minimal = false }: { article: LegacyArticle; faviconSize?: number; minimal?: boolean }) {
   const t = useTranslations("articleList");
   const time = useRowTime(article.publishedAt);
+  const isAudioOrVideo = article.kind === "audio" || article.kind === "video";
+  const readTime = !isAudioOrVideo ? article.readTime : null;
   return (
     <div className="flex min-w-0 items-center gap-1.5 text-footnote text-muted-foreground">
       <FeedFavicon icon={article.feedIcon} name={article.feedName} articleLink={article.link} newsletter={article.feedIsNewsletter} size={faviconSize} />
@@ -304,6 +306,16 @@ function SourceLine({ article, faviconSize = 14, minimal = false }: { article: L
       <time dateTime={article.publishedAt} className="shrink-0 whitespace-nowrap tabular-nums">
         {time}
       </time>
+      {readTime != null && (
+        <>
+          <span aria-hidden className="shrink-0 opacity-50">
+            ·
+          </span>
+          <span className="shrink-0 whitespace-nowrap text-caption tabular-nums" title={t("readTimeTooltip", { minutes: readTime })}>
+            {t("readTimeBadge", { minutes: readTime })}
+          </span>
+        </>
+      )}
       <StateGlyphs article={article} />
     </div>
   );
@@ -518,6 +530,7 @@ function ListBody(p: BodyProps) {
 // ---------------------------------------------------------------- minimal
 
 function MinimalBody(p: BodyProps) {
+  const t = useTranslations("articleList");
   const { article } = p;
   const time = useRowTime(article.publishedAt);
   return (
@@ -535,6 +548,11 @@ function MinimalBody(p: BodyProps) {
       <time dateTime={article.publishedAt} className="shrink-0 whitespace-nowrap text-footnote tabular-nums text-muted-foreground">
         {time}
       </time>
+      {article.readTime != null && article.kind !== "audio" && article.kind !== "video" && (
+        <span className="shrink-0 whitespace-nowrap text-caption tabular-nums text-muted-foreground" title={t("readTimeTooltip", { minutes: article.readTime })}>
+          {t("readTimeBadge", { minutes: article.readTime })}
+        </span>
+      )}
       <RowActions article={article} handlers={p.handlers} canReleaseSpoiler={p.canReleaseSpoiler} size="sm" />
     </div>
   );

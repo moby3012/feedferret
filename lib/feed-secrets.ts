@@ -60,6 +60,7 @@ export const FEED_CLIENT_SELECT = {
   defaultContentFormat: true,
   fullTextAutoSuggestDismissed: true,
   filtersActionRead: true,
+  contentRules: true,
   hideFromAllFeeds: true,
   hideArticleImage: true,
   readerFontSizeOverride: true,

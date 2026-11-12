@@ -172,7 +172,15 @@
       "feedsHintReset": "The tip shows again on the Feeds screen."
     },
     "sectionsNav": "Settings sections",
-    "backToSettings": "Settings"
+    "backToSettings": "Settings",
+    "mediaProxyImages": "Load images through FeedFerret (privacy)",
+    "mediaProxyImagesDescription": "Applies when the administrator allows optional image proxying. Always on applies to everyone.",
+    "mediaFrontendsDescription": "Custom frontends open in a new tab. No public instance is selected automatically.",
+    "mediaYoutubeInstance": "Invidious / Piped instance URL",
+    "mediaRedditFrontend": "Reddit frontend",
+    "mediaTwitterInstance": "X / Twitter instance URL",
+    "mediaInstanceDescription": "HTTPS instance origin, or empty to use the original site.",
+    "mediaRedditDescription": "Enter old for old.reddit.com, an HTTPS Redlib origin, or leave empty."
   },
   "profile": {
     "changePassword": "Change password",
@@ -490,10 +498,22 @@
     "wallabagClientSecretLabel": "Client secret",
     "wallabagUsernameLabel": "Username",
     "wallabagPasswordLabel": "Password",
+    "readeckTitle": "Readeck",
+    "readeckDescription": "Send articles to your own self-hosted Readeck instance via its API.",
+    "readeckUrlLabel": "Instance URL",
+    "readeckUrlPlaceholder": "https://readeck.example.com",
+    "readeckApiKeyLabel": "API token",
+    "linkwardenTitle": "Linkwarden",
+    "linkwardenDescription": "Send articles to your own self-hosted Linkwarden instance via its API.",
+    "linkwardenUrlLabel": "Instance URL",
+    "linkwardenUrlPlaceholder": "https://linkwarden.example.com",
+    "linkwardenApiKeyLabel": "API token",
     "currentlySet": "currently set",
     "leaveBlankToKeep": "Leave blank to keep current",
     "save": "Save",
     "saving": "Saving…",
+    "removeToken": "Remove token",
+    "tokenRequiredForNewUrl": "API token is required when changing the URL",
     "testConnection": "Test connection",
     "testing": "Testing…",
     "connectionSuccessful": "Connection successful"
@@ -619,7 +639,25 @@
     "saveSearch": "Save search",
     "commandPalette": "Open command palette",
     "help": "Help",
-    "toggleHelp": "Toggle help"
+    "toggleHelp": "Toggle help",
+    "audio": "Audio & Podcast",
+    "audioPlayPause": "Play / Pause",
+    "audioPauseOnly": "Pause (while playing)",
+    "audioSkipBack": "15s back",
+    "audioSkipBack15": "Skip back 15s",
+    "audioSkipBack30": "Skip back 30s (Shift+←)",
+    "audioSkipForward": "30s forward",
+    "audioSkipForward30": "Skip forward 30s"
+  },
+  "podcastPlayer": {
+    "play": "Play",
+    "pause": "Pause",
+    "skipBack15": "15 seconds back",
+    "skipForward30": "30 seconds forward",
+    "speed": "Playback speed",
+    "seek": "Seek",
+    "playbackError": "Playback failed",
+    "openOriginal": "Open original"
   },
   "login": {
     "signIn": "Sign In",
@@ -1041,6 +1079,8 @@
     "kindImage": "Image",
     "kindSocial": "Post",
     "duration": "Duration {time}",
+    "readTimeBadge": "{minutes} min",
+    "readTimeTooltip": "{minutes, plural, one {# min read} other {# min read}}",
     "rowActions": "Actions: {title}",
     "rowActionsShort": "Actions"
   },
@@ -1072,8 +1112,12 @@
     "sendTo": "Send to",
     "sendToObsidian": "Obsidian",
     "sendToWallabag": "Wallabag",
+    "sendToReadeck": "Readeck",
+    "sendToLinkwarden": "Linkwarden",
     "sendToObsidianSuccess": "Opening in Obsidian…",
     "sendToWallabagSuccess": "Sent to Wallabag",
+    "sendToReadeckSuccess": "Sent to Readeck",
+    "sendToLinkwardenSuccess": "Sent to Linkwarden",
     "sendToFailed": "Could not send the article",
     "moreActions": "More actions",
     "previousArticle": "Previous article",
@@ -1121,7 +1165,8 @@
     "bodyErrorDescription": "Headline and source are above – the text didn't arrive.",
     "bodyOfflineTitle": "Not available offline",
     "bodyOfflineDescription": "This article isn't stored on this device. Stored are “Read later” and your recently opened articles.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "loadVideo": "Load video (connects to provider)"
   },
   "rssHeader": {
     "lastSynced": "Last synced",
@@ -1698,6 +1743,16 @@
       "description": "You have unsaved changes to this feed's settings. If you close now, they will be lost.",
       "keepEditing": "Keep editing",
       "discardChanges": "Discard changes"
+    },
+    "contentRules": {
+      "title": "Clean content",
+      "description": "Ordered JSON rules for new or publisher-updated items. Existing articles stay unchanged.",
+      "help": "transforms: strip_selector(css), replace_regex(pattern, replacement, flags), strip_text_before/after(marker). gates: title_include/title_exclude(pattern, flags), numeric_min(pattern, minimum; capture 1). Gates inspect original text; all must pass.",
+      "preview": "Live preview of latest stored item (already cleaned)",
+      "allowed": "Allowed",
+      "held": "Held back",
+      "empty": "No item available",
+      "invalid": "Invalid/unsafe rules or preview unavailable"
     }
   },
   "serverManagement": {
@@ -1987,7 +2042,12 @@
       "loadFailed": "Could not load the encryption status.",
       "rerun": "Re-seal now",
       "disabledHint": "Background re-seal is off (FEEDFERRET_SECRET_MIGRATION=0): re-seal with `secrets-cli migrate` in the container, then enable it."
-    }
+    },
+    "mediaProxyMode": "Image proxy",
+    "mediaProxyDescription": "Off: direct images. Optional: personal preference. Always on: every user. Off by default.",
+    "mediaProxyOff": "Off",
+    "mediaProxyOptIn": "Opt-in",
+    "mediaProxyOn": "Always on"
   },
   "accessibility": {
     "title": "Accessibility Statement",

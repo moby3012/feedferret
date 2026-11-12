@@ -21,10 +21,19 @@ const state = vi.hoisted(() => ({
   fetchFeed: null as unknown as ReturnType<typeof import("vitest").vi.fn>,
   page: null as unknown as (url: string) => Promise<string>,
   pageFetches: [] as string[],
+  ruleTimeout: false,
   aiCalls: 0,
   renderConfigured: false,
   renderCalls: 0,
+  render: async (): Promise<string | null> => null,
 }));
+vi.mock("@/lib/html-worker/pool", async original => {
+  const actual = await original<typeof import("@/lib/html-worker/pool")>();
+  return { ...actual, runHtmlTask: async (...args: Parameters<typeof actual.runHtmlTask>) => {
+    if (state.ruleTimeout && args[0] === "feedContentRules") throw new actual.HtmlWorkerError("timeout", "simulated hostile item exceeded worker deadline");
+    return actual.runHtmlTask(...args);
+  } };
+});
 vi.mock("@/lib/ai-extraction", () => ({
   extractArticleWithAi: async () => {
     state.aiCalls++;
@@ -54,12 +63,12 @@ vi.mock("@/lib/ssrf", async (importOriginal) => {
 });
 vi.mock("@/lib/render-sidecar", () => ({
   getRenderSidecarConfig: async () => state.renderConfigured ? { url: "https://renderer.example", token: null } : null,
-  renderViaSidecar: async () => { state.renderCalls++; return null; },
+  renderViaSidecar: async () => { state.renderCalls++; return state.render(); },
 }));
 
 import { syncFeed, upsertArticleBatch, MAX_RENDER_ESCALATIONS_PER_SYNC } from "../../lib/rss-sync";
 import { refetchArticleFullText } from "../../lib/full-text-fetch";
-import { FULL_TEXT_STATE_SELECT, recordFullTextMiss } from "../../lib/full-text-store";
+import { FULL_TEXT_STATE_SELECT, MAX_FULL_TEXT_ATTEMPTS, recordFullTextMiss } from "../../lib/full-text-store";
 import { HttpStatusError } from "../../lib/ssrf";
 import { resetHostBackoff } from "../../lib/host-backoff";
 import { resetTransportMemory } from "../../lib/readability-extract";
@@ -122,9 +131,11 @@ beforeEach(async () => {
   resetHostBackoff();
   resetTransportMemory();
   state.pageFetches = [];
+  state.ruleTimeout = false;
   state.aiCalls = 0;
   state.renderConfigured = false;
   state.renderCalls = 0;
+  state.render = async () => null;
   state.page = async (url) => fullPage(url.slice(-1));
   state.fetchFeed.mockReset();
   state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items() }));
@@ -157,6 +168,82 @@ describe("auto full text: no churn", () => {
     await syncFeed(userId, feed.id);
     expect(state.pageFetches).toEqual([]);
     expect(await rows(feed.id)).toEqual(first);
+  });
+
+  it("rule edits preserve existing full text, feed bodies and updatedAt", async () => {
+    const feed = await autoFeed();
+    await syncFeed(userId, feed.id);
+    const before = await rows(feed.id);
+    await state.db.feed.update({ where: { id: feed.id }, data: { contentRules: JSON.stringify({ transforms: [{ type: "replace_regex", pattern: "[a-z]", replacement: "Z", flags: "g" }] }) } });
+    state.pageFetches = [];
+    await syncFeed(userId, feed.id);
+    expect(await rows(feed.id)).toEqual(before);
+    expect(state.pageFetches).toEqual([]);
+  });
+
+  it("normal feeds do not acquire upstream hashes or perform article writes on re-sync", async () => {
+    const feed = await autoFeed();
+    await syncFeed(userId, feed.id);
+    expect(await state.db.article.findMany({ where: { feedId: feed.id }, select: { upstreamContentHash: true } })).toEqual(Array.from({ length: 3 }, () => ({ upstreamContentHash: null })));
+    const write = vi.spyOn(state.db.article, "update");
+    await syncFeed(userId, feed.id);
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it.each(["{}", '{"transforms":[],"gates":[]}'])("empty stored config %s takes the normal no-hash/no-extra-write sync path", async contentRules => {
+    const feed = await autoFeed();
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off", contentRules } });
+    await syncFeed(userId, feed.id);
+    expect(await state.db.article.findMany({ where: { feedId: feed.id }, select: { upstreamContentHash: true } })).toEqual(Array.from({ length: 3 }, () => ({ upstreamContentHash: null })));
+    const write = vi.spyOn(state.db.article, "update");
+    await syncFeed(userId, feed.id);
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it("invalid stored rules keep sync successful and the feed unmuted", async () => {
+    const feed = await autoFeed();
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off", contentRules: JSON.stringify({ gates: [{ type: "title_include", pattern: "(a|aa)+$" }] }) } });
+    for (let n = 0; n < 3; n++) expect((await syncFeed(userId, feed.id)).success).toBe(true);
+    expect(await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } })).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0, lastStatus: "ok" });
+    expect((await rows(feed.id)).map(row => row.content)).toEqual(items().map(item => item.content));
+  });
+
+  it("rule feeds preserve enclosure and media corrections when the sanitized body is unchanged", async () => {
+    const feed = await autoFeed();
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off", contentRules: JSON.stringify({ transforms: [{ type: "strip_selector", css: ".unused" }] }) } });
+    await syncFeed(userId, feed.id);
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items().map(item => ({ ...item, imageUrl: "https://media.example/new.jpg", enclosures: [{ url: "https://media.example/fixed.mp3", type: "audio/mpeg" }], media: { url: "https://media.example/fixed.mp3", type: "audio/mpeg" } })) }));
+    await syncFeed(userId, feed.id);
+    const after = await state.db.article.findMany({ where: { feedId: feed.id } });
+    expect(after.every(row => row.imageUrl === "https://media.example/new.jpg" && row.enclosures?.includes("fixed.mp3") && row.mediaUrl === "https://media.example/fixed.mp3")).toBe(true);
+  });
+
+  it("hashes default-sanitized content so volatile raw HTML plus a rule edit cannot cause churn", async () => {
+    const feed = await autoFeed();
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off", contentRules: JSON.stringify({ transforms: [{ type: "strip_selector", css: ".unused" }] }), fullTextRemoveSelectors: ".ad" } });
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items().map(item => ({ ...item, content: item.content + '<script nonce="one">volatile1</script><div class="ad">one</div>' })) }));
+    await syncFeed(userId, feed.id);
+    const before = await state.db.article.findMany({ where: { feedId: feed.id }, orderBy: { externalId: "asc" } });
+    await state.db.feed.update({ where: { id: feed.id }, data: { contentRules: JSON.stringify({ transforms: [{ type: "replace_regex", pattern: "Teaser", replacement: "Clean" }] }) } });
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items().map(item => ({ ...item, content: item.content + '<script nonce="two">volatile2</script><div class="ad">two</div>' })) }));
+    const write = vi.spyOn(state.db.article, "update");
+    await syncFeed(userId, feed.id);
+    expect(await state.db.article.findMany({ where: { feedId: feed.id }, orderBy: { externalId: "asc" } })).toEqual(before);
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it("a hostile rule item falls back to default sanitizing without failing or muting the feed", async () => {
+    const feed = await autoFeed();
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off", contentRules: JSON.stringify({ transforms: [{ type: "strip_selector", css: ".unused" }] }) } });
+    state.ruleTimeout = true;
+    for (let n = 0; n < 3; n++) expect((await syncFeed(userId, feed.id)).success).toBe(true);
+    const saved = await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } });
+    expect(saved).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0, lastStatus: "ok" });
+    expect(await state.db.article.count({ where: { feedId: feed.id } })).toBe(3);
+    expect((await rows(feed.id)).every(row => row.content.startsWith("<p>Teaser"))).toBe(true);
   });
 
   it("a genuine upstream change re-extracts only that article; a failed fetch keeps the stored full text", async () => {
@@ -594,6 +681,38 @@ describe("full-text quality guards", () => {
     expect(state.pageFetches).toEqual([]);
   });
 
+  it("rejects personalized generic age gates across eight items, including later sync history", async () => {
+    const feed = await autoFeed();
+    const batch = Array.from({ length: 8 }, (_, n) => ({ ...items()[0],
+      externalId: `age-${n}`, link: `https://games.example/game-${n}`,
+      content: `<p>${Array.from({ length: 35 }, (_, w) => `g${n}w${w}`).join(" ")}</p>`,
+    }));
+    state.page = async (url) => `<article><h1>Age check for Game ${url.slice(-1)}</h1><p>${Array.from({ length: 150 }, (_, w) => `ageverificationword${w}`).join(" ")}</p></article>`;
+    // First item is tentatively accepted; later siblings prove the page generic.
+    state.fetchFeed.mockResolvedValue({ title: "Games", articles: batch.slice(0, 1) });
+    await syncFeed(userId, feed.id);
+    state.fetchFeed.mockResolvedValue({ title: "Games", articles: batch });
+    await syncFeed(userId, feed.id);
+    const current = await rows(feed.id);
+    expect(current).toHaveLength(8);
+    expect(current.every(row => row.fullTextReason === "duplicate_across_items")).toBe(true);
+    expect(current.every(row => row.fullTextStatus !== "ok")).toBe(true);
+    expect(current.map(row => row.content)).toEqual(batch.map(item => item.content));
+  });
+
+  it("keeps short articles with a 400-word shared footer when their own feed lead is present", async () => {
+    const feed = await autoFeed();
+    const footer = Array.from({ length: 400 }, (_, n) => `footerword${n}`).join(" ");
+    const batch = Array.from({ length: 8 }, (_, n) => ({ ...items()[0],
+      externalId: `short-${n}`, link: `https://short.example/story-${n}`,
+      content: `<p>${Array.from({ length: 20 }, (_, w) => `article${n}uniquedetail${w}`).join(" ")}</p>`,
+    }));
+    state.fetchFeed.mockResolvedValue({ title: "Short articles", articles: batch });
+    state.page = async (url) => `<article>${batch[Number(url.slice(-1))].content}<p>${footer}</p></article>`;
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id)).map(row => `${row.fullTextStatus}:${row.fullTextReason}`)).toEqual(Array(8).fill("ok:null"));
+  });
+
   it("rejects a duplicate found in a later sync, keeping an unverifiable sibling until the page proves generic", async () => {
     const feed = await autoFeed();
     state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems().slice(0, 1) });
@@ -654,6 +773,36 @@ describe("full-text quality guards", () => {
     expect(state.pageFetches).toEqual([]);
   });
 
+  it.each(["null", "error"])("defers transient shell render failures (%s), caps attempts and preserves upstream timestamps", async (failure) => {
+    const feed = await autoFeed();
+    state.renderConfigured = true;
+    state.page = async () => '<div id="app"></div><script src="/app.js"></script>';
+    state.render = async () => { if (failure === "error") throw new Error("renderer unavailable"); return null; };
+    await syncFeed(userId, feed.id);
+    const first = await rows(feed.id);
+    expect(first.every(row => row.fullTextStatus === "deferred" && row.fullTextReason === "render_unavailable" && row.fullTextAttempts === 1)).toBe(true);
+    for (let i = 1; i < MAX_FULL_TEXT_ATTEMPTS; i++) await syncFeed(userId, feed.id);
+    const capped = await rows(feed.id);
+    expect(capped.every(row => row.fullTextStatus === "failed" && row.fullTextAttempts === MAX_FULL_TEXT_ATTEMPTS)).toBe(true);
+    expect(capped.map(row => row.updatedAt)).toEqual(first.map(row => row.updatedAt));
+    expect(capped.map(row => row.content)).toEqual(first.map(row => row.content));
+    state.pageFetches = [];
+    state.renderCalls = 0;
+    await syncFeed(userId, feed.id);
+    expect(state.pageFetches).toEqual([]);
+    expect(state.renderCalls).toBe(0);
+  });
+
+  it("recovers a deferred shell when the renderer succeeds on the next sync", async () => {
+    const feed = await autoFeed();
+    state.renderConfigured = true;
+    state.page = async () => '<div id="app"></div><script src="/app.js"></script>';
+    await syncFeed(userId, feed.id);
+    state.render = async () => fullPage("rendered");
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id)).every(row => row.fullTextStatus === "ok")).toBe(true);
+  });
+
   it("trims chrome and rejects duplicate selector extractions through the shared sync engine", async () => {
     const feed = await autoFeed();
     await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "selector", fullTextSelector: ".chosen" } });
@@ -666,6 +815,7 @@ describe("full-text quality guards", () => {
   it("defers JS shells after actually exhausting the shared render budget", async () => {
     const feed = await autoFeed();
     state.renderConfigured = true;
+    state.render = async () => '<div id="app"></div><script src="/app.js"></script>';
     state.page = async () => '<div id="app"></div><script src="/app.js"></script>';
     const batch = Array.from({ length: MAX_RENDER_ESCALATIONS_PER_SYNC + 1 }, (_, n) => ({
       ...items()[0], externalId: `shell-${n}`, link: `https://shell.example/${n}`,

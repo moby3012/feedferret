@@ -1,3 +1,4 @@
+vi.mock("@/lib/media-proxy", () => ({ presentMedia: async (items: unknown[]) => items }));
 // N13: per-user limits on the expensive reads and writes (search list, count,
 // "mark up to here" range, hot-toggle batches) and the Postgres statement
 // timeout around search reads. The data layer is mocked: these tests pin the

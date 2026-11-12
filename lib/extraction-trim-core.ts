@@ -12,6 +12,7 @@ import { LEAK_TEST } from "@/lib/extraction-quality";
 // Only complete short UI labels, never substrings within prose.
 const CTA_PATTERN = /^(?:newsletter|subscribe|abonnieren sie unseren newsletter|follow us|folgen sie|related articles|weitere artikel|mehr zum thema|lesen sie auch|auch interessant|you might also like|read more|recommended|empfohlen|startseite|zur startseite|anzeige|advertisement|sponsored|comments?|kommentare|sign up)[:!… ]*$/i;
 const SHARE_PATTERN = /^(?:share(?: this| on| via)?|teilen(?: via)?|partager|compartir|condividi)\b/i;
+// “Sitzung wird überprüft” is a generic bot-challenge label, not a site-specific rule.
 const CHECK_PATTERN = /^(?:sitzung wird überprüft|checking your browser|vérification du navigateur|verificando (?:su navegador|tu navegador))[.…! ]*$/i;
 
 function blockText(el: Element): string {

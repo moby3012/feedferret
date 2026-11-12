@@ -39,7 +39,7 @@ import { apiSourceAttentionReason } from "@/lib/api-source-errors";
 import { CheckCircle2, Eye, Loader2, Sparkles } from "lucide-react";
 import { useUpdateFeed, usePreviewFeedExtraction, useProposeAiFullTextSelector, useAiSettings } from "@/hooks/use-rss-data";
 import { resolveFullTextMode, type FullTextMode } from "@/lib/full-text-mode";
-import { getFeedEditConfig } from "@/app/actions/feeds";
+import { previewFeedContentRules, getFeedEditConfig } from "@/app/actions/feeds";
 import { GoogleNewsQueryEditor } from "@/components/google-news-panel";
 
 /** Cheap client-side gate; the server re-checks (origin may be admin-overridden). */
@@ -69,6 +69,7 @@ interface FeedEditDialogProps {
     unicityCriteria?: string | null;
     unicityCriteriaForced?: boolean;
     fullTextConditions?: string | null;
+    contentRules?: string | null;
     filtersActionRead?: string | null;
     retentionDays?: number | null;
     keepMinArticles?: number | null;
@@ -125,6 +126,8 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
   const [httpOptions, setHttpOptions] = useState("");
   // Option names whose stored values are write-only (shown as "__keep__").
   const [maskedHttpOptions, setMaskedHttpOptions] = useState<string[]>([]);
+  const [contentRules, setContentRules] = useState("");
+  const [rulesPreview, setRulesPreview] = useState("");
   const [filtersActionRead, setFiltersActionRead] = useState("");
   const [retentionDays, setRetentionDays] = useState("");
   const [keepMinArticles, setKeepMinArticles] = useState("");
@@ -176,6 +179,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     unicityCriteriaForced,
     scraperConfig,
     httpOptions,
+    contentRules,
     filtersActionRead,
     retentionDays,
     keepMinArticles,
@@ -185,6 +189,17 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     readerWidthOverride,
     openOriginalOverride,
   });
+
+  useEffect(() => {
+    if (!open || !feed) return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      previewFeedContentRules(feed.id, contentRules, fullTextRemoveSelectors).then(result => {
+        if (!cancelled) setRulesPreview(result ? `${result.allowed ? t("contentRules.allowed") : t("contentRules.held")}\n${result.title}\n${result.html}` : t("contentRules.empty"));
+      }).catch(() => { if (!cancelled) setRulesPreview(t("contentRules.invalid")); });
+    }, 500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [open, feed, contentRules, fullTextRemoveSelectors, t]);
 
   useEffect(() => {
     if (!feed) return;
@@ -214,6 +229,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
     setUnicityCriteriaForced(feed.unicityCriteriaForced ?? false);
     setScraperConfig("");
     setHttpOptions("");
+    setContentRules(feed.contentRules || "");
     setFiltersActionRead(feed.filtersActionRead || "");
     setRetentionDays(feed.retentionDays ? String(feed.retentionDays) : "");
     setKeepMinArticles(feed.keepMinArticles ? String(feed.keepMinArticles) : "");
@@ -241,6 +257,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
         if (cancelled) return;
         setAuthUsername(config.authUsername || "");
         setHasStoredPassword(config.hasAuthPassword);
+        setContentRules(config.contentRules || "");
         setScraperConfig(config.scraperConfig || "");
         setHttpOptions(config.httpOptions || "");
         setMaskedHttpOptions(config.maskedHttpOptions ?? []);
@@ -300,6 +317,7 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
           unicityCriteriaForced,
           scraperConfig: editConfigLoaded ? scraperConfig.trim() || null : undefined,
           httpOptions: editConfigLoaded ? httpOptions.trim() || null : undefined,
+          contentRules: editConfigLoaded ? contentRules.trim() || null : undefined,
           filtersActionRead: filtersActionRead.trim() || null,
           retentionDays: retentionDays ? parseInt(retentionDays) : null,
           keepMinArticles: keepMinArticles ? parseInt(keepMinArticles) : null,
@@ -999,6 +1017,15 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   placeholder={t("scout.fullContentConditionsPlaceholder")}
                   className="min-h-20 rounded-panel border-border/70 bg-background/70 font-mono text-footnote"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="feed-content-rules" className="text-body-sm font-medium">{t("contentRules.title")}</Label>
+                <p className="text-footnote text-muted-foreground">{t("contentRules.description")}</p>
+                <Textarea id="feed-content-rules" disabled={!editConfigLoaded} value={contentRules} onChange={e => setContentRules(e.target.value)} placeholder={'{"transforms":[{"type":"strip_selector","css":".sponsor"}],"gates":[]}'} className="min-h-24 font-mono text-footnote" />
+                <p className="text-footnote text-muted-foreground">{t("contentRules.help")}</p>
+                <Label className="text-body-sm">{t("contentRules.preview")}</Label>
+                <pre aria-live="polite" className="max-h-48 overflow-auto whitespace-pre-wrap text-footnote">{rulesPreview}</pre>
               </div>
 
               <div className="space-y-1.5">

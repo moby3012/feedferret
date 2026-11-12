@@ -1,3 +1,4 @@
+import { presentMedia } from "@/lib/media-proxy";
 export const dynamic = "force-dynamic";
 
 import { appError, appJson, clampInt, resolveSessionUser } from "@/lib/api-auth";
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
     const page = isSearch
       ? await withStatementTimeout((client) => listArticles(user.id, params, client))
       : await listArticles(user.id, params);
-    return await appJson(page, { request });
+    return await appJson({ ...page, items: await presentMedia(page.items, user.id) }, { request });
   } catch (error) {
     if (error instanceof InvalidCursorError) return appError("Invalid cursor", 400);
     if (isStatementTimeout(error)) return appError("Search took too long, try a narrower query", 503);

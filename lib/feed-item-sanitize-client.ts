@@ -30,6 +30,8 @@ export type SanitizeFeedItemBodiesOptions = {
   removeSelectors?: string | null;
   /** Excerpt from the sanitized HTML instead of the raw content. */
   excerptFromSanitized?: boolean;
+  /** Known video-provider iframes become plain links (see SanitizeFeedItemsInput.embedLinks / SanitizedFeedItem.legacyHtml). */
+  embedLinks?: boolean;
   /** Pool options (priority defaults to the async context's, see runAsBackgroundHtmlWork). */
   run?: RunOptions;
 };
@@ -37,6 +39,7 @@ export type SanitizeFeedItemBodiesOptions = {
 export async function sanitizeFeedItemBodies(contents: string[], options: SanitizeFeedItemBodiesOptions = {}): Promise<SanitizedFeedItem[]> {
   const removeSelectors = options.removeSelectors ?? null;
   const excerptFromSanitized = options.excerptFromSanitized ?? false;
+  const embedLinks = options.embedLinks ?? false;
   const run = options.run ?? {};
   const guarded = contents.map((content) => guardHtml(content).html);
   const results: SanitizedFeedItem[] = new Array(guarded.length);
@@ -50,7 +53,7 @@ export async function sanitizeFeedItemBodies(contents: string[], options: Saniti
     }
     const chunk = guarded.slice(start, end);
     try {
-      const out = await runHtmlTask("sanitizeFeedItems", { items: chunk, removeSelectors, excerptFromSanitized }, run);
+      const out = await runHtmlTask("sanitizeFeedItems", { items: chunk, removeSelectors, excerptFromSanitized, embedLinks }, run);
       out.forEach((item, i) => (results[start + i] = item));
     } catch (error) {
       if (!tooComplex(error)) throw error;
@@ -59,7 +62,7 @@ export async function sanitizeFeedItemBodies(contents: string[], options: Saniti
       } else {
         for (let i = 0; i < chunk.length; i++) {
           try {
-            results[start + i] = (await runHtmlTask("sanitizeFeedItems", { items: [chunk[i]], removeSelectors, excerptFromSanitized }, run))[0];
+            results[start + i] = (await runHtmlTask("sanitizeFeedItems", { items: [chunk[i]], removeSelectors, excerptFromSanitized, embedLinks }, run))[0];
           } catch (itemError) {
             if (!tooComplex(itemError)) throw itemError;
             results[start + i] = dropped(itemError);

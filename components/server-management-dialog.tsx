@@ -1383,6 +1383,18 @@ export function ServerManagementDialog({
                       </div>
                     )}
 
+                    <div className="p-6 rounded-panel bg-card border border-border space-y-4">
+                      <Label htmlFor="media-proxy-mode">{t("mediaProxyMode")}</Label>
+                      <p className="text-body-sm text-muted-foreground">{t("mediaProxyDescription")}</p>
+                      <Select value={settings?.mediaProxyMode ?? "off"} onValueChange={(value) => handleUpdateSettings({ mediaProxyMode: value })}>
+                        <SelectTrigger id="media-proxy-mode"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="off">{t("mediaProxyOff")}</SelectItem>
+                          <SelectItem value="opt-in">{t("mediaProxyOptIn")}</SelectItem>
+                          <SelectItem value="on">{t("mediaProxyOn")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div data-testid="twitch-settings" className="p-6 rounded-panel bg-card border border-border space-y-4">
                       <h4 className="text-title-sm font-semibold tracking-title">Twitch</h4>
                       <p className="text-footnote text-muted-foreground">{t("sync.twitchGuide")}</p>
