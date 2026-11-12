@@ -19,6 +19,7 @@ import { isCountDisplay, type CountDisplay } from "@/lib/count-display";
 import { normalizeInactiveDays } from "@/lib/broken-feeds";
 import { pickFields } from "@/lib/pick-fields";
 import { verifyStepUp } from "@/lib/step-up";
+import { CLEAR_LOGIN_LOCKOUT } from "@/lib/account-lockout";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { AiBudgetError } from "@/lib/ai/errors";
 
@@ -89,7 +90,7 @@ export async function updateProfile(data: {
     // Changing the login email hands the account to whoever owns the new
     // address (magic link / password reset), so a stolen or borrowed session
     // alone must not be enough: same step-up as the API password (#227).
-    const limit = checkRateLimit(session.user.id, { prefix: "email-change-step-up", limit: 10, windowSecs: 900 });
+    const limit = checkRateLimit(session.user.id, { prefix: "email-change-step-up", limit: 10, windowSecs: 900, critical: true });
     if (!limit.success) return { success: false, code: "rateLimited" };
     const stepUp = await verifyStepUp(
       { id: session.user.id, authenticatedAt: (session as { authenticatedAt?: number }).authenticatedAt },
@@ -100,7 +101,7 @@ export async function updateProfile(data: {
     if (await emailTakenByOtherUser(profile.email, session.user.id)) return { success: false, code: "emailTaken" };
     const { isMailServiceEnabled } = await import("@/lib/mail");
     if (await isMailServiceEnabled()) {
-      if (!checkRateLimit(session.user.id, { prefix: "email-change-request", limit: 3, windowSecs: 3600 }).success) return { success: false, code: "rateLimited" };
+      if (!checkRateLimit(session.user.id, { prefix: "email-change-request", limit: 3, windowSecs: 3600, critical: true }).success) return { success: false, code: "rateLimited" };
       const { requestEmailChange, EmailChangeNoticeError } = await import("@/lib/email-change");
       let sent: boolean;
       try {
@@ -170,6 +171,10 @@ export async function changePassword(data: {
   // Accounts provisioned via SSO/OAuth (e.g. Authelia) have no password set.
   if (!user?.password) return { success: false, error: t("noPasswordSet") };
 
+  // The current password is a guessable secret for whoever holds a session: throttle (fail-safe store).
+  if (!checkRateLimit(session.user.id, { prefix: "password-change", limit: 10, windowSecs: 900, critical: true }).success) {
+    return { success: false, error: t("emailChangeRateLimited") };
+  }
   const currentMatches = await bcrypt.compare(parsed.data.currentPassword, user.password);
   if (!currentMatches) return { success: false, error: t("currentPasswordIncorrect") };
 
@@ -177,7 +182,7 @@ export async function changePassword(data: {
   await db.$transaction([db.user.update({
     where: { id: session.user.id },
     // Keep the independent API password; revoke issued GReader Auth/T tokens.
-    data: { password: hashedPassword, sessionVersion: { increment: 1 }, apiTokenVersion: { increment: 1 } },
+    data: { password: hashedPassword, sessionVersion: { increment: 1 }, apiTokenVersion: { increment: 1 }, ...CLEAR_LOGIN_LOCKOUT },
   }), db.emailChangeRequest.deleteMany({ where: { userId: session.user.id } })]);
 
   return { success: true };
@@ -362,6 +367,10 @@ export async function disableTwoFactor(code: string) {
   const secret = readTotpSecret(user.twoFactorSecret);
   if (!secret) throw new Error(TOTP_UNREADABLE);
 
+  // A 6-digit code is guessable online by whoever holds a session: throttle (fail-safe store).
+  if (!checkRateLimit(session.user.id, { prefix: "2fa-disable", limit: 10, windowSecs: 900, critical: true }).success) {
+    throw new Error("Too many attempts. Wait 15 minutes and try again.");
+  }
   if (!verifyTotpToken(secret, code)) {
     throw new Error("Invalid one-time code");
   }

@@ -28,6 +28,7 @@ services:
       - FEEDFERRET_DB_SYNC=${FEEDFERRET_DB_SYNC:-migrate}
       - AUTH_SECRET=${AUTH_SECRET:?set AUTH_SECRET}
       - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-true}
+      - TRUSTED_PROXY_COUNT=${TRUSTED_PROXY_COUNT:-1}
       - AUTH_URL=${AUTH_URL:-https://feedferret.example.com}
       - PORT=${PORT:-3000}
       # Example OAuth Providers (Uncomment and set values to enable)

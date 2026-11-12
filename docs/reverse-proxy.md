@@ -20,6 +20,8 @@ This variable is already included in `.env.example` and is set to `true` by defa
 
 `TRUSTED_PROXY_COUNT=1` selects the right-most `X-Forwarded-For` entry for a single Nginx, Caddy or Traefik proxy. For Cloudflare → Traefik → FeedFerret, set `TRUSTED_PROXY_COUNT=2`. Restrict origin access to Cloudflare and app access to Traefik; only trust headers appended by this controlled chain.
 
+**Coolify (Traefik):** exactly one proxy hop, so `TRUSTED_PROXY_COUNT=1` (the bundled compose files default to it). If the variable is unset, empty, `0` or not a positive integer, FeedFerret assumes `1`, logs a startup warning and logs another one the first time a request carries `X-Forwarded-For`: with no proxy in front, a client could choose its own rate-limit key by sending that header. Expose the container only through the proxy.
+
 ## Nginx
 
 ### With Let's Encrypt (Certbot)

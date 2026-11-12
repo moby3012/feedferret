@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 
 ## [Unreleased]
 
+### Security — sign-in lockout isolated from other rate limiters
+
+- **Per-limiter stores.** `lib/rate-limit.ts` no longer keeps one shared in-memory table: every limiter has its own store and cap, so a flood of distinct keys against one endpoint cannot evict the sign-in lockout. Credential-guessing limiters (`critical`) evict fail-safe: active lockouts are never dropped; when only lockouts remain, new keys are refused until the earliest one expires.
+- **Per-account sign-in lockout in the database** (`User.failedLoginCount` / `failedLoginWindowEnd`, additive migration): 10 attempts per account per 15 minutes across all IPs, atomic under parallel guesses, persistent across restarts and replicas; a password change clears it. Password change and 2FA disable are now throttled too.
+- **Proxy hint.** A startup warning (and a one-time warning on the first request with `X-Forwarded-For`) when `TRUSTED_PROXY_COUNT` is unset/invalid; the bundled compose files default it to `1`, and docs describe the Coolify/Traefik value.
+
 ### Changed — API source discovery guidance
 
 - The internal `/api/discover` endpoint now returns `hint: "needs-api-credentials"` with `hintPlatform` instead of `"needs-twitch"`; API variant IDs and translated labels are stored together. REST v1 discovery continues to return only `mode` and `feeds` (no hint fields).

@@ -148,6 +148,10 @@ model User {
   // "Defekte Feeds" → inactive group: a feed that still fetches fine but whose newest
   // article is older than this many days counts as inactive (not broken).
   inactiveFeedDays Int @default(180)
+  // Per-account sign-in lockout (lib/account-lockout.ts): attempts reserved in the current
+  // fixed window; the window (and the lockout once the count hits the limit) ends at failedLoginWindowEnd.
+  failedLoginCount     Int       @default(0)
+  failedLoginWindowEnd DateTime?
   @@index([digestEnabled])
   @@index([pushEnabled])
 }

@@ -79,7 +79,8 @@ In-memory sliding window rate limiter (`lib/rate-limit.ts`) protects against bru
 
 | Endpoint group | Limit | Window |
 |---|---|---|
-| `POST /api/auth/*` (sign-in, credentials) | 10 failed GReader attempts (credentials-status counts requests) | 15 minutes |
+| `POST /api/auth/*` (sign-in, credentials), per IP | 10 requests | 15 minutes |
+| Password sign-in, per account (database) | 10 attempts, then locked until the window ends | 15 minutes |
 | GReader ClientLogin / Basic (per IP and email), credentials-status (per IP) | 10 failed GReader attempts (credentials-status counts requests) | 15 minutes |
 | Magic link requests | 3 attempts | 10 minutes |
 | `POST /api/mcp` | 100 requests | 1 minute |
@@ -103,6 +104,13 @@ On PostgreSQL, search reads (ad-hoc `q` and saved searches, list and count) run 
 Imports run one at a time per instance (`FEEDFERRET_MAX_CONCURRENT_IMPORTS`, default 1) and per user; see [FreshRSS migration](freshrss-migration.md#security).
 
 AI: digest prompts escape and delimit every feed-supplied field (titles, feed names, excerpts) like the briefing, and the generated subject and summary are stripped of HTML, markdown, URLs, e-mail addresses and bare `host/path` links before they reach the digest e-mail. Every AI call — summaries, tagging, briefing, digest (also the preview), full-text extraction, feed-config and RSSHub proposals, the connection test — reserves against the user's daily token cap (`AI_DAILY_TOKEN_CAP`, default 150 000) and is recorded in `AiUsage`.
+
+#### Isolated limiter stores and the per-account lockout
+
+- **One store per limiter.** Every limiter (`prefix`) has its own in-memory store with its own cap (50 000 keys), so a flood of distinct keys against one endpoint (many IPs, attacker-chosen key parts) can only evict entries of that endpoint, never the sign-in lockout.
+- **Fail-safe stores for credential guessing.** Limiters marked `critical` (sign-in, GReader/Fever/credentials-status password budgets, magic link, internal API key, inbound-mail webhook auth failures, email-change and API-password step-up, password change, 2FA disable) never drop an active lockout to make room. When full they evict expired entries, then lightly used entries (below half of the limit), then entries that are not yet locked; if every entry is an active lockout, **new keys are refused** (answered as rate limited) until the earliest lockout expires. Trade-off: filling a store with live lockouts needs `cap × limit` requests from `cap` distinct keys and then denies brand-new keys; the alternative (evicting lockouts) would silently reset password-guess throttling.
+- **Per-account lockout in the database** (`User.failedLoginCount` / `failedLoginWindowEnd`, `lib/account-lockout.ts`): browser password sign-in reserves one attempt per account in a fixed 15-minute window before any password/OTP check (a single atomic UPDATE, so parallel guesses cannot overshoot) and gives it back on a fully successful sign-in. After 10 outstanding attempts the account refuses password sign-in (answered like a wrong password, no audit row) until the window ends; refused attempts do not extend it. It survives restarts, is shared by all replicas and holds against guessing spread over many IPs; the per-IP limiter stays. A password change clears it.
+- **Trade-off.** Someone who knows an address can burn its 10 attempts and block password sign-in for up to 15 minutes at a time. This is bounded and limited to password sign-in: existing sessions, magic-link and OAuth/OIDC sign-in, API tokens and GReader/Fever are unaffected, and a correct password + TOTP does not bypass an active lockout (otherwise the attacker could keep guessing). GReader/Fever Basic auth keep their separate in-memory email+IP budgets and deliberately do not feed the account lockout, so a misconfigured sync client cannot lock the owner out of the web login.
 
 Limits are per process, not shared across replicas. MCP is limited by source IP. `TRUSTED_PROXY_COUNT=1` selects the right-most `X-Forwarded-For` entry for a single Nginx, Caddy or Traefik proxy. For Cloudflare → Traefik → FeedFerret, set `TRUSTED_PROXY_COUNT=2`. Restrict origin access to Cloudflare and app access to Traefik; only trust headers appended by this controlled chain.
 
