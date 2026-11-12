@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ feeds: vi.fn(), log: vi.fn(), opml: vi.fn(), fetch: vi.fn(), lookup: vi.fn(), update: vi.fn(async () => ({})) }));
-vi.mock("@/lib/db", () => ({ getDatabaseProvider: () => "sqlite", db: { article: { findMany: vi.fn(async () => []) }, feed: { findMany: mocks.feeds, findUnique: mocks.lookup, update: mocks.update } } }));
+const mocks = vi.hoisted(() => ({ feeds: vi.fn(), log: vi.fn(), opml: vi.fn(), fetch: vi.fn(), lookup: vi.fn(), update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) }));
+vi.mock("@/lib/db", () => ({ getDatabaseProvider: () => "sqlite", db: { article: { findMany: vi.fn(async () => []) }, feed: { findMany: mocks.feeds, findUnique: mocks.lookup, update: mocks.update, updateMany: mocks.updateMany } } }));
 vi.mock("../../lib/system-log", () => ({ writeSystemLog: mocks.log }));
 vi.mock("../../lib/dynamic-opml", () => ({ syncDynamicOpmlCategories: mocks.opml }));
 vi.mock("../../lib/connector-secrets", () => ({ getConnectorSecretRules: async () => [], stripConnectorSecretsWith: (_r: unknown, url: string) => url, redactConnectorTextWith: (_r: unknown, text: string) => text }));
@@ -119,4 +119,44 @@ it("grows feed-specific blocked delays with duration and caps them at 24 hours",
   expect(patch[0].data.nextSyncAt.getTime()).toBeGreaterThanOrEqual(now + 86400000);
   expect(patch[0].data.nextSyncAt.getTime()).toBeLessThanOrEqual(Date.now() + 86400000);
   expect(patch[0].data.failingSince.getTime()).toBe(now - 3 * 86400000);
+});
+
+it.each([
+  ["a freshly fetched feed keeps its interval", 0, 60 * 60000, 60 * 60000],
+  ["an overdue feed is spread within the jitter window", -3 * 3600000, 1000, 15 * 60000 + 1000],
+])("adopting an unscheduled feed: %s", async (_label, fetchedOffset, min, max) => {
+  const now = Date.now();
+  mocks.lookup.mockResolvedValue({ id: "legacy", url: "https://legacy.example/feed", nextSyncAt: null, lastFetchedAt: new Date(now + fetchedOffset), consecutiveFailureCount: 0, updateFrequency: null, category: null, user: { defaultUpdateFrequency: 60 } });
+  mocks.fetch.mockClear(); mocks.updateMany.mockClear();
+  expect(await syncFeed("u", "legacy", { background: true })).toMatchObject({ skipped: true, deferredReason: "initial_schedule" });
+  expect(mocks.fetch).not.toHaveBeenCalled();
+  const patch = mocks.updateMany.mock.calls[0] as unknown as [{ data: { nextSyncAt: Date } }];
+  const delay = patch[0].data.nextSyncAt.getTime() - now;
+  expect(delay).toBeGreaterThanOrEqual(min - 50);
+  expect(delay).toBeLessThanOrEqual(max + 50);
+});
+
+it("a plain 503 pauses that host's lane for the rest of the run; leftovers are scheduled after the pause", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  vi.setSystemTime(1000000);
+  vi.stubEnv("SYNC_ALL_BUDGET_MS", "60000");
+  const feeds = [0, 1, 2].map(i => ({ id: `s-${i}`, userId: "u", url: `https://plain503.example/${i}` }));
+  feeds.push({ id: "other", userId: "u", url: "https://fine.example/feed" });
+  mocks.feeds.mockResolvedValue(feeds);
+  mocks.lookup.mockImplementation(async ({ where }: any) => ({ ...feeds.find(feed => feed.id === where.id), nextSyncAt: new Date(0), updateFrequency: null, category: null, user: { defaultUpdateFrequency: 60 } }));
+  const fetched: string[] = [];
+  mocks.fetch.mockImplementation(async (feed: { id: string }) => {
+    fetched.push(feed.id);
+    if (feed.id.startsWith("s-")) throw new HttpStatusError(503, "busy");
+    return { notModified: true, articles: [] };
+  });
+  mocks.update.mockClear();
+  const run = syncAllFeeds();
+  await vi.advanceTimersByTimeAsync(60000);
+  const results = await run;
+  expect(fetched.sort()).toEqual(["other", "s-0"]);
+  expect(results.filter(result => "deferredReason" in result && result.deferredReason === "sync_budget")).toHaveLength(2);
+  const leftovers = (mocks.update.mock.calls as unknown as [{ where: { id: string }; data: { nextSyncAt: Date } }][])
+    .filter(([call]) => call.where.id === "s-1" || call.where.id === "s-2");
+  expect(leftovers.every(([call]) => call.data.nextSyncAt.getTime() >= 1000000 + 120000)).toBe(true);
 });

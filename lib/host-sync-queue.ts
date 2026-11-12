@@ -4,7 +4,8 @@ export async function drainHostQueues<T extends { url: string }, R>(
     options: {
         concurrency: number;
         deadline: number;
-        run: (item: T) => Promise<{ result: R; retryAfterMs?: number }>;
+        /** retryAfterMs: retry this item later in the run; pauseMs: item done, but its host asked us to back off. */
+        run: (item: T) => Promise<{ result: R; retryAfterMs?: number; pauseMs?: number }>;
         spacingRemaining: (url: string) => number;
         spacingMs: number;
         defer: (item: T, waitMs: number) => Promise<R>;
@@ -34,14 +35,14 @@ export async function drainHostQueues<T extends { url: string }, R>(
                 if (lane.active || !lane.entries.length || lane.readyAt > now) continue;
                 const entry = lane.entries[0];
                 lane.active = true;
-                const task = Promise.resolve().then(() => options.run(entry.item)).then(({ result, retryAfterMs }) => {
+                const task = Promise.resolve().then(() => options.run(entry.item)).then(({ result, retryAfterMs, pauseMs }) => {
                     if (retryAfterMs !== undefined) {
                         // A different background run owns this host: retry the same feed later in this pass.
                         lane.readyAt = Date.now() + Math.max(1, retryAfterMs);
                     } else {
                         results[entry.index] = result;
                         lane.entries.shift();
-                        lane.readyAt = Date.now() + options.spacingRemaining(entry.item.url);
+                        lane.readyAt = Date.now() + Math.max(options.spacingRemaining(entry.item.url), pauseMs ?? 0);
                     }
                 }).catch(error => { failure = error; }).finally(() => {
                     lane.active = false;

@@ -618,8 +618,24 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
     // have no fetchable URL — a sync must not fail/auto-mute them.
     if (feed.sourceType === NEWSLETTER_SOURCE_TYPE) return { success: true, count: 0, createdArticleIds: [] };
 
+    const scheduleFrom = async (consecutiveFailureCount: number) => {
+        const items = await db.article.findMany({
+            where: { feedId: feed.id, publishedAt: { lte: new Date() } },
+            orderBy: { publishedAt: "desc" }, take: 40,
+            select: { publishedAt: true, createdAt: true },
+        });
+        const minutes = politeUpdateFrequency({ ...feed, consecutiveFailureCount }, adaptiveInterval(items, feed.updateFrequency, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency)));
+        return { minutes, cadenceMinutes: publicationCadence(items) };
+    };
+
     if (options.background && feed.nextSyncAt === null) {
-        await db.feed.updateMany({ where: { id: feed.id, nextSyncAt: null }, data: { nextSyncAt: initialSyncAt(feed.id) } });
+        // Unscheduled (legacy/adopted) rows: a recent fetch keeps its interval, so adoption never
+        // refetches a fresh feed early; the jitter only spreads feeds that are already overdue.
+        const jittered = initialSyncAt(feed.id);
+        const fromLastFetch = feed.lastFetchedAt
+            ? new Date(feed.lastFetchedAt.getTime() + (await scheduleFrom(feed.consecutiveFailureCount)).minutes * 60_000)
+            : jittered;
+        await db.feed.updateMany({ where: { id: feed.id, nextSyncAt: null }, data: { nextSyncAt: fromLastFetch > jittered ? fromLastFetch : jittered } });
         return { success: true, skipped: true, deferred: true, deferredReason: "initial_schedule", count: 0, createdArticleIds: [] };
     }
 
@@ -634,13 +650,8 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             ? await withPoliteHost(feed.url, () => fetchFeedArticles(feed))
             : await fetchFeedArticles(feed);
         const scheduleNext = async () => {
-            const items = await db.article.findMany({
-                where: { feedId: feed.id, publishedAt: { lte: new Date() } },
-                orderBy: { publishedAt: "desc" }, take: 40,
-                select: { publishedAt: true, createdAt: true },
-            });
-            const minutes = politeUpdateFrequency({ ...feed, consecutiveFailureCount: 0 }, adaptiveInterval(items, feed.updateFrequency, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency)));
-            return { nextSyncAt: new Date(Date.now() + minutes * 60_000), cadenceMinutes: publicationCadence(items) };
+            const { minutes, cadenceMinutes } = await scheduleFrom(0);
+            return { nextSyncAt: new Date(Date.now() + minutes * 60_000), cadenceMinutes };
         };
         // G1: Google News keyword feeds — resolve redirect links to publisher
         // URLs (bounded, cached; falls back to the Google link).
@@ -1344,7 +1355,11 @@ async function syncBackgroundFeedQueues(feeds: BackgroundFeed[], deadline: numbe
         run: async (feed) => {
             if (feed.autoMuted) return { result: { feed: publicUrl(feed), success: true, skipped: true, count: 0 } };
             const res = await syncFeed(feed.userId, feed.id, { background: true, retryBusyHostInRun: true, deferAutoReadRules });
-            return { result: { feed: publicUrl(feed), ...res }, ...("deferredReason" in res && res.deferredReason === "host_busy" ? { retryAfterMs: res.retryAfterMs } : {}) };
+            const reason = "deferredReason" in res ? res.deferredReason : undefined;
+            const waitMs = "retryAfterMs" in res ? res.retryAfterMs : undefined;
+            // Busy: another run owns the lane, retry this feed. Backoff (429/503/Retry-After, incl. a plain 503
+            // that does not mark discovery/full-text rate-limited): pause this host's lane for the rest of the run.
+            return { result: { feed: publicUrl(feed), ...res }, ...(reason === "host_busy" ? { retryAfterMs: waitMs } : reason === "host_backoff" ? { pauseMs: waitMs } : {}) };
         },
         defer: async (feed, waitMs) => {
             await db.feed.update({ where: { id: feed.id }, data: { nextSyncAt: deferredSyncAt(waitMs) } });
@@ -1355,8 +1370,11 @@ async function syncBackgroundFeedQueues(feeds: BackgroundFeed[], deadline: numbe
     return feeds.map(feed => feed.autoMuted ? { feed: publicUrl(feed), success: true, skipped: true, count: 0 } : activeResults[index++]);
 }
 
+/** The reader-boot request waits on this run: keep it short; leftovers keep staggered schedules for the server run. */
+const USER_BACKGROUND_BUDGET_MS = 30_000;
+
 async function syncUserFeedsNow(userId: string, background: boolean) {
-    const deadline = Date.now() + syncBudgetMs();
+    const deadline = Date.now() + Math.min(syncBudgetMs(), USER_BACKGROUND_BUDGET_MS);
     await syncDynamicOpmlCategories(userId).catch((e) =>
         logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );

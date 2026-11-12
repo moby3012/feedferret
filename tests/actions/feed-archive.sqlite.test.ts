@@ -361,10 +361,14 @@ describe("archived feeds leave the reader but keep their articles", () => {
   });
 
   it("a deployment with many NULL schedules persists staggered Prisma Dates before fetching", async () => {
-    for (let i = 0; i < 100; i++) await makeFeed(alice, { nextSyncAt: null });
+    for (let i = 0; i < 100; i++) await makeFeed(alice, { nextSyncAt: null, lastFetchedAt: daysAgo(2) });
+    const fresh = await makeFeed(alice, { nextSyncAt: null, lastFetchedAt: new Date() });
     const before = Date.now();
     await syncAllFeeds();
     expect(h.syncedUrls).toEqual([]);
+    // A feed fetched just before adoption keeps its interval instead of being refetched within the stagger window.
+    expect((await reload(fresh.id)).nextSyncAt!.getTime()).toBeGreaterThan(before + 30 * 60_000);
+    await h.db.feed.delete({ where: { id: fresh.id } });
     const feeds = await h.db.feed.findMany({ where: { userId: alice } });
     expect(feeds.every(feed => feed.nextSyncAt instanceof Date && feed.nextSyncAt.getTime() > before && feed.nextSyncAt.getTime() <= Date.now() + 901000)).toBe(true);
     expect(new Set(feeds.map(feed => feed.nextSyncAt!.getTime())).size).toBeGreaterThan(90);
