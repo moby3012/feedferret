@@ -1,12 +1,12 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "./helpers/csp-test";
 import { createTotpUser, manifest, userColumns } from "./helpers/db";
-import { sealForE2e } from "./helpers/secrets";
+import { openForE2e, sealForE2e } from "./helpers/secrets";
 import { generateTotpToken } from "../lib/totp";
 
-// M8 (security audit #2): TOTP login works with a plaintext secret and with a
-// v2-sealed one (this release reads v2, still writes plaintext), and a used
-// code cannot be replayed. Sign-in is rate limited (10 POSTs / 15 min / IP):
+// M8 (security audit #2): TOTP login works with a legacy plaintext secret
+// (re-sealed to v2 by that login) and with a v2-sealed one, and a used code
+// cannot be replayed. Sign-in is rate limited (10 POSTs / 15 min / IP):
 // this spec makes three sign-in attempts.
 
 const SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
@@ -27,6 +27,8 @@ test("TOTP login with a plaintext secret", async ({ page }) => {
   try {
     await signIn(page, user.email, generateTotpToken(SECRET));
     await page.waitForURL((url) => url.pathname === "/", { timeout: 30_000 });
+    // M8 PR 5: the successful login re-sealed the legacy seed (CAS) — v2 now, same secret.
+    expect(openForE2e("user.twoFactorSecret", userColumns({ email: user.email }, ["twoFactorSecret"]).twoFactorSecret)).toBe(SECRET);
   } finally {
     user.cleanup();
   }
@@ -49,7 +51,7 @@ test("TOTP login with a v2-sealed secret; the same code is refused on replay", a
     } finally {
       await replay.close();
     }
-    // Read-only release: the stored value is untouched (no re-seal, no plaintext write-back).
+    // Already sealed with the current key: the stored value is untouched (no re-seal, no plaintext write-back).
     expect(userColumns({ email: user.email }, ["twoFactorSecret"]).twoFactorSecret).toBe(sealed);
   } finally {
     user.cleanup();

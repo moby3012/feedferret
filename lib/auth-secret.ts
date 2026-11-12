@@ -1,3 +1,5 @@
+import { keyMaterialProblem } from "./secret-box-core.mjs";
+
 const PLACEHOLDERS = ["your-super-secret-key-change-this", "your-secret-here", "change-me", "secret", "changeme", "build-time-secret-only"];
 
 export function validateAuthSecret(secret = process.env.AUTH_SECRET, production = process.env.NODE_ENV === "production") {
@@ -8,6 +10,12 @@ export function validateAuthSecret(secret = process.env.AUTH_SECRET, production 
     throw new Error(message);
   }
   validateEncryptionKey(process.env.FEEDFERRET_ENCRYPTION_KEY, production);
+  const keyProblem = keyMaterialProblem({ ...process.env, AUTH_SECRET: secret });
+  if (keyProblem) {
+    const message = `${keyProblem} Refusing to start.`;
+    console.error(message);
+    throw new Error(message);
+  }
 }
 
 /**

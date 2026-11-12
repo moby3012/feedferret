@@ -83,13 +83,14 @@ COPY --chown=nextjs:nodejs scripts/db-sync.sh ./scripts/db-sync.sh
 COPY --chown=nextjs:nodejs scripts/db-state.mjs ./scripts/db-state.mjs
 COPY --chown=nextjs:nodejs scripts/migration-utils.mjs ./scripts/migration-utils.mjs
 COPY --chown=nextjs:nodejs start.sh ./start.sh
-# Stored-secret status CLI (M8): `node scripts/secrets-cli.mjs status`. Plain ESM, read-only.
+# Stored-secret CLI (M8): `node scripts/secrets-cli.mjs status|migrate|rotate`. Plain ESM.
 COPY --chown=nextjs:nodejs scripts/secrets-cli.mjs ./scripts/secrets-cli.mjs
 COPY --chown=nextjs:nodejs lib/secret-box-core.mjs ./lib/secret-box-core.mjs
 # Account recovery: `node scripts/auth-cli.mjs unlock-user <email>` (clears the sign-in lockout).
 COPY --chown=nextjs:nodejs scripts/auth-cli.mjs ./scripts/auth-cli.mjs
 # Stamps the TCP peer address on every request (rate limits, TRUSTED_PROXY_COUNT=0), see lib/client-ip.ts.
 COPY --chown=nextjs:nodejs scripts/peer-address-preload.cjs ./scripts/peer-address-preload.cjs
+COPY --chown=nextjs:nodejs lib/secret-migration-core.mjs ./lib/secret-migration-core.mjs
 RUN chmod +x ./start.sh
 
 RUN npm install -g prisma@7.8.0

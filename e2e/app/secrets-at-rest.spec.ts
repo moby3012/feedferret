@@ -1,10 +1,10 @@
 import Database from "better-sqlite3";
 import { test, expect, openSettingsSection } from "../helpers/test";
 import { manifest, setUserColumns, userColumns } from "../helpers/db";
-import { sealForE2e } from "../helpers/secrets";
+import { openForE2e, sealForE2e } from "../helpers/secrets";
 
-// M8 (security audit #2): the app reads v2-sealed secrets (this release still
-// writes the legacy format) and never sends stored secrets to the browser.
+// M8 (security audit #2): the app reads v2-sealed secrets, writes every secret
+// v2-sealed (PR 5) and never sends stored secrets to the browser.
 
 test("a feed behind HTTP Basic auth syncs with v2-sealed credentials", async ({ app, page }) => {
   await page.goto("/");
@@ -91,8 +91,8 @@ test("notification settings: tokens are write-only (presence only), keep on save
     await page.locator("#gotify-app-token").fill("E2E-NEW-GOTIFY");
     await page.getByRole("button", { name: "Save channels" }).click();
     await expect.poll(() => userColumns({ userKey: app.userKey }, ["telegramBotToken"]).telegramBotToken).toBeNull();
-    // This release still writes the legacy (plaintext) format.
-    expect(userColumns({ userKey: app.userKey }, ["gotifyToken"]).gotifyToken).toBe("E2E-NEW-GOTIFY");
+    // Written v2-sealed (M8 PR 5), never in the clear.
+    expect(openForE2e("user.gotifyToken", userColumns({ userKey: app.userKey }, ["gotifyToken"]).gotifyToken)).toBe("E2E-NEW-GOTIFY");
     await expect(page.locator("#gotify-app-token")).toHaveValue("");
     expect(await page.content()).not.toContain("E2E-NEW-GOTIFY");
   } finally {
@@ -127,8 +127,12 @@ test("rules: webhook secret and header values never reach the browser; editing k
     await page.getByTitle("Edit rule").first().click();
     await page.getByRole("button", { name: "Save changes" }).first().click();
     await expect.poll(() => (db.prepare('SELECT updatedAt FROM "AutoReadRule" WHERE id = ?').get(ruleId) as { updatedAt: string }).updatedAt).not.toBe(now);
-    const after = JSON.parse((db.prepare('SELECT webhookConfigs FROM "AutoReadRule" WHERE id = ?').get(ruleId) as { webhookConfigs: string }).webhookConfigs);
-    expect(after).toEqual(JSON.parse(stored));
+    const afterRaw = (db.prepare('SELECT webhookConfigs FROM "AutoReadRule" WHERE id = ?').get(ruleId) as { webhookConfigs: string }).webhookConfigs;
+    expect(afterRaw).not.toContain(secret); // the legacy plaintext secret got sealed on save (M8 PR 5)
+    const after = JSON.parse(afterRaw);
+    expect(after[0]).toMatchObject({ url: "https://hook.e2e.test/x", method: "POST" });
+    expect(openForE2e("autoReadRule.webhookConfigs.secret", after[0].secret)).toBe(secret);
+    expect(openForE2e("autoReadRule.webhookConfigs.header", after[0].headers.Authorization)).toBe(header);
     for (const body of bodies) for (const value of forbidden) expect(body).not.toContain(value);
   } finally {
     db.prepare('DELETE FROM "AutoReadRule" WHERE id = ?').run(ruleId);
@@ -155,13 +159,38 @@ test("feed edit dialog: fetch options with credentials are masked; saving keeps 
     const dom = await page.content();
     for (const value of ["E2E-COOKIE", "E2E-OPT-HEADER", "ff2."]) expect(dom).not.toContain(value);
 
+    const storedNow = () => (db.prepare('SELECT httpOptions FROM "Feed" WHERE id = ?').get(feed.id) as { httpOptions: string });
+    const sealedBefore = storedNow().httpOptions;
     await app.activate(dialog.getByRole("button", { name: "Save settings" }));
     await expect(dialog).toHaveCount(0);
-    await expect.poll(() => (db.prepare('SELECT httpOptions FROM "Feed" WHERE id = ?').get(feed.id) as { httpOptions: string }).httpOptions.startsWith("ff2.")).toBe(false);
-    const saved = JSON.parse((db.prepare('SELECT httpOptions FROM "Feed" WHERE id = ?').get(feed.id) as { httpOptions: string }).httpOptions);
-    expect(saved).toEqual(options); // kept server-side; written in the legacy format by this release
+    await expect.poll(() => storedNow().httpOptions).not.toBe(sealedBefore); // re-saved (fresh IV)
+    const saved = JSON.parse(openForE2e("feed.httpOptions", storedNow().httpOptions));
+    expect(saved).toEqual(options); // kept server-side; written v2-sealed (M8 PR 5)
   } finally {
     db.prepare('UPDATE "Feed" SET httpOptions = ? WHERE id = ?').run(feed.httpOptions, feed.id);
     db.close();
+  }
+});
+
+test("AI settings: a saved API key is stored v2-sealed and never sent back", async ({ app, page, isMobile }) => {
+  const key = `sk-E2E-AI-${app.userKey}`;
+  const restore = setUserColumns(app.userKey, { aiProvider: "openai", aiApiKey: null });
+  try {
+    await openSettingsSection(page, isMobile, "Integrations");
+    const section = page.locator("section").filter({ has: page.locator("#ai-api-key-input") }).last(); // innermost: the AI card
+    await section.locator("#ai-api-key-input").fill(key);
+    await section.getByRole("button", { name: "Save", exact: true }).click();
+    await expect.poll(() => userColumns({ userKey: app.userKey }, ["aiApiKey"]).aiApiKey).not.toBeNull();
+    const stored = userColumns({ userKey: app.userKey }, ["aiApiKey"]).aiApiKey as string;
+    expect(stored.startsWith("ff2.")).toBe(true);
+    expect(openForE2e("user.aiApiKey", stored)).toBe(key);
+
+    await openSettingsSection(page, isMobile, "Integrations");
+    await expect(page.locator("#ai-api-key-input")).toHaveAttribute("placeholder", "Leave blank to keep existing key");
+    const dom = await page.content();
+    expect(dom).not.toContain(key);
+    expect(dom).not.toContain("ff2.");
+  } finally {
+    restore();
   }
 });

@@ -32,7 +32,20 @@ function arg(name, fallback = undefined) {
   return idx >= 0 ? args[idx + 1] : fallback;
 }
 function usage() {
-  console.log(`FeedFerret CLI\n\nCommands:\n  list-users\n  create-user --email EMAIL --password PASS [--name NAME] [--admin true]   (also clears a sign-in lockout)\n  unlock-user EMAIL   (clear the per-account sign-in lockout)\n  sync [--user EMAIL]\n  import-opml --user EMAIL --file subscriptions.opml\n  export-opml --user EMAIL --file subscriptions.opml\n  purge [--user EMAIL]\n  secrets:status [--json]\n`);
+  console.log(`FeedFerret CLI
+
+Commands:
+  list-users
+  create-user --email EMAIL --password PASS [--name NAME] [--admin true]   (also clears a sign-in lockout)
+  unlock-user EMAIL   (clear the per-account sign-in lockout)
+  sync [--user EMAIL]
+  import-opml --user EMAIL --file subscriptions.opml
+  export-opml --user EMAIL --file subscriptions.opml
+  purge [--user EMAIL]
+  secrets:status [--json]
+  secrets:migrate [--dry-run] [--batch N] [--json]
+  secrets:rotate [--dry-run] [--batch N] [--json]
+`);
 }
 
 async function findUser() {
