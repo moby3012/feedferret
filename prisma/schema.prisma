@@ -91,6 +91,10 @@ model User {
   storyClustering         Boolean   @default(true)
   clusterReadMode         String    @default("story")    // "story" | "article" — "story" since the story card UI (PR 6)
   mediaProxyImages Boolean @default(false)
+  mediaYoutubeInstance String @default("")
+  mediaRedditFrontend String @default("")
+  mediaTwitterInstance String @default("")
+
   markReadOnScroll        Boolean   @default(false)
   markReadOnAdvance       Boolean   @default(false)     // end-of-list "Weiter zu …" also marks the current view read
   layoutDirection         String    @default("ltr")     // "ltr" | "rtl"

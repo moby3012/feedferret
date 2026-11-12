@@ -423,7 +423,7 @@ export function useUpdateGlobalSettings() {
             }
         },
         onSuccess: (_result, data) => {
-            if (data.mediaProxyImages !== undefined) {
+            if (Object.keys(data).some(key => key.startsWith("media"))) {
                 queryClient.invalidateQueries({ queryKey: ["list"] })
                 queryClient.invalidateQueries({ queryKey: ["article"] })
             }

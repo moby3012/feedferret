@@ -1,4 +1,5 @@
 "use server";
+import { validateInstance } from "@/lib/video-providers";
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -208,6 +209,10 @@ const GLOBAL_SETTINGS_TYPES = {
   secondaryColor: "string",
   hideDuplicates: "boolean",
   mediaProxyImages: "boolean",
+  mediaYoutubeInstance: "string",
+  mediaRedditFrontend: "string",
+  mediaTwitterInstance: "string",
+
   markReadOnScroll: "boolean",
   markReadOnAdvance: "boolean",
   storyClustering: "boolean",
@@ -234,6 +239,10 @@ export async function updateGlobalSettings(data: {
   secondaryColor?: string;
   hideDuplicates?: boolean;
   mediaProxyImages?: boolean;
+  mediaYoutubeInstance?: string;
+  mediaRedditFrontend?: string;
+  mediaTwitterInstance?: string;
+
   markReadOnScroll?: boolean;
   markReadOnAdvance?: boolean;
   storyClustering?: boolean;
@@ -278,11 +287,16 @@ export async function updateGlobalSettings(data: {
     throw new Error("Invalid countDisplay");
   }
 
+  for (const field of ["mediaYoutubeInstance", "mediaRedditFrontend", "mediaTwitterInstance"] as const) {
+    if (field in updateData) {
+      updateData[field] = field === "mediaRedditFrontend" && updateData[field] === "old" ? "old" : validateInstance(updateData[field]);
+    }
+  }
   await db.user.update({
     where: { id: session.user.id },
     data: updateData,
   });
-  if ("mediaProxyImages" in updateData) clearMediaProxySettingsCache(session.user.id);
+  if (Object.keys(updateData).some(key => key.startsWith("media"))) clearMediaProxySettingsCache(session.user.id);
 
   revalidatePath("/");
 }

@@ -16,6 +16,8 @@ export interface ArticleListItem {
   feedId: string;
   title: string;
   link: string;
+  /** App-only destination for opening the original; never use for sharing or icons. */
+  openLink?: string;
   excerpt: string;
   author: string | null;
   publishedAt: string;

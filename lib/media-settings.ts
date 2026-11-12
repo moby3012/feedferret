@@ -1,3 +1,4 @@
+import type { Frontends } from "./video-providers";
 import { db } from "./db";
 const TTL = 30_000;
 type Entry<T> = { until: number; value: Promise<T> };
@@ -6,14 +7,15 @@ type Entry<T> = { until: number; value: Promise<T> };
 const root = globalThis as typeof globalThis & { __feedferretMediaSettings?: {
   globalMode?: Entry<string>;
   users: Map<string, Entry<boolean>>;
+  frontends?: Map<string, Entry<Frontends & { uiLanguage?: string | null }>>;
 } };
 const store: NonNullable<typeof root.__feedferretMediaSettings> = root.__feedferretMediaSettings ??= { users: new Map<string, Entry<boolean>>() };
 const users = store.users;
 
 /** Same-process settings writes invalidate immediately; other replicas expire in 30s. */
 export function clearMediaProxySettingsCache(userId?: string) {
-  if (userId) users.delete(userId);
-  else { store.globalMode = undefined; users.clear(); }
+  if (userId) { users.delete(userId); store.frontends?.delete(userId); }
+  else { store.frontends?.clear(); store.globalMode = undefined; users.clear(); }
 }
 
 export async function mediaProxyEnabled(userId: string): Promise<boolean> {
@@ -39,4 +41,18 @@ export async function mediaProxyEnabled(userId: string): Promise<boolean> {
     void value.catch(() => { if (users.get(userId) === entry) users.delete(userId); });
   }
   return user.value;
+}
+
+export async function mediaFrontends(userId: string): Promise<Frontends & { uiLanguage?: string | null }> {
+  const cache = store.frontends ??= new Map();
+  const old = cache.get(userId);
+  if (old && old.until > Date.now()) return old.value;
+  if (cache.size >= 10_000) cache.clear();
+  const value = db.user.findUnique({ where: { id: userId }, select: {
+    uiLanguage: true, mediaYoutubeInstance: true, mediaRedditFrontend: true, mediaTwitterInstance: true,
+  } }).then(row => row ?? {});
+  const entry = { until: Date.now() + TTL, value };
+  cache.set(userId, entry);
+  void value.catch(() => { if (cache.get(userId) === entry) cache.delete(userId); });
+  return value;
 }

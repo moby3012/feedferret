@@ -1,5 +1,6 @@
 "use client";
 
+import { videoFor } from "@/lib/video-providers";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertCircle, ExternalLink, Loader2, RotateCw, Sparkles, WifiOff } from "lucide-react";
@@ -54,7 +55,31 @@ function ReaderBody({ article, loading, error, hideImages, onFetchFullText, isFe
         </p>
       )}
       {hasContent ? (
-        <div className={`article-content${hideImages ? " hide-images" : ""}`} dangerouslySetInnerHTML={{ __html: html }} />
+        <div className={`article-content${hideImages ? " hide-images" : ""}`} onClick={event => {
+          const button = (event.target as Element).closest<HTMLButtonElement>("button[data-ff-video]");
+          if (!button || !event.currentTarget.contains(button)) return;
+          const video = videoFor(button.dataset.ffVideo ?? "", window.location.hostname);
+          if (video?.provider === "Reddit video") {
+            const player = document.createElement("video");
+            const url = new URL(video.url);
+            player.src = url.pathname.split("/").filter(Boolean).length === 1 ? video.url.replace(/\/$/, "") + "/DASH_720.mp4" : video.url;
+            player.controls = true;
+            player.preload = "none";
+            player.className = "w-full";
+            button.closest(".ff-video-placeholder")?.replaceWith(player);
+            return;
+          }
+          if (!video?.embed) return;
+          const frame = document.createElement("iframe");
+          frame.src = video.embed;
+          frame.title = video.provider;
+          frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-presentation");
+          frame.referrerPolicy = "no-referrer";
+          frame.loading = "lazy";
+          frame.allow = "fullscreen";
+          frame.className = "w-full aspect-video";
+          button.closest(".ff-video-placeholder")?.replaceWith(frame);
+        }} dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
         <div className="ff-reader-card text-center">
           <p className="mb-1 text-body-sm font-medium text-foreground">{t("noContent")}</p>

@@ -116,8 +116,8 @@ export function ReaderView(props: ReaderViewProps) {
   usePullToNext(scrollerRef, pullRef, hasNextRef, onNextRef);
 
   const openOriginal = useCallback(() => {
-    if (article.link) window.open(article.link, "_blank", "noopener,noreferrer");
-  }, [article.link]);
+    if (article.link) window.open(article.openLink ?? article.link, "_blank", "noopener,noreferrer");
+  }, [article.link, article.openLink]);
   const copyLink = useCallback(async () => {
     if (!article.link) return;
     try {

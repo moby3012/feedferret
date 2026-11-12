@@ -24,6 +24,8 @@ export interface Article {
   feedIcon: string
   title: string
   link: string
+  /** Private frontend destination, used only by open-original actions. */
+  openLink?: string
   excerpt: string
   content: string
   contentFormat?: "html" | "markdown"

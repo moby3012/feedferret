@@ -174,7 +174,13 @@
     "sectionsNav": "Bereiche der Einstellungen",
     "backToSettings": "Einstellungen",
     "mediaProxyImages": "Bilder über FeedFerret laden (Privatsphäre)",
-    "mediaProxyImagesDescription": "Gilt, wenn der Administrator die optionale Bildweiterleitung erlaubt. Bei „Immer an“ gilt sie für alle."
+    "mediaProxyImagesDescription": "Gilt, wenn der Administrator die optionale Bildweiterleitung erlaubt. Bei „Immer an“ gilt sie für alle.",
+    "mediaFrontendsDescription": "Eigene Frontends öffnen in einem neuen Tab. Es wird keine öffentliche Instanz vorausgewählt.",
+    "mediaYoutubeInstance": "Invidious- / Piped-Instanz-URL",
+    "mediaRedditFrontend": "Reddit-Frontend",
+    "mediaTwitterInstance": "X / Twitter-Instanz-URL",
+    "mediaInstanceDescription": "HTTPS-Ursprung der Instanz; leer verwendet die Originalseite.",
+    "mediaRedditDescription": "old für old.reddit.com, einen HTTPS-Redlib-Ursprung eingeben oder leer lassen."
   },
   "profile": {
     "changePassword": "Passwort ändern",
@@ -1123,7 +1129,8 @@
     "bodyErrorDescription": "Überschrift und Quelle stehen oben – der Text kam nicht an.",
     "bodyOfflineTitle": "Offline nicht verfügbar",
     "bodyOfflineDescription": "Dieser Artikel ist nicht auf dem Gerät gespeichert. Gespeichert werden „Später lesen“ und deine zuletzt geöffneten Artikel.",
-    "retry": "Erneut versuchen"
+    "retry": "Erneut versuchen",
+    "loadVideo": "Video laden (Verbindung zum Anbieter)"
   },
   "rssHeader": {
     "lastSynced": "Zuletzt synchronisiert",
