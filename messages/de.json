@@ -758,6 +758,7 @@
     "topicFeeds": "News- und Suchfeeds zu diesem Thema – such dir einen aus",
     "resolverNoResult": "Dazu wurde nichts gefunden. Probier die Adresse der Seite oder eine Feed-URL.",
     "hints": {
+      "genericPlatform": "Plattform",
       "publicPreviewUnavailable": "Dieser Kanal hat keine zugängliche öffentliche Web-Vorschau. Er ist möglicherweise privat oder existiert nicht mehr.",
       "needsRsshub": "Braucht RSSHub – unter Einstellungen › Server einrichten",
       "rateLimited": "Später erneut versuchen",
@@ -767,7 +768,7 @@
       "partial": "Die Suche wurde vorzeitig beendet (Zeit- oder Anfragelimit), bevor ein Feed gefunden wurde. Versuche es später erneut oder gib die Feed-Adresse direkt ein.",
       "blockedButFound": "Die Seite blockiert den automatischen Abruf – Feed trotzdem gefunden: {via}",
       "blockedButFoundPlain": "Die Seite blockiert den automatischen Abruf – Feed trotzdem gefunden.",
-      "needsTwitch": "Twitch aktivieren bzw. gespeicherte Zugangsdaten prüfen: Admin → Server-Einstellungen → Twitch. Unter dev.twitch.tv/console eine App erstellen (Redirect http://localhost, Kategorie Website Integration), Client ID und Client Secret speichern. Alternativ RSSHub konfigurieren."
+      "needsApiCredentials": "{platform} aktivieren oder gespeicherte Zugangsdaten prüfen: Admin → Server-Einstellungen → {platform}. Der Anleitung dort folgen und die App-Zugangsdaten speichern. Alternativ RSSHub konfigurieren."
     },
     "kinds": {
       "videos": "Videos",
@@ -2583,6 +2584,8 @@
       "searching": "Suche nach Feeds auf {site} …",
       "none": "Auf der Seite wurde kein anderer Feed gefunden.",
       "noneHint": {
+        "needs-api-credentials": "Die Plattform aktivieren oder ihre gespeicherten API-Zugangsdaten unter Admin → Server-Einstellungen prüfen.",
+        "public-preview-unavailable": "Dieser Kanal hat keine zugängliche öffentliche Webvorschau. Er ist möglicherweise privat oder existiert nicht mehr.",
         "needs-rsshub": "Für diese Seite wird RSSHub benötigt.",
         "rate-limited": "Die Seite bremst automatische Zugriffe aus.",
         "blocked": "Die Seite blockiert automatische Zugriffe.",

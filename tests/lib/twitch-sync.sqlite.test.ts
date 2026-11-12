@@ -31,6 +31,7 @@ vi.mock("@/lib/ssrf", async (importOriginal) => {
 
 import { syncFeed } from "../../lib/rss-sync";
 import { resetTwitchCaches } from "../../lib/twitch";
+import { recordHostRateLimit, resetHostBackoff } from "../../lib/host-backoff";
 
 const dir = mkdtempSync(join(tmpdir(), "feedferret-twitch-sync-"));
 let userId = "";
@@ -62,6 +63,7 @@ beforeEach(async () => {
   state.tokenThrows = false;
   state.streams = [];
   resetTwitchCaches();
+  resetHostBackoff();
   await state.db.feed.deleteMany({ where: { userId } });
   await configure(true);
 });
@@ -109,6 +111,21 @@ describe("Twitch feeds through syncFeed", () => {
     const feed = await state.db.feed.create({ data: { userId, name: "Twitch · Example", url: "feedferret://twitch/example/live" } });
     for (let i = 0; i < 3; i++) expect(await syncFeed(userId, feed.id)).toMatchObject({ deferred: true });
     expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0, lastStatus: null, lastError: null });
+  });
+
+  it("defers every feed during shared quota backoff and resumes without auto-muting", async () => {
+    state.streams = [BROADCAST];
+    const feed = await state.db.feed.create({ data: { userId, name: "Twitch · Example", url: "feedferret://twitch/example/live" } });
+    await syncFeed(userId, feed.id);
+    const before = await state.db.feed.findUnique({ where: { id: feed.id } });
+    const articles = await state.db.article.findMany({ where: { feedId: feed.id } });
+    recordHostRateLimit("https://api.twitch.tv", Date.now() + 60_000);
+    for (let i = 0; i < 3; i++) expect(await syncFeed(userId, feed.id)).toMatchObject({ success: true, skipped: true, deferred: true });
+    expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toEqual(before);
+    expect(await state.db.article.findMany({ where: { feedId: feed.id } })).toEqual(articles);
+    resetHostBackoff();
+    expect(await syncFeed(userId, feed.id)).toMatchObject({ success: true, count: 1 });
+    expect(await state.db.feed.findUnique({ where: { id: feed.id } })).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0, lastStatus: "ok" });
   });
 
   it("resumes normally once credentials return", async () => {
