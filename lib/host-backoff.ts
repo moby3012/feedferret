@@ -134,3 +134,11 @@ export function recordHostSuccess(url: string) {
 export function resetHostBackoff() {
     hosts.clear();
 }
+
+/** Honour an API's explicit quota reset even on a successful final request. */
+export function recordHostRateLimit(url: string, resetAt: number, now = Date.now()) {
+    const host = hostOf(url);
+    if (!host || !Number.isFinite(resetAt) || resetAt <= now) return;
+    prune(now);
+    hosts.set(host, { failures: 0, until: Math.max(hosts.get(host)?.until ?? 0, Math.min(resetAt, now + MAX_RETRY_AFTER_MS)), rateLimited: true });
+}

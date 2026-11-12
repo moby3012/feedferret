@@ -526,3 +526,31 @@ Point FeedFerret's changedetection.io base URL at `http://changedetection:3000/`
 - **Example feeds/pages to smoke-test each fetch path (incl. connectors):** [`docs/testing-feeds.md`](./testing-feeds.md)
 - **Database details:** [`docs/database.md`](./database.md)
 - **Security:** [`docs/security.md`](./security.md)
+
+### Twitch (native API platform source)
+
+In **Admin → Server settings → Sync**, create/configure Twitch with your own
+[developer app](https://dev.twitch.tv/console): OAuth redirect `http://localhost`,
+category **Website Integration**. Copy the Client ID and Client Secret, save, then
+use **Test connection / Verbindung testen**. The secret is sealed at rest and
+never returned in clear text. An empty secret preserves the stored value; clear
+the Client ID to disable the integration.
+
+Paste `https://www.twitch.tv/example`, `/example/videos` or `/example/clips` in
+Add feed. FeedFerret offers live status, VODs/highlights, and the top 100 clips
+from the last seven days. Live polling creates one item per broadcast; offline
+polls create nothing. Videos fetch the latest 100 entries (uploads excluded).
+Polling can miss broadcasts that start and end between syncs.
+
+Only the [official Helix API](https://dev.twitch.tv/docs/api/) is used, with a
+[client credentials app token](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/#client-credentials-grant-flow).
+Tokens are cached until expiry and retried once on 401; quota exhaustion defers
+requests to the API host until `Ratelimit-Reset`. Credentials and access tokens
+stay on the server, including during connection tests.
+
+API sources share the ordinary feed ingestion/deduplication pipeline. Their
+strict internal identifiers, e.g. `feedferret://twitch/example/live`, contain no
+credentials, survive OPML export/import, and are never fetched as web addresses.
+Importing on another instance requires that instance's own Twitch credentials.
+Without credentials discovery uses the existing RSSHub video route when RSSHub
+is configured; otherwise it explains how the admin can enable Twitch.

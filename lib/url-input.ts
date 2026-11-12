@@ -1,3 +1,4 @@
+import { parseApiSourceUrl } from "./feed-adapters/api-source-url";
 // One normaliser for every "the user typed/pasted a page or feed address"
 // entry point (Add-Feed dialog tabs, page→feed, AI setup, REST v1, MCP).
 //
@@ -135,6 +136,7 @@ export function normalizeUrlInput(raw: unknown): NormalizedUrlInput {
   s = s.replace(/^feed:(?=https?:)/i, "").replace(/^feed:\/\//i, "https://");
   if (s.startsWith("//")) s = `https:${s}`;
 
+  if (parseApiSourceUrl(s)) return { ok: true, url: s, schemeAssumed: false };
   const scheme = SCHEME.exec(s);
   // "example.com:8080/x" / "localhost:3000" parse as a scheme — it is a port.
   const isPortNotScheme = scheme && /^\d{1,5}(?:[/?#]|$)/.test(s.slice(scheme[0].length));

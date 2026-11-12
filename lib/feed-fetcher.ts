@@ -350,6 +350,10 @@ async function fetchRssOrAtom(feed: FeedFetchConfig): Promise<FetchedFeed> {
 }
 
 export async function fetchFeedArticles(feed: FeedFetchConfig): Promise<FetchedFeed> {
+  if (feed.url.startsWith("feedferret:")) {
+    const { fetchApiPlatformSource } = await import("./api-platform-source");
+    return fetchApiPlatformSource(feed.url, feed.signal);
+  }
   const sourceType = normalizeSourceType(feed.sourceType);
   const scraperConfig = parseJsonObject<FeedExtractionConfig>(feed.scraperConfig);
 

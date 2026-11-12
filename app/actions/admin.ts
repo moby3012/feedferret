@@ -48,6 +48,7 @@ const ENCRYPTED_FIELDS = [
   "sendgridApiKey",
   "renderSidecarToken",
   "rsshubApiKey",
+  "twitchClientSecret",
   "changedetectionApiKey",
   "changedetectionRssToken",
 ] as const;
@@ -137,6 +138,8 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
     next.renderSidecarUrl = value || null;
   }
 
+  if ("twitchClientId" in data) next.twitchClientId = String(data.twitchClientId || "").trim() || null;
+
   // RSSHub connector (M5a)
   if (typeof data.rsshubEnabled === "boolean") next.rsshubEnabled = data.rsshubEnabled;
   if ("rsshubBaseUrl" in data) {
@@ -162,7 +165,7 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
   for (const field of ENCRYPTED_FIELDS) {
     if (field in data) {
       const val = String(data[field] || "").trim();
-      if (val) {
+      if (val && val !== "__encrypted__") {
         next[field] = encryptIfValue(val);
       }
       // If empty, skip — preserve existing encrypted value
@@ -549,4 +552,16 @@ export async function getStorageStats() {
     aiSummaries: summaryMap.get(u.id) ?? 0,
     labeledArticles: labelMap.get(u.id) ?? 0,
   }));
+}
+
+export async function testTwitchConnection(input: { clientId: string; clientSecret: string }) {
+  await checkAdmin();
+  const { getTwitchCredentials, twitchRequest } = await import("@/lib/twitch");
+  try {
+    const stored = input.clientSecret === "__encrypted__" ? await getTwitchCredentials() : null;
+    const clientSecret = input.clientSecret === "__encrypted__" ? stored?.clientSecret : input.clientSecret;
+    if (!input.clientId.trim() || !clientSecret) return { success: false, error: "Client ID and Client Secret required" };
+    await twitchRequest("users", { login: "twitch" }, { clientId: input.clientId.trim(), clientSecret });
+    return { success: true };
+  } catch { return { success: false, error: "Twitch connection failed. Check credentials or retry after the API rate limit resets." }; }
 }

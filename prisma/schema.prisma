@@ -667,6 +667,8 @@ model GlobalSettings {
   // subreddit, GitHub repo releases, etc. into a real feed via RSSHub's own
   // route conventions). Hidden in the UI until enabled. API key (RSSHub's
   // optional `?key=` access gate) is encrypted at rest.
+  twitchClientId                  String?
+  twitchClientSecret              String?
   rsshubEnabled                  Boolean @default(false)
   rsshubBaseUrl                  String?
   rsshubApiKey                   String?
