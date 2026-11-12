@@ -12,7 +12,7 @@ beforeEach(() => {
   mocks.lookup.mockImplementation(async ({ where }: any) => ({ id: where.id, url: "https://example.com/rss", nextSyncAt: new Date(0), updateFrequency: null, category: null, user: { defaultUpdateFrequency: 60 } }));
   mocks.fetch.mockResolvedValue({ notModified: true, articles: [] });
 });
-afterEach(() => { resetHostBackoff(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.useRealTimers(); resetHostBackoff(); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 it("defers feeds when preparation exhausts the budget without acquiring job locks", async () => {
   vi.stubEnv("SYNC_ALL_BUDGET_MS", "10");
   mocks.opml.mockResolvedValue(undefined);
@@ -50,28 +50,36 @@ it.each([429, 503, 403])("defers HTTP %i without feed failure bookkeeping or aut
   const result = await syncFeed("u", "a", { background: true });
   expect(result).toMatchObject({ success: true, skipped: true, deferred: true });
   const patch = mocks.update.mock.calls[0] as unknown as [{ data: { nextSyncAt: Date } }];
-  expect(Object.keys(patch[0].data).sort()).toEqual(status === 403 ? ["lastError", "lastStatus", "nextSyncAt"] : ["nextSyncAt"]);
+  expect(Object.keys(patch[0].data).sort()).toEqual(status === 403 ? ["failingSince", "lastError", "lastStatus", "nextSyncAt"] : ["nextSyncAt"]);
   expect(patch[0].data.nextSyncAt.getTime()).toBeGreaterThanOrEqual(before + 3600000);
 });
 
-it("200 feeds sharing a busy host do not prevent another host using the pool", async () => {
+it("drains 200 same-host feeds at two-second spacing up to budget while other hosts progress", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  vi.setSystemTime(1000000);
+  vi.stubEnv("SYNC_ALL_BUDGET_MS", "240000");
   vi.stubEnv("FEEDFERRET_SYNC_CONCURRENCY", "4");
   const feeds = Array.from({ length: 200 }, (_, i) => ({ id: `shared-${i}`, userId: `user-${i}`, url: `https://shared.example/${i}` }));
-  feeds.push({ id: "other", userId: "other-user", url: "https://independent.example/feed" });
+  for (let i = 0; i < 5; i++) feeds.push({ id: `other-${i}`, userId: "other-user", url: `https://independent${i}.example/feed` });
   mocks.feeds.mockResolvedValue(feeds);
   mocks.lookup.mockImplementation(async ({ where }: any) => ({ ...feeds.find(feed => feed.id === where.id), nextSyncAt: new Date(0), updateFrequency: null, category: null, user: { defaultUpdateFrequency: 60 } }));
-  let release!: () => void;
-  let reached!: () => void;
-  const otherReached = new Promise<void>(resolve => { reached = resolve; });
+  const starts: { id: string; at: number }[] = [];
+  mocks.update.mockClear();
   mocks.fetch.mockImplementation(async (feed: { id: string }) => {
-    if (feed.id === "shared-0") await new Promise<void>(resolve => { release = resolve; });
-    if (feed.id === "other") reached();
+    starts.push({ id: feed.id, at: Date.now() });
     return { notModified: true, articles: [] };
   });
   const run = syncAllFeeds();
-  try { await otherReached; } finally { release?.(); }
+  await vi.advanceTimersByTimeAsync(240000);
   const results = await run;
-  expect(results.filter(result => "deferred" in result && result.deferred)).toHaveLength(199);
+  const shared = starts.filter(start => start.id.startsWith("shared"));
+  expect(shared).toHaveLength(120);
+  expect(shared.every((start, i) => !i || start.at - shared[i - 1].at >= 2000)).toBe(true);
+  expect(starts.filter(start => start.id.startsWith("other")).every(start => start.at < 1002000)).toBe(true);
+  expect(results.filter(result => "deferred" in result && result.deferred)).toHaveLength(80);
+  // Completed feeds write their success state; only leftovers get scheduling-only writes.
+  const patches = mocks.update.mock.calls as unknown as [{ data: Record<string, unknown> }][];
+  expect(patches.filter(call => Object.keys(call[0].data).length === 1 && "nextSyncAt" in call[0].data)).toHaveLength(80);
 });
 it("persists a capped retry time for a seven-day host quota", async () => {
   mocks.update.mockClear();
@@ -99,4 +107,16 @@ it("persists Google News exponential delay using the newly incremented failure c
   await syncFeed("u", "google");
   const patch = mocks.update.mock.calls[0] as unknown as [{ data: { nextSyncAt: Date } }];
   expect(patch[0].data.nextSyncAt.getTime()).toBeGreaterThanOrEqual(before + 240 * 60000);
+});
+
+it("grows feed-specific blocked delays with duration and caps them at 24 hours", async () => {
+  const now = Date.now();
+  mocks.lookup.mockResolvedValue({ id: "blocked", url: "https://blocked.example/feed", nextSyncAt: new Date(0), lastStatus: "attention", lastError: "HTTP 403: feed_blocked", failingSince: new Date(now - 3 * 86400000), user: { defaultUpdateFrequency: 60 } });
+  mocks.fetch.mockRejectedValueOnce(new HttpStatusError(403, "blocked"));
+  mocks.update.mockClear();
+  await syncFeed("u", "blocked");
+  const patch = mocks.update.mock.calls[0] as unknown as [{ data: { nextSyncAt: Date; failingSince: Date } }];
+  expect(patch[0].data.nextSyncAt.getTime()).toBeGreaterThanOrEqual(now + 86400000);
+  expect(patch[0].data.nextSyncAt.getTime()).toBeLessThanOrEqual(Date.now() + 86400000);
+  expect(patch[0].data.failingSince.getTime()).toBe(now - 3 * 86400000);
 });

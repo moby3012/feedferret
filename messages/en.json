@@ -1150,6 +1150,7 @@
     "feedsInCategory": "{count} feeds"
   },
   "common": {
+    "feedDeferredReason": "Will retry later",
     "feedRefreshDeferred": "Fetch deferred: {reason}",
     "feedBlockedReason": "Access to this feed blocked (HTTP 403)",
     "feedHostReason": "Server backoff or minimum fetch spacing",
@@ -1583,7 +1584,7 @@
       "updateInterval": "Update interval (minutes)",
       "globalDefault": "Global default",
       "automatic": "Automatic",
-"cadence": "Automatic (avg. {count} posts/day (grouped))",
+"cadence": "Automatic (avg. {count} posts/day · grouped)",
 "learning": "Automatic (learning publication cadence)",
 "nextSync": "Next fetch around {time}",
 "overrideSync": "Empty = automatic; inherited intervals are a minimum. Enter minutes to set a fixed interval for this feed.",

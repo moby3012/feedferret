@@ -462,13 +462,14 @@ export async function archiveInactiveFeeds(feedIds: string[]): Promise<{ archive
     const ids = cleanIds(feedIds);
     if (ids.length === 0) return { archived: 0, skipped: 0, archivedIds: [] };
     const cutoff = new Date(Date.now() - (await inactiveThreshold(userId)) * 86_400_000);
+    const { OR: exclusion, ...inactiveCandidate } = INACTIVE_CANDIDATE;
     const archivedIds = await archiveWhere(userId, {
             id: { in: ids },
-            ...INACTIVE_CANDIDATE,
+            ...inactiveCandidate,
             // No item newer than the cutoff, and either some (older) item exists or the feed itself is older than
             // the cutoff (an empty feed is silent since its creation).
             articles: { none: { publishedAt: { gte: cutoff } } },
-            OR: [{ createdAt: { lt: cutoff } }, { articles: { some: {} } }],
+            AND: [{ OR: exclusion }, { OR: [{ createdAt: { lt: cutoff } }, { articles: { some: {} } }] }],
     });
     revalidatePath("/");
     return { archived: archivedIds.length, skipped: ids.length - archivedIds.length, archivedIds };

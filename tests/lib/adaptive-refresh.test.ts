@@ -81,3 +81,18 @@ it("a later request honours backoff after a 503 with Retry-After", async () => {
     await expect(withPoliteHost("https://retry.example/b", fetch)).rejects.toMatchObject({ waitMs: 3600000 });
     expect(fetch).not.toHaveBeenCalled();
 });
+
+it("a successful probe resets expired host failures, preserving a live quota", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(now);
+    const url = "https://reset.example/feed";
+    await expect(withPoliteHost(url, async () => { throw new HttpStatusError(503, "busy"); })).rejects.toBeInstanceOf(HostDeferredError);
+    await vi.advanceTimersByTimeAsync(120000);
+    await withPoliteHost(url, async () => "ok");
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(withPoliteHost(url, async () => { throw new HttpStatusError(503, "busy"); })).rejects.toMatchObject({ waitMs: 120000 });
+});
+it("a plain full-text 503 does not create a feed/discovery rate-limit window", async () => {
+    const url = "https://page503.example/article";
+    recordHostFailure(url, new HttpStatusError(503, "busy"));
+    await expect(withPoliteHost("https://page503.example/feed", async () => "ok")).resolves.toBe("ok");
+});

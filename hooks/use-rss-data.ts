@@ -127,7 +127,10 @@ export function useRefreshFeed() {
         onSuccess: async (result) => {
             queryClient.invalidateQueries({ queryKey: ["feeds"] })
             queryClient.invalidateQueries({ queryKey: ["feed-health"] })
-            if ("deferredReason" in result) toast.info(t("feedRefreshDeferred", { reason: t(result.deferredReason === "feed_blocked" ? "feedBlockedReason" : "feedHostReason") }))
+            if ("deferred" in result && result.deferred) {
+                const reason = "deferredReason" in result ? result.deferredReason : undefined
+                toast.info(t("feedRefreshDeferred", { reason: t(reason === "feed_blocked" ? "feedBlockedReason" : reason ? "feedHostReason" : "feedDeferredReason") }))
+            }
             else toast.success("Feed refreshed")
             await invalidateAfterSync(queryClient)
         },

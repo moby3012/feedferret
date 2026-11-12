@@ -295,6 +295,13 @@ describe("archive / restore", () => {
     expect(after).toEqual(before);
   });
 
+  it("archiveInactiveFeeds cannot archive a feed that became blocked with no failure streak", async () => {
+    const feed = await makeFeed(alice);
+    await h.db.feed.update({ where: { id: feed.id }, data: { lastStatus: "attention", lastError: "HTTP 403: feed_blocked", consecutiveFailureCount: 0 } });
+    expect(await archiveInactiveFeeds([feed.id])).toMatchObject({ archived: 0, skipped: 1 });
+    expect((await reload(feed.id)).archivedAt).toBeNull();
+  });
+
   it("archiveInactiveFeeds re-checks eligibility atomically: only still-inactive feeds are archived", async () => {
     const quiet = await makeFeed(alice, { name: "quiet" });
     await makeArticle(alice, quiet.id, 300);
