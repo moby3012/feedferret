@@ -44,7 +44,7 @@ test("TOTP login with a v2-sealed secret; the same code is refused on replay", a
     try {
       const replayPage = await replay.newPage();
       await signIn(replayPage, user.email, code);
-      await expect(replayPage.getByText("Password or authenticator code incorrect.")).toBeVisible({ timeout: 30_000 });
+      await expect(replayPage.getByText(/Password or authenticator code incorrect, or too many attempts/)).toBeVisible({ timeout: 30_000 });
       expect(new URL(replayPage.url()).pathname).toBe("/login");
     } finally {
       await replay.close();
