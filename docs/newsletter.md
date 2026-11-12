@@ -107,7 +107,7 @@ Responses:
 | `408` | the body stalled for more than 30 s |
 | `404` | unknown source id, or the source is not a webhook way |
 | `413` | body or mail larger than the limit (raw mail 10 MB; JSON may be ~4/3 larger for base64 attachments) |
-| `429` | rate limit, or too many failed authentications from that client (a request that authenticates is never locked out) |
+| `429` | rate limit, or too many failed authentications from that client (verified Basic credentials are never locked out) |
 | `500` / `503` | infrastructure error / no readable secret / busy (at most 4 request bodies are buffered at once, `Retry-After: 5`) — the sender should retry |
 
 ## Security notes
@@ -115,12 +115,14 @@ Responses:
 - **Signature:** HMAC-SHA256 over `timestamp \n recipient \n body`, compared in constant time.
   The ±5 minute window is checked from the timestamp header before the body is read. A replay inside the window is
   harmless: mails are de-duplicated by Message-ID.
-- **Rate limits (per client IP, not per source id):** 60 requests per minute; after 10 failed
-  authentications in 5 minutes further failures answer 429 for the rest of the window, but a request that
-  authenticates is never locked out. Failed attempts never write to the database. Credentials (Basic
-  password, signature format and timestamp window) are checked *before* the body is read, and at most 4
-  bodies are buffered at once. Behind a reverse proxy set `TRUSTED_PROXY_COUNT` correctly so the real client
-  address is used.
+- **Rate limits (per client IP, not per source id):** 60 requests per minute. Failed attempts are
+  counted per client: wrong signatures / passwords and, for signed requests, bodies that overflow,
+  stall (30 s) or break. After 10 in 5 minutes that client gets 429 instead of a body slot. Verified
+  Basic credentials are checked first and are never locked out. Failed attempts never write to the
+  database. Credentials (Basic password, signature format and timestamp window) are checked *before*
+  the body is read; at most 4 bodies are buffered at once and only 1 per client address, so one
+  address cannot hog the others' capacity. Behind a reverse proxy keep `TRUSTED_PROXY_COUNT` correct,
+  otherwise every request looks like it comes from the same client.
 - **Limits:** the request body is read with a hard cap (Content-Length is not trusted); a paused
   source answers 403 before the body is read. Attachments are never stored; only inline raster images
   up to 2 MB are kept.

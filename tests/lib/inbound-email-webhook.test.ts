@@ -192,6 +192,15 @@ describe("handleInboundEmailWebhook", () => {
     expect(h.db.inboundMailSource.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ errorCount: 0, lastError: null, lastReceivedAt: expect.any(Date) }) }));
   });
 
+  it("still answers 200 when the after-ingest hooks throw (the mail is stored)", async () => {
+    h.after.mockRejectedValueOnce(new Error("rules exploded with " + SECRET));
+    const res = await call(request());
+    expect(res.status).toBe(200);
+    expect(await json(res)).toMatchObject({ status: "created" });
+    expect(JSON.stringify(h.logs)).not.toContain(SECRET);
+    expect(JSON.stringify(h.logs)).toContain("after-ingest hooks failed");
+  });
+
   it("answers 401 for a missing, wrong or tampered signature and never ingests", async () => {
     expect((await call(request({ signed: false }))).status).toBe(401);
     expect((await call(request({ headers: { "x-feedferret-signature": "sha256=" + "0".repeat(64) } }))).status).toBe(401);
@@ -297,14 +306,49 @@ describe("handleInboundEmailWebhook", () => {
     expect((await call(request({ ip: "198.51.100.78" }))).status).toBe(200);
   });
 
-  it("counts failed authentications per client: from the 11th the answer is 429, but a valid request is never locked out", async () => {
+  it("counts failed authentications per client: from the 11th the answer is 429; Basic credentials are verified first and never locked out", async () => {
     const ip = "198.51.100.99";
     for (let i = 0; i < 10; i++) expect((await call(request({ ip, signed: false }))).status).toBe(401);
     const locked = await call(request({ ip, signed: false }));
     expect(locked.status).toBe(429);
     expect(await json(locked)).toEqual({ error: "too-many-failed-attempts" });
-    expect((await call(request({ ip }))).status).toBe(200);
-    expect((await call(request({ ip: "198.51.100.100", signed: false }))).status).toBe(401);
+    // A signature cannot be checked before its body is read: no slot for a client with a spent budget.
+    expect((await call(request({ ip }))).status).toBe(429);
+    expect(h.ingest).not.toHaveBeenCalled();
+    // Verified Basic credentials pass (the tiny body is no valid payload: 400, not 401/429).
+    const basic = request({ ip, signed: false, headers: { "content-type": "application/json", authorization: `Basic ${Buffer.from(`u:${SECRET}`).toString("base64")}` } });
+    expect((await call(basic)).status).toBe(400);
+    // Another client is unaffected.
+    expect((await call(request({ ip: "198.51.100.100" }))).status).toBe(200);
+  });
+
+  it("counts bodies that overflow, stall or break against the failure budget in signature mode, so no slots are hogged", async () => {
+    const ip = "198.51.100.150";
+    const oversized = () => request({ ip, headers: { "content-length": String(MAX_WEBHOOK_BODY_BYTES + 1) } });
+    for (let i = 0; i < 10; i++) expect((await call(oversized())).status).toBe(413);
+    expect((await call(oversized())).status).toBe(429);
+    expect((await call(request({ ip }))).status).toBe(429);
+    expect(inFlightWebhookRequests()).toBe(0);
+    expect((await call(request({ ip: "198.51.100.151" }))).status).toBe(200);
+
+    // A body that errors mid-way is counted too.
+    const broken = () => {
+      const stream = new ReadableStream<Uint8Array>({ start: (c) => c.error(new Error("socket hang up")) });
+      const timestamp = String(nowSecs());
+      return new Request("http://localhost/api/webhooks/inbound-email/src_webhook_1", {
+        method: "POST",
+        headers: { "x-forwarded-for": "198.51.100.152", "x-feedferret-timestamp": timestamp, "x-feedferret-signature": `sha256=${"a".repeat(64)}`, "content-type": "message/rfc822" },
+        body: stream,
+        duplex: "half",
+      } as RequestInit);
+    };
+    for (let i = 0; i < 10; i++) expect((await call(broken())).status).toBe(400);
+    expect((await call(broken())).status).toBe(429);
+
+    // Authenticated (Basic) senders are not penalised for their own big payloads.
+    const basicOversized = () =>
+      request({ ip: "198.51.100.153", signed: false, headers: { authorization: `Basic ${Buffer.from(`u:${SECRET}`).toString("base64")}`, "content-length": String(MAX_WEBHOOK_BODY_BYTES + 1) } });
+    for (let i = 0; i < 12; i++) expect((await call(basicOversized())).status).toBe(413);
   });
 
   it("keys the limiters on the client only: a flood of random source ids creates no per-id entries and evicts nothing", async () => {
@@ -373,6 +417,32 @@ describe("handleInboundEmailWebhook", () => {
       const res = await call(withStream(stream, { authorization: `Basic ${Buffer.from(`u:${SECRET}`).toString("base64")}`, "content-type": "application/json" }));
       // The tiny body is not a Postmark/Mailgun payload, but it was read: 400, not 401.
       expect(res.status).toBe(400);
+    });
+
+    it("lets one client hold only one body slot; a second sender elsewhere still gets through", async () => {
+      const controllers: ReadableStreamDefaultController<Uint8Array>[] = [];
+      const stalledFrom = (ip: string) =>
+        withStream(new ReadableStream<Uint8Array>({ start: (c) => void controllers.push(c) }), {
+          "x-forwarded-for": ip,
+          "x-feedferret-signature": fakeSignature,
+          "x-feedferret-timestamp": ts(),
+        });
+      const attacker = "203.0.113.201";
+      const first = call(stalledFrom(attacker));
+      await vi.waitFor(() => expect(inFlightWebhookRequests()).toBe(1));
+      for (let i = 0; i < 3; i++) {
+        const busy = await call(stalledFrom(attacker));
+        expect(busy.status).toBe(503);
+        expect(busy.headers.get("retry-after")).toBe("5");
+      }
+      expect(inFlightWebhookRequests()).toBe(1);
+      // A legitimate sender from another address is served meanwhile.
+      expect((await call(request({ ip: "203.0.113.202" }))).status).toBe(200);
+      controllers[0].close();
+      expect((await first).status).toBe(401);
+      expect(inFlightWebhookRequests()).toBe(0);
+      // The slot is free again for the same client.
+      expect((await call(request({ ip: attacker }))).status).toBe(200);
     });
 
     it(`buffers at most ${MAX_CONCURRENT_WEBHOOK_REQUESTS} bodies at once and answers 503 + Retry-After beyond that`, async () => {

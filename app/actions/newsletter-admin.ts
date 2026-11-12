@@ -458,8 +458,8 @@ export async function saveNewsletterDomainSource(input: unknown): Promise<Domain
     settings: null,
     credentials: null,
     webhookSecret: sealWebhookSecret(secret),
-    // Rotating the secret of a paused source must not quietly resume it.
-    paused: existing?.kind === kind ? existing.paused : false,
+    // Setting up again (rotation, other flavour) must not quietly resume a paused source.
+    paused: existing?.paused ?? false,
     errorCount: 0,
     lastError: null,
   };

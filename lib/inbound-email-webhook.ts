@@ -31,7 +31,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { readPlainColumnState, sealSecret } from "@/lib/secret-box";
-import { checkRateLimit, getClientIdentifier, rateLimitHeaders, RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimit, getClientIdentifier, peekRateLimit, rateLimitHeaders, RATE_LIMITS } from "@/lib/rate-limit";
 import { ingestRawEmail, MAX_RAW_EMAIL_BYTES, type IngestResult } from "@/lib/inbound-email";
 import { adaptInboundPayload } from "@/lib/inbound-email-adapters";
 import { afterIngest } from "@/lib/newsletter-after-ingest";
@@ -170,7 +170,10 @@ const bookkeeping = (sourceId: string, data: Record<string, unknown>) =>
 /** Stored in `InboundMailSource.lastError` (wizard maps them to copy). */
 export type WebhookErrorCode = "mail-unparseable" | "mail-too-large" | "payload-unsupported";
 
+/** Bodies one client may have in flight; with a global cap of 4 this keeps a single IP from holding every slot. */
+export const MAX_CONCURRENT_PER_CLIENT = 1;
 let inFlight = 0;
+const inFlightByClient = new Map<string, number>();
 /** Webhook requests currently holding a body slot (tests). */
 export const inFlightWebhookRequests = () => inFlight;
 
@@ -185,10 +188,12 @@ export async function handleInboundEmailWebhook(request: Request, sourceId: stri
   const client = getClientIdentifier(request);
   const limited = checkRateLimit(client, RATE_LIMITS.inboundEmailWebhook);
   if (!limited.success) return reply(429, { error: "rate-limited" }, rateLimitHeaders(limited));
-  // Counts a failed authentication (check + increment in one step); once the
-  // budget is spent the answer turns from 401 into 429.
+  // Counts a failure (check + increment in one step); once the budget is
+  // spent the answer turns into 429. Used for failed authentications and, in
+  // signature mode, for bodies that never arrive / are too large.
+  const spend = () => checkRateLimit(client, RATE_LIMITS.inboundEmailWebhookAuthFail);
   const authFailed: AuthFailed = (error, status = 401, extra = {}) => {
-    const budget = checkRateLimit(client, RATE_LIMITS.inboundEmailWebhookAuthFail);
+    const budget = spend();
     logger.warn("[inbound-email-webhook] rejected", { sourceId, reason: error });
     if (!budget.success) return reply(429, { error: "too-many-failed-attempts" }, rateLimitHeaders(budget));
     return reply(status, { error }, extra);
@@ -219,13 +224,27 @@ export async function handleInboundEmailWebhook(request: Request, sourceId: stri
     if (Math.abs(Math.floor(Date.now() / 1000) - Number(ts)) > SIGNATURE_TOLERANCE_SECS) return authFailed("timestamp-out-of-window");
   }
 
-  // Bounded memory: only a few (up to 13 MB) bodies at once, instance-wide.
-  if (inFlight >= MAX_CONCURRENT_WEBHOOK_REQUESTS) return reply(503, { error: "busy" }, { "retry-after": "5" });
+  // A signature cannot be verified before the body is read, so a client that
+  // already spent its failure budget gets no more body slots (Basic was verified above).
+  if (mode === "signature") {
+    const budget = peekRateLimit(client, RATE_LIMITS.inboundEmailWebhookAuthFail);
+    if (!budget.success) return reply(429, { error: "too-many-failed-attempts" }, rateLimitHeaders({ ...budget, retryAfterSecs: Math.ceil((budget.resetAt - Date.now()) / 1000) }));
+  }
+
+  // Bounded memory: a few (up to 13 MB) bodies at once, instance-wide, and one
+  // per client, so that one address cannot occupy every slot.
+  if (inFlight >= MAX_CONCURRENT_WEBHOOK_REQUESTS || (inFlightByClient.get(client) ?? 0) >= MAX_CONCURRENT_PER_CLIENT) {
+    return reply(503, { error: "busy" }, { "retry-after": "5" });
+  }
   inFlight += 1;
+  inFlightByClient.set(client, (inFlightByClient.get(client) ?? 0) + 1);
   try {
-    return await processBody(request, { sourceId, secret, mode, signature, timestamp, recipientHeader, authFailed });
+    return await processBody(request, { sourceId, secret, mode, signature, timestamp, recipientHeader, authFailed, spend });
   } finally {
     inFlight -= 1;
+    const left = (inFlightByClient.get(client) ?? 1) - 1;
+    if (left > 0) inFlightByClient.set(client, left);
+    else inFlightByClient.delete(client);
   }
 }
 
@@ -239,17 +258,23 @@ async function processBody(
     timestamp: string | null;
     recipientHeader: string | null;
     authFailed: AuthFailed;
+    spend: () => unknown;
   },
 ): Promise<Response> {
-  const { sourceId, secret, mode, signature, timestamp, recipientHeader, authFailed } = ctx;
+  const { sourceId, secret, mode, signature, timestamp, recipientHeader, authFailed, spend } = ctx;
+  // Unverified (signature) requests that stall, break or overflow count like failed logins.
+  const bodyFailure = (status: number, error: string) => {
+    if (mode === "signature") spend();
+    return reply(status, { error });
+  };
   let body: Buffer | null;
   try {
     body = await readBodyCapped(request, MAX_WEBHOOK_BODY_BYTES);
   } catch (error) {
-    if (error instanceof BodyTimeoutError) return reply(408, { error: "request-timeout" });
-    return reply(400, { error: "unreadable-body" });
+    if (error instanceof BodyTimeoutError) return bodyFailure(408, "request-timeout");
+    return bodyFailure(400, "unreadable-body");
   }
-  if (body === null) return reply(413, { error: "payload-too-large" });
+  if (body === null) return bodyFailure(413, "payload-too-large");
 
   if (mode === "signature") {
     const verdict = verifyInboundSignature({ secret, signatureHeader: signature, timestampHeader: timestamp, recipient: recipientHeader ?? "", body });
@@ -276,7 +301,14 @@ async function processBody(
   const now = new Date();
   if (result.status === "created") {
     await bookkeeping(sourceId, { lastReceivedAt: now, lastCheckedAt: now, errorCount: 0, lastError: null });
-    if (result.userId && result.articleId) await afterIngest([{ userId: result.userId, articleId: result.articleId }], "inbound-email-webhook");
+    if (result.userId && result.articleId) {
+      // The mail is stored: a failing side effect must not turn this into a 500 (the sender would retry).
+      try {
+        await afterIngest([{ userId: result.userId, articleId: result.articleId }], "inbound-email-webhook");
+      } catch (error) {
+        logger.error("[inbound-email-webhook] after-ingest hooks failed", { sourceId, error: error instanceof Error ? error.name : "error" });
+      }
+    }
   } else if (result.status === "parse-error" || result.status === "too-large") {
     const code: WebhookErrorCode = result.status === "parse-error" ? "mail-unparseable" : "mail-too-large";
     await bookkeeping(sourceId, { errorCount: { increment: 1 }, lastError: code, lastCheckedAt: now });
