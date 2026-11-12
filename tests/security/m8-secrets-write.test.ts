@@ -212,11 +212,12 @@ describe("writer paths store v2", () => {
 
   it("mail and connector credentials (admin updateGlobalSettings)", async () => {
     state.session = { user: { id: ids.admin } };
-    await updateGlobalSettings({ rsshubApiKey: S.rsshub, smtpPassword: S.smtp, changedetectionApiKey: "S3CRET-cd" });
+    await updateGlobalSettings({ rsshubApiKey: S.rsshub, smtpPassword: S.smtp, changedetectionApiKey: "S3CRET-cd", twitchClientSecret: "S3CRET-twitch" });
     const row = await raw.globalSettings.findUniqueOrThrow({ where: { id: "global" } });
     expectSealed(row.rsshubApiKey, "globalSettings.rsshubApiKey", S.rsshub);
     expectSealed(row.smtpPassword, "globalSettings.smtpPassword", S.smtp);
     expectSealed(row.changedetectionApiKey, "globalSettings.changedetectionApiKey", "S3CRET-cd");
+    expectSealed(row.twitchClientSecret, "globalSettings.twitchClientSecret", "S3CRET-twitch");
   });
 
   it("TOTP seed (beginTwoFactorSetup) and newsletter IMAP credentials (any write)", async () => {
@@ -229,6 +230,14 @@ describe("writer paths store v2", () => {
     const stored = await raw.inboundMailSource.findUniqueOrThrow({ where: { id: source.id } });
     expectSealed(stored.credentials, "inboundMailSource.credentials", JSON.stringify({ user: "u", pass: "S3CRET-imap" }));
     expectSealed(stored.webhookSecret, "inboundMailSource.webhookSecret", "S3CRET-hook");
+    // Rotation / disconnect write through the same extension: a plain update is sealed, null stays null.
+    await state.db.inboundMailSource.update({ where: { id: source.id }, data: { webhookSecret: "S3CRET-rotated" } });
+    const rotated = await raw.inboundMailSource.findUniqueOrThrow({ where: { id: source.id } });
+    expectSealed(rotated.webhookSecret, "inboundMailSource.webhookSecret", "S3CRET-rotated");
+    await state.db.inboundMailSource.update({ where: { id: source.id }, data: { credentials: null, webhookSecret: null } });
+    const cleared = await raw.inboundMailSource.findUniqueOrThrow({ where: { id: source.id } });
+    expect(cleared.credentials).toBeNull();
+    expect(cleared.webhookSecret).toBeNull();
     await raw.inboundMailSource.delete({ where: { id: source.id } });
   });
 

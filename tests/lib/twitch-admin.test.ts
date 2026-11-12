@@ -42,7 +42,7 @@ describe("Twitch admin settings", () => {
     expect(update).not.toHaveProperty("twitchClientSecret");
 
     await updateGlobalSettings({ twitchClientSecret: "fresh-secret" });
-    expect(mocks.encrypt).toHaveBeenCalledWith("fresh-secret");
+    expect(mocks.encrypt).toHaveBeenCalledWith("fresh-secret", "globalSettings.twitchClientSecret");
     expect(mocks.upsert.mock.calls[1][0].update.twitchClientSecret).toBe("enc(fresh-secret)");
   });
 
