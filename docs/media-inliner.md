@@ -45,6 +45,25 @@ unavailable or silent on some posts). No stored-content normalization occurs.
 The app keeps the canonical article link for Copy link, Share and favicon lookup.
 A separate app-only openLink is used solely by open-original actions.
 
+## Embeds at ingest
+
+Feed-item sanitizing (`lib/feed-item-sanitize.ts`, plain feed-sync path) turns an
+`<iframe src>` of a provider in the table above that has a canonical watch page
+(YouTube, Vimeo, Dailymotion, Twitch, v.redd.it) into a plain
+`<a href="canonical watch URL">`; the URL is built from the matched id by
+`watchUrlForEmbed` (same matcher as `videoFor`), never copied from the source.
+No iframe is ever stored; every other iframe is stripped as before. At render
+time the link becomes a click-to-load placeholder like any other video link.
+Feeds with content rules and the FreshRSS import keep the default profile.
+
+Existing articles are not touched: the change check of sync compares the stored
+body with the freshly sanitized one, so an item that merely sanitizes
+differently after the deploy would look edited (updatedAt bump, full-text reset).
+The sanitizer therefore also returns the pre-feature form (`legacyHtml`, only
+for items where a link was added) and sync keeps the stored body when it equals
+that form. Only new rows and rows whose upstream content really changed get the
+link; a row that has it is compared against the new form as usual.
+
 The worker is skipped for ordinary articles unless the proxy is enabled, a
 frontend is configured, or a cheap string check finds a supported media candidate.
 Markdown output carries its renderer provenance so both sanitization passes

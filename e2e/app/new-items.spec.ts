@@ -55,6 +55,27 @@ async function holdFirstPage(page: Page) {
   };
 }
 
+/**
+ * Advances the fake clock one counts-poll interval at a time until the head probe has run (it follows every counts
+ * response). A single jump is not enough on a loaded machine: a read-state write that is still settling cancels
+ * the counts fetch the poll started (by design: a response must never undo an optimistic change), and the next
+ * attempt is a whole interval away. Asserts the probe ran, not how often.
+ */
+async function advanceUntilProbed(page: Page, heads: string[], attempts = 4) {
+  for (let i = 0; i < attempts; i++) {
+    await page.clock.fastForward(POLL);
+    const before = heads.length;
+    try {
+      await expect.poll(() => heads.length, { timeout: 5_000 }).toBeGreaterThan(0);
+      return;
+    } catch {
+      // The counts fetch was cancelled by a write (or never answered): another interval.
+      expect(heads.length).toBe(before);
+    }
+  }
+  expect(heads.length, `no head probe after ${attempts} counts-poll intervals`).toBeGreaterThan(0);
+}
+
 /** Article number (1-based) of a seeded row id `e2e-<user>-NNN`. */
 const numberOf = (id: string) => Number(id.slice(id.lastIndexOf("-") + 1)) + 1;
 
@@ -274,6 +295,9 @@ test.describe("↑ N neu — races", () => {
     await app.open();
     await app.activate(app.row(1));
     await expect(page.locator("article")).toBeVisible();
+    // Opening marks the row read: that write (batcher flush + server action) cancels a counts fetch that is in
+    // flight, so let it land before the poll below, or the cancelled fetch makes the head probe skip a whole interval.
+    await page.waitForLoadState("networkidle");
     // The list itself sits at the very top: only the open reader holds the rows back.
     const scroller = app.listScroller();
     await scroller.evaluate((el) => el.scrollTo(0, 0));
@@ -281,8 +305,7 @@ test.describe("↑ N neu — races", () => {
     const heads = track(page, HEAD_URL);
     const arrivals = insertArrivals(app.userKey, 2, "reader");
     try {
-      await page.clock.fastForward(POLL);
-      await expect.poll(() => heads.length, { timeout: 15_000 }).toBe(1);
+      await advanceUntilProbed(page, heads);
       await page.waitForTimeout(800);
       expect(await scroller.evaluate((el) => el.scrollTop)).toBe(0);
       for (const id of arrivals.ids) await expect(page.locator(`[data-article-id="${id}"]`)).toHaveCount(0);
