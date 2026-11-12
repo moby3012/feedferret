@@ -36,7 +36,8 @@ vi.mock("@/lib/rate-limit", async (original) => ({
 
 import { GET as greaderGet } from "../../app/api/greader/[...path]/route";
 import { POST as feverPost } from "../../app/api/fever/route";
-import { GET as v1Get, PATCH as v1Patch } from "../../app/api/v1/[...path]/route";
+import { GET as v1Get, PATCH as v1Patch, POST as v1Post } from "../../app/api/v1/[...path]/route";
+import { POST as greaderPost } from "../../app/api/greader/[...path]/route";
 import { POST as mcpPost } from "../../app/api/mcp/route";
 import { hashApiToken } from "../../lib/token";
 
@@ -218,5 +219,109 @@ describe("MCP", () => {
     const restored = await tool("update_feed", { feedId: "old", archived: false });
     expect(restored.archivedAt).toBeNull();
     expect(await tool("list_feeds")).toHaveLength(2);
+  });
+});
+
+describe("bulk read and stats skip archived feeds in aggregate scopes only", () => {
+  const unread = (feedId: string) => h.db.article.count({ where: { feedId, isRead: false } });
+  const v1MarkAll = async (body: Record<string, unknown>) => {
+    const res = await v1Post(
+      new Request("http://localhost/api/v1/articles/mark-all-read", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      { params: Promise.resolve({ path: ["articles", "mark-all-read"] }) },
+    );
+    expect(res.status).toBe(200);
+  };
+  const mcp = async (name: string, args: Record<string, unknown> = {}) => {
+    const res = await mcpPost(
+      new Request("http://localhost/api/mcp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: `feedferret.${name}`, arguments: args } }) }),
+    );
+    const result = (await res.json()).result as { isError?: boolean; content: Array<{ text: string }> };
+    expect(result.isError).toBeFalsy();
+    return JSON.parse(result.content[0].text);
+  };
+
+  it("REST v1 mark-all-read: unscoped and category scopes leave archived articles unread; feed / query scopes keep addressing them", async () => {
+    await archiveOld();
+    await v1MarkAll({});
+    expect(await unread("live")).toBe(0);
+    expect(await unread("old")).toBe(2);
+
+    await v1MarkAll({ feedId: "old" });
+    expect(await unread("old")).toBe(0);
+  });
+
+  it("REST v1 mark-all-read with a search query still reaches archived feeds", async () => {
+    await archiveOld();
+    await v1MarkAll({ query: "old-" });
+    expect(await unread("old")).toBe(0);
+  });
+
+  it("REST v1 mark-all-read by category skips archived feeds", async () => {
+    const cat = await h.db.category.create({ data: { id: "cat1", userId: "alice", name: "Cat" } });
+    await h.db.feed.updateMany({ data: { categoryId: cat.id } });
+    await archiveOld();
+    await v1MarkAll({ categoryId: cat.id });
+    expect(await unread("live")).toBe(0);
+    expect(await unread("old")).toBe(2);
+    await h.db.feed.updateMany({ data: { categoryId: null } });
+    await h.db.category.delete({ where: { id: cat.id } });
+  });
+
+  it("MCP mark_all_read: unscoped skips archived, feedId addresses them", async () => {
+    await archiveOld();
+    await mcp("mark_all_read");
+    expect(await unread("live")).toBe(0);
+    expect(await unread("old")).toBe(2);
+    await mcp("mark_all_read", { feedId: "old" });
+    expect(await unread("old")).toBe(0);
+  });
+
+  it("v1 /stats and MCP get_stats: archived feeds are not feeds and their unread articles are not unread; totalArticles still counts them", async () => {
+    const stats = async () => {
+      const res = await v1Get(new Request("http://localhost/api/v1/stats"), { params: Promise.resolve({ path: ["stats"] }) });
+      expect(res.status).toBe(200);
+      return res.json();
+    };
+    expect(await stats()).toMatchObject({ totalFeeds: 2, unreadArticles: 3, totalArticles: 3 });
+    await archiveOld();
+    expect(await stats()).toMatchObject({ totalFeeds: 1, unreadArticles: 1, totalArticles: 3 });
+    expect(await mcp("get_stats")).toMatchObject({ totalFeeds: 1, unreadArticles: 1, totalArticles: 3 });
+  });
+});
+
+describe("subscribing to the URL of an archived feed restores it", () => {
+  it("GReader quickadd restores the archived feed and says so", async () => {
+    await archiveOld();
+    const res = await greaderPost(new Request("http://localhost/api/greader/reader/api/0/subscription/quickadd", { method: "POST", body: new URLSearchParams({ quickadd: "https://example.org/old.xml" }) }), {
+      params: Promise.resolve({ path: ["reader", "api", "0", "subscription", "quickadd"] }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ numResults: 1, streamId: `feed/${Number(OLD_FEED)}`, restored: true });
+    expect((await h.db.feed.findUniqueOrThrow({ where: { id: "old" } })).archivedAt).toBeNull();
+  });
+
+  it("REST v1 POST /feeds restores instead of failing on the unique URL", async () => {
+    await archiveOld();
+    const res = await v1Post(
+      new Request("http://localhost/api/v1/feeds", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: "https://example.org/old.xml" }) }),
+      { params: Promise.resolve({ path: ["feeds"] }) },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: "old", archived: false, restored: true });
+    expect(await h.db.feed.count({ where: { url: "https://example.org/old.xml" } })).toBe(1);
+  });
+
+  it("MCP add_feed restores", async () => {
+    await archiveOld();
+    const mcp = async () => {
+      const res = await mcpPost(
+        new Request("http://localhost/api/mcp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "feedferret.add_feed", arguments: { url: "https://example.org/old.xml" } } }) }),
+      );
+      return (await res.json()).result as { isError?: boolean; content: Array<{ text: string }> };
+    };
+    const result = await mcp();
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(result.content[0].text)).toMatchObject({ id: "old", restored: true });
+    expect((await h.db.feed.findUniqueOrThrow({ where: { id: "old" } })).archivedAt).toBeNull();
   });
 });

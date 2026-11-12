@@ -87,13 +87,13 @@ export function InactiveFeeds({ onEdit }: { onEdit: (feed: any) => void }) {
   const archiveOne = async (feed: InactiveFeedDto) => {
     setBusy((prev) => ({ ...prev, [feed.id]: true }));
     try {
-      await archiveFeeds([feed.id]);
+      const { archivedIds } = await archiveFeeds([feed.id]);
       patchList([feed.id]);
       refreshShell();
       toast.success(tb("archive.done", { name: feed.name }), {
         action: {
           label: tb("archive.undo"),
-          onClick: () => void restoreFeeds([feed.id]).then(refreshShell, () => toast.error(tb("archive.failed"))),
+          onClick: () => void restoreFeeds(archivedIds).then(refreshShell, () => toast.error(tb("archive.failed"))),
         },
       });
     } catch {
@@ -113,11 +113,12 @@ export function InactiveFeeds({ onEdit }: { onEdit: (feed: any) => void }) {
     if (ids.length === 0) return;
     setArchivingAll(true);
     try {
-      const { archived } = await archiveInactiveFeeds(ids);
+      const { archived, archivedIds } = await archiveInactiveFeeds(ids);
+      // Undo restores exactly what this click archived (feeds that stopped matching in between were skipped).
       toast.success(t("archiveAllDone", { count: archived }), {
         action: {
           label: tb("archive.undo"),
-          onClick: () => void restoreFeeds(ids).then(refreshShell, () => toast.error(tb("archive.failed"))),
+          onClick: () => void restoreFeeds(archivedIds).then(refreshShell, () => toast.error(tb("archive.failed"))),
         },
       });
       await refetch();
@@ -175,6 +176,9 @@ export function InactiveFeeds({ onEdit }: { onEdit: (feed: any) => void }) {
         </div>
       </div>
 
+      <span id="inactive-archive-hint" className="sr-only">
+        {tb("archive.hint")}
+      </span>
       <ScrollArea className="min-h-0 flex-1">
         <div className="pb-8 pe-3">
           {isError ? (
@@ -231,6 +235,7 @@ export function InactiveFeeds({ onEdit }: { onEdit: (feed: any) => void }) {
                           onClick={() => void archiveOne(feed)}
                           disabled={!!busy[feed.id] || archivingAll}
                           title={tb("archive.hint")}
+                          aria-describedby="inactive-archive-hint"
                           data-testid="inactive-archive"
                         >
                           {busy[feed.id] ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Archive className="size-3.5" aria-hidden />}

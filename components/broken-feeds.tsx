@@ -267,13 +267,13 @@ function BrokenList({ onEdit }: { onEdit: (feed: any) => void }) {
   const archive = async (feed: BrokenFeedDto) => {
     setBusyFor(feed.id, "archive");
     try {
-      await archiveFeeds([feed.id]);
+      const { archivedIds } = await archiveFeeds([feed.id]);
       patchList(feed.id, null);
       refreshShell();
       toast.success(t("archive.done", { name: feed.name }), {
         action: {
           label: t("archive.undo"),
-          onClick: () => void restoreFeeds([feed.id]).then(refreshShell, () => toast.error(t("archive.failed"))),
+          onClick: () => void restoreFeeds(archivedIds).then(refreshShell, () => toast.error(t("archive.failed"))),
         },
       });
     } catch {
@@ -356,6 +356,9 @@ function BrokenList({ onEdit }: { onEdit: (feed: any) => void }) {
         </div>
       )}
 
+      <span id="broken-archive-hint" className="sr-only">
+        {t("archive.hint")}
+      </span>
       <ScrollArea className="min-h-0 flex-1">
         <div className="pb-8 pe-3">
           {isError ? (
@@ -502,6 +505,7 @@ function BrokenList({ onEdit }: { onEdit: (feed: any) => void }) {
                             onClick={() => void archive(feed)}
                             disabled={!!state || bulkRunning}
                             title={t("archive.hint")}
+                            aria-describedby="broken-archive-hint"
                             data-testid="broken-archive"
                           >
                             {state === "archive" ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Archive className="size-3.5" aria-hidden />}

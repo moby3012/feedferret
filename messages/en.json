@@ -977,7 +977,8 @@
       "ai-failed": "The AI request failed. Check the AI settings and try again.",
       "page-tls-error": "The secure (HTTPS) connection to this site failed (certificate error). For your safety we don't switch to unencrypted http automatically — if you trust the site, enter the address with http://."
     },
-    "notAFeedHint": "That address is a web page, not a feed. These feeds are linked on it:"
+    "notAFeedHint": "That address is a web page, not a feed. These feeds are linked on it:",
+    "feedRestoredFromArchive": "“{name}” was archived and is subscribed again."
   },
   "articleList": {
     "newItems": "{count} new",
@@ -1203,7 +1204,7 @@
       "archivedEmpty": "No archived feeds",
       "archivedEmptyDescription": "Archive feeds from Broken feeds → Inactive. Archived feeds stop syncing but keep their articles.",
       "archivedOn": "Archived {date}",
-      "archivedArticles": "{count, plural, one {# article} other {# articles}} kept",
+      "archivedArticles": "{count, plural, one {# article} other {# articles}} stored",
       "restore": "Restore",
       "restored": "“{name}” restored.",
       "restoreFailed": "Could not restore the feed.",
@@ -2632,7 +2633,7 @@
       "done": "“{name}” archived.",
       "undo": "Undo",
       "failed": "Could not archive the feed.",
-      "hint": "Stops syncing and hides the feed from the sidebar and unread counts. Its articles are kept; you can restore it any time."
+      "hint": "Stops syncing and hides the feed from the sidebar and unread counts. Its articles stay (the normal retention rules still apply); you can restore it any time."
     },
     "inactive": {
       "title": "Inactive feeds",
@@ -2648,7 +2649,7 @@
       "emptyDescription": "Every working feed published something within the last {days, plural, one {# day} other {# days}}.",
       "archiveAll": "Archive all inactive ({count})",
       "archiveAllTitle": "Archive {count, plural, one {# feed} other {# feeds}}?",
-      "archiveAllDescription": "These feeds published nothing for more than {days, plural, one {# day} other {# days}}. They stop syncing and disappear from the sidebar and unread counts. Their articles are kept and stay searchable. Restore them any time under Manage feeds → Archived.",
+      "archiveAllDescription": "These feeds published nothing for more than {days, plural, one {# day} other {# days}}. They stop syncing and disappear from the sidebar and unread counts. Their articles stay searchable (the normal retention rules still apply). Restore them any time under Manage feeds → Archived.",
       "archiveAllConfirm": "Archive {count, plural, one {# feed} other {# feeds}}",
       "archiveAllDone": "{count, plural, one {# feed archived} other {# feeds archived}}.",
       "archiveAllFailed": "Could not archive the feeds."

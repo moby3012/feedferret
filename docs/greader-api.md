@@ -39,7 +39,7 @@ required, including for raw OPML imports.
 
 ## Archived feeds
 
-Feeds archived in FeedFerret (stopped syncing, kept articles) are not subscriptions for GReader
+Feeds archived in FeedFerret (stopped syncing; their articles stay, subject to the usual retention rules) are not subscriptions for GReader
 clients: they are absent from `subscription/list`, `subscription/export`, `unread-count` and from every
 item stream (`reading-list`, labels, `starred`, `feed/…`). Restoring the feed brings them back.
 

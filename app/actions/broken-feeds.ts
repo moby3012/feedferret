@@ -76,6 +76,7 @@ const BROKEN_SELECT = {
 const REPAIRABLE_SOURCE_TYPES = new Set(["rss", "JSONFeed"]);
 const MAX_BULK_IDS = 500;
 const MAX_REPAIR_CANDIDATES = 8;
+const STATS_CHUNK = 5000;
 
 type BrokenRow = {
     id: string;
@@ -379,18 +380,20 @@ export async function getInactiveFeeds(): Promise<InactiveFeedsResult> {
         select: { id: true, name: true, icon: true, url: true, sourceType: true, autoMuted: true, consecutiveFailureCount: true, lastFetchedAt: true, lastSuccessAt: true, createdAt: true, archivedAt: true },
     });
     if (rows.length === 0) return { thresholdDays, feeds: [] };
-    const stats = await db.article.groupBy({
-        by: ["feedId"],
-        where: { userId },
-        _max: { publishedAt: true },
-        _count: { _all: true },
-    });
-    const statsByFeed = new Map<string, { newest: Date | null; count: number }>(
-        stats.map((s: { feedId: string; _max: { publishedAt: Date | null }; _count: { _all: number } }) => [
-            s.feedId,
-            { newest: s._max.publishedAt, count: s._count._all },
-        ]),
-    );
+    // Only the candidates: `(feedId, publishedAt)`-indexed lookups instead of grouping every article of the user.
+    // Chunked so a huge subscription list never exceeds the bind-parameter limit.
+    const statsByFeed = new Map<string, { newest: Date | null; count: number }>();
+    for (let i = 0; i < rows.length; i += STATS_CHUNK) {
+        const stats = await db.article.groupBy({
+            by: ["feedId"],
+            where: { userId, feedId: { in: rows.slice(i, i + STATS_CHUNK).map((r) => r.id) } },
+            _max: { publishedAt: true },
+            _count: { _all: true },
+        });
+        for (const s of stats as Array<{ feedId: string; _max: { publishedAt: Date | null }; _count: { _all: number } }>) {
+            statsByFeed.set(s.feedId, { newest: s._max.publishedAt, count: s._count._all });
+        }
+    }
     const feeds: InactiveFeedDto[] = [];
     for (const row of rows) {
         const stat = statsByFeed.get(row.id);
@@ -420,16 +423,31 @@ function cleanIds(feedIds: unknown): string[] {
  * and the GReader / Fever subscription lists, and keeps all of its articles. Only the Feed row is
  * written, so no Article.updatedAt is touched. Restoring is `restoreFeeds`.
  */
-export async function archiveFeeds(feedIds: string[]): Promise<{ archived: number }> {
+export async function archiveFeeds(feedIds: string[]): Promise<{ archived: number; archivedIds: string[] }> {
     const userId = await requireUserId();
     const ids = cleanIds(feedIds);
-    if (ids.length === 0) return { archived: 0 };
-    const { count } = await db.feed.updateMany({
-        where: { id: { in: ids }, userId, archivedAt: null },
-        data: { archivedAt: new Date() },
-    });
+    if (ids.length === 0) return { archived: 0, archivedIds: [] };
+    const archivedIds = await archiveWhere(userId, { id: { in: ids } });
     revalidatePath("/");
-    return { archived: count };
+    return { archived: archivedIds.length, archivedIds };
+}
+
+/**
+ * Archives the feeds matching `guard` (always: own, not yet archived) and returns exactly the ids this call
+ * archived, so an Undo restores nothing else. Candidates are selected with the guard, then updated by id inside
+ * a transaction; the guard stays on the UPDATE so a feed that stops matching in between is left alone, and the
+ * ids are read back by this call's unique timestamp.
+ */
+async function archiveWhere(userId: string, guard: Record<string, unknown>): Promise<string[]> {
+    return db.$transaction(async (tx) => {
+        const where = { ...guard, userId, archivedAt: null };
+        const candidates = (await tx.feed.findMany({ where, select: { id: true } })).map((f: { id: string }) => f.id);
+        if (candidates.length === 0) return [];
+        const stamp = new Date();
+        await tx.feed.updateMany({ where: { ...where, id: { in: candidates } }, data: { archivedAt: stamp } });
+        const done = await tx.feed.findMany({ where: { userId, id: { in: candidates }, archivedAt: stamp }, select: { id: true } });
+        return done.map((f: { id: string }) => f.id);
+    });
 }
 
 /**
@@ -437,25 +455,21 @@ export async function archiveFeeds(feedIds: string[]): Promise<{ archived: numbe
  * update predicate (same idea as `removeStaleBrokenFeeds`): a feed that published again, failed or was
  * archived in the meantime no longer matches and is left alone. Mirrors `isInactiveFeed`.
  */
-export async function archiveInactiveFeeds(feedIds: string[]): Promise<{ archived: number; skipped: number }> {
+export async function archiveInactiveFeeds(feedIds: string[]): Promise<{ archived: number; skipped: number; archivedIds: string[] }> {
     const userId = await requireUserId();
     const ids = cleanIds(feedIds);
-    if (ids.length === 0) return { archived: 0, skipped: 0 };
+    if (ids.length === 0) return { archived: 0, skipped: 0, archivedIds: [] };
     const cutoff = new Date(Date.now() - (await inactiveThreshold(userId)) * 86_400_000);
-    const { count } = await db.feed.updateMany({
-        where: {
+    const archivedIds = await archiveWhere(userId, {
             id: { in: ids },
-            userId,
             ...INACTIVE_CANDIDATE,
             // No item newer than the cutoff, and either some (older) item exists or the feed itself is older than
             // the cutoff (an empty feed is silent since its creation).
             articles: { none: { publishedAt: { gte: cutoff } } },
             OR: [{ createdAt: { lt: cutoff } }, { articles: { some: {} } }],
-        },
-        data: { archivedAt: new Date() },
     });
     revalidatePath("/");
-    return { archived: count, skipped: ids.length - count };
+    return { archived: archivedIds.length, skipped: ids.length - archivedIds.length, archivedIds };
 }
 
 /** Un-archives feeds; they are picked up by the next background sync (their sync schedule was only paused). */

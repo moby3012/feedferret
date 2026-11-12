@@ -9,7 +9,7 @@ include an error with HTTP 500.
 
 ## Archived feeds
 
-Feeds archived in FeedFerret (stopped syncing, kept articles) are not part of the Fever view: they are
+Feeds archived in FeedFerret (stopped syncing; their articles stay, subject to the usual retention rules) are not part of the Fever view: they are
 missing from `feeds`, `feeds_groups` and `favicons`, and their items are missing from `items`,
 `unread_item_ids` and `saved_item_ids`. Group `0` ("mark all") skips them. Restoring the feed in
 FeedFerret brings everything back; clients may need a full re-sync afterwards.

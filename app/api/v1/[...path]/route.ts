@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { assertSafeHttpOptionsProxy } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { restoreArchivedFeedByUrl } from "@/lib/archived-feed";
 import { markWhereRead, parseCutoffMs, setReadStateByIds, type BulkReadResult } from "@/server/articles/bulk-read";
 import { userStateGroups, userStateStatements, writeUserState, type UserStatePatch } from "@/server/articles/user-state";
 import { readPlainColumn, readPlainColumnOrNull } from "@/lib/secret-box";
@@ -298,6 +299,11 @@ async function markAllRead(user: ApiUser, request: Request) {
     const advancedWhere = await buildAdvancedSearchWhere(user.id, body.query);
     if (Object.keys(advancedWhere).length) where.AND = [...(where.AND || []), advancedWhere];
   }
+  // Aggregate scopes (everything / a category) skip archived feeds like the reader's "All articles" does; a feed,
+  // a label or a search addresses articles explicitly and keeps them.
+  if (typeof body.feedId !== "string" && typeof body.labelId !== "string" && !(typeof body.query === "string" && body.query.trim())) {
+    where.feed = { ...(where.feed || {}), archivedAt: null };
+  }
   // `before` (optional, epoch ms or ISO): arrival cutoff, like GReader `ts` / Fever `before`.
   const now = new Date();
   const before = typeof body.before === "number" ? body.before : typeof body.before === "string" ? Date.parse(body.before) : undefined;
@@ -347,6 +353,9 @@ async function createFeedFromUrl(
   const connectorError = await connectorFeedUrlError(url);
   if (connectorError) return apiError(connectorError, 400);
   url = await stripConnectorSecrets(url);
+  // An archived subscription to this URL is restored (200 + `restored: true`) instead of a duplicate error.
+  const restored = await restoreArchivedFeedByUrl(user.id, url);
+  if (restored) return NextResponse.json({ ...feedPayload(restored, await getConnectorSecretRules()), restored: true });
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId: user.id } });
   const feed = await db.feed.create({
@@ -900,9 +909,10 @@ async function getStats(user: ApiUser) {
     totalAutoReadRules,
     unreadNotifications,
   ] = await db.$transaction([
-    db.feed.count({ where: { userId: user.id } }),
+    // Archived feeds are not subscriptions: not counted as feeds, their unread articles are not "unread".
+    db.feed.count({ where: { userId: user.id, archivedAt: null } }),
     db.article.count({ where: { userId: user.id } }),
-    db.article.count({ where: { userId: user.id, isRead: false } }),
+    db.article.count({ where: { userId: user.id, isRead: false, feed: { archivedAt: null } } }),
     db.article.count({ where: { userId: user.id, isStarred: true } }),
     db.article.count({ where: { userId: user.id, isReadLater: true } }),
     db.label.count({ where: { userId: user.id } }),

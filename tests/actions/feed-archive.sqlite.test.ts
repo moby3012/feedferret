@@ -41,6 +41,7 @@ import {
   restoreFeeds,
 } from "../../app/actions/broken-feeds";
 import { updateGlobalSettings } from "../../app/actions/settings";
+import { addFeed } from "../../app/actions/feeds";
 import { syncUserFeeds } from "../../lib/rss-sync";
 import { getCounts, loadFeeds, loadArchivedFeeds, loadReadingPreferences } from "../../server/bootstrap";
 import { buildViewScope } from "../../server/articles/view-scope";
@@ -166,7 +167,7 @@ describe("getInactiveFeeds", () => {
     const { feeds } = await getInactiveFeeds();
     expect(names(feeds)).toEqual(["added-today"]);
     expect(feeds[0].inactiveDays).toBe(365);
-    expect(await archiveInactiveFeeds([f.id])).toEqual({ archived: 1, skipped: 0 });
+    expect(await archiveInactiveFeeds([f.id])).toEqual({ archived: 1, skipped: 0, archivedIds: [f.id] });
   });
 
   it("treats a feed that never delivered an item as silent since its creation", async () => {
@@ -228,12 +229,12 @@ describe("archive / restore", () => {
     const mine = await makeFeed(alice, { name: "mine" });
     const theirs = await makeFeed(bob, { name: "theirs" });
 
-    expect(await archiveFeeds([mine.id, theirs.id, "", "x".repeat(200)])).toEqual({ archived: 1 });
+    expect(await archiveFeeds([mine.id, theirs.id, "", "x".repeat(200)])).toEqual({ archived: 1, archivedIds: [mine.id] });
     expect((await reload(mine.id)).archivedAt).toBeInstanceOf(Date);
     expect((await reload(theirs.id)).archivedAt).toBeNull();
 
     const firstDate = (await reload(mine.id)).archivedAt!;
-    expect(await archiveFeeds([mine.id])).toEqual({ archived: 0 }); // already archived: untouched
+    expect(await archiveFeeds([mine.id])).toEqual({ archived: 0, archivedIds: [] }); // already archived: untouched
     expect((await reload(mine.id)).archivedAt).toEqual(firstDate);
 
     expect(await restoreFeeds([mine.id, theirs.id])).toEqual({ restored: 1 });
@@ -241,11 +242,41 @@ describe("archive / restore", () => {
     expect(await restoreFeeds([mine.id])).toEqual({ restored: 0 });
   });
 
+  it("archive actions return exactly the ids they archived (Undo must not restore anything else)", async () => {
+    const quiet = await makeFeed(alice, { name: "quiet" });
+    await makeArticle(alice, quiet.id, 300);
+    const revived = await makeFeed(alice, { name: "revived" });
+    await makeArticle(alice, revived.id, 300);
+    const already = await makeFeed(alice, { name: "already", archivedAt: daysAgo(9) });
+    await makeArticle(alice, already.id, 300);
+    await makeArticle(alice, revived.id, 0); // published again after the list was shown
+
+    const result = await archiveInactiveFeeds([quiet.id, revived.id, already.id]);
+    expect(result).toEqual({ archived: 1, skipped: 2, archivedIds: [quiet.id] });
+    // restoring "what was archived" leaves the feed that was archived before untouched
+    await restoreFeeds(result.archivedIds);
+    expect((await reload(already.id)).archivedAt).not.toBeNull();
+    expect((await reload(quiet.id)).archivedAt).toBeNull();
+
+    const manual = await archiveFeeds([quiet.id, already.id]);
+    expect(manual.archivedIds).toEqual([quiet.id]);
+    expect(manual.archived).toBe(1);
+  });
+
+  it("addFeed on the URL of an archived feed restores it instead of failing on the unique URL (no fetch)", async () => {
+    const f = await makeFeed(alice, { name: "back again", url: "https://again.example/feed.xml", archivedAt: daysAgo(4) });
+    const result = await addFeed("https://again.example/feed.xml");
+    expect(result).toMatchObject({ success: true, restored: true, feed: { id: f.id } });
+    expect((await reload(f.id)).archivedAt).toBeNull();
+    expect(h.syncedUrls).toEqual([]); // nothing was fetched
+    expect(await h.db.feed.count({ where: { userId: alice, url: "https://again.example/feed.xml" } })).toBe(1);
+  });
+
   it("rejects malformed input", async () => {
     await expect(archiveFeeds("nope" as unknown as string[])).rejects.toThrow("Invalid input");
     await expect(archiveInactiveFeeds({} as unknown as string[])).rejects.toThrow("Invalid input");
     await expect(restoreFeeds(null as unknown as string[])).rejects.toThrow("Invalid input");
-    expect(await archiveFeeds([])).toEqual({ archived: 0 });
+    expect(await archiveFeeds([])).toEqual({ archived: 0, archivedIds: [] });
   });
 
   it("never touches an article: updatedAt, read state and content stay as they were", async () => {
@@ -284,7 +315,7 @@ describe("archive / restore", () => {
     await h.db.feed.update({ where: { id: failing.id }, data: { consecutiveFailureCount: 3 } });
     await h.db.feed.update({ where: { id: muted.id }, data: { autoMuted: true } });
 
-    expect(await archiveInactiveFeeds(shown)).toEqual({ archived: 1, skipped: shown.length - 1 });
+    expect(await archiveInactiveFeeds(shown)).toMatchObject({ archived: 1, skipped: shown.length - 1, archivedIds: [quiet.id] });
     const archived = (await h.db.feed.findMany({ where: { archivedAt: { not: null } } })).map((f) => f.name);
     expect(archived).toEqual(["quiet"]);
   });

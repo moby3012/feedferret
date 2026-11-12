@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { restoreArchivedFeedByUrl } from "@/lib/archived-feed";
 import { assertComplete, markWhereRead, setReadStateByIds } from "@/server/articles/bulk-read";
 import { userStateGroups, writeUserState, type UserStatePatch } from "@/server/articles/user-state";
 import { apiError, clampInt, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
@@ -277,6 +278,9 @@ async function createFeedForUser(
   const connectorError = await connectorFeedUrlError(url);
   if (connectorError) throw new Error(connectorError);
   url = await stripConnectorSecrets(url);
+  // An archived subscription to this URL is restored instead of a duplicate error.
+  const restored = await restoreArchivedFeedByUrl(userId, url);
+  if (restored) return clientFeed({ ...restored, restored: true });
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId } });
   const name = (typeof opts.name === "string" && opts.name.trim()) || remoteFeed?.title || opts.fallbackName || url;
@@ -359,6 +363,11 @@ async function callTool(user: ApiUser, name: string, args: any) {
       if (typeof args.query === "string") {
         const advancedWhere = await buildAdvancedSearchWhere(user.id, args.query);
         if (Object.keys(advancedWhere).length) where.AND = [...(where.AND || []), advancedWhere];
+      }
+      // Aggregate scopes (everything / a category) skip archived feeds like the reader's "All articles"; a feed, a
+      // label or a search addresses articles explicitly and keeps them.
+      if (typeof args.feedId !== "string" && typeof args.labelId !== "string" && !(typeof args.query === "string" && args.query.trim())) {
+        where.feed = { ...(where.feed || {}), archivedAt: null };
       }
       const now = new Date();
       // Partial write → tool error with counts (PartialBulkWriteError); re-running is idempotent.
@@ -661,9 +670,9 @@ async function callTool(user: ApiUser, name: string, args: any) {
     }
     case "feedferret.get_stats": {
       const [totalFeeds, totalArticles, unreadArticles, starredArticles, readLaterArticles, totalLabels, totalCategories, totalSavedSearches, totalKeywordAlerts, totalAutoReadRules, unreadNotifications] = await db.$transaction([
-        db.feed.count({ where: { userId: user.id } }),
+        db.feed.count({ where: { userId: user.id, archivedAt: null } }),
         db.article.count({ where: { userId: user.id } }),
-        db.article.count({ where: { userId: user.id, isRead: false } }),
+        db.article.count({ where: { userId: user.id, isRead: false, feed: { archivedAt: null } } }),
         db.article.count({ where: { userId: user.id, isStarred: true } }),
         db.article.count({ where: { userId: user.id, isReadLater: true } }),
         db.label.count({ where: { userId: user.id } }),

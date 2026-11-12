@@ -317,7 +317,7 @@ test("an archived feed's articles stay reachable through its own view", async ({
   await page.goto("/manage-feeds");
   await app.activate(page.getByTestId("feed-filter-archived"));
   const row = page.getByTestId("archived-feed").filter({ hasText: "Quiet but readable" });
-  await expect(row).toContainText("1 article kept");
+  await expect(row).toContainText("1 article stored");
   await app.activate(row.getByTestId("archived-open"));
   await expect(page).toHaveURL(new RegExp(`feed=${quiet.id}`));
   await expect(page.getByText("Quiet but readable last post").first()).toBeVisible();

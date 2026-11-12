@@ -124,7 +124,7 @@ Response:
 
 ### `GET /api/v1/articles`
 
-Searches or lists articles.
+Searches or lists articles. Like the in-app search, this endpoint **includes articles of archived feeds** (they stay, subject to the usual retention rules); filter by `feedId` or query to narrow it down.
 
 Query parameters:
 
@@ -231,7 +231,7 @@ Error responses use the uniform error format:
 
 ### `POST /api/v1/articles/mark-all-read`
 
-Marks matching unread articles as read.
+Marks matching unread articles as read. Without `feedId`, `labelId` or `query` (everything, or a `categoryId`) **archived feeds are skipped**, matching the reader's "All articles"; naming a feed, a label or a search addresses those articles explicitly.
 
 Body filters can be combined:
 
@@ -561,7 +561,7 @@ Enables/disables public RSS/web sharing of the search.
 
 ### `GET /api/v1/opml`
 
-Exports all feeds and categories as OPML/XML.
+Exports all feeds and categories as OPML/XML. Archived feeds are included (a backup keeps everything) but carry no archive marker, so importing the file makes them active subscriptions again; archive them once more afterwards if needed. (GReader's `subscription/export` is a subscription list and omits archived feeds.)
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
@@ -875,7 +875,7 @@ Marks a single notification as read.
 
 ### `GET /api/v1/stats`
 
-Returns aggregate values: feeds, articles, unread, starred, read later, labels, categories, saved searches, alerts, rules, notifications.
+Returns aggregate values: feeds, articles, unread, starred, read later, labels, categories, saved searches, alerts, rules, notifications. `totalFeeds` and `unreadArticles` exclude archived feeds; `totalArticles` (like `/articles`) still counts their stored articles.
 
 Response:
 

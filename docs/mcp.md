@@ -179,7 +179,7 @@ Listet Feeds inkl. Kategorie, Unread Count und der **vollständigen Feed-Konfigu
 (Fetch-/HTTP-Optionen, Full-Text-/Feed-Intelligence-Einstellungen, Reader-/Anzeige-Overrides,
 Health-Status). Das Auth-Passwort wird nie zurückgegeben.
 
-Archivierte Feeds (Sync gestoppt, Artikel bleiben) sind standardmäßig ausgeblendet; Argument
+Archivierte Feeds (Sync gestoppt, Artikel bleiben im Rahmen der üblichen Aufbewahrung erhalten) sind standardmäßig ausgeblendet; Argument
 `archived`: `exclude` (Standard), `only` oder `include`.
 
 ```json
@@ -239,6 +239,8 @@ Listet Labels.
 
 Markiert passende Artikel als gelesen. Vorsichtig verwenden.
 
+Ohne `feedId`, `labelId` oder `query` (alles bzw. eine `categoryId`) werden Artikel archivierter Feeds übersprungen, wie in der Ansicht „Alle Artikel“.
+
 ```json
 { "query": "is:unread after:30d" }
 ```
@@ -262,7 +264,7 @@ Unterstützte Felder:
 - **Metadaten/Zeitplan:** `name`, `icon`, `categoryId`, `priority`, `updateFrequency`, `retentionDays`, `keepMinArticles`
 - **Fetch/HTTP:** `customUserAgent`, `fetchTimeoutSecs`, `sslVerify`, `maxSizeKb`, `authType`, `authUsername`, `authPassword` (write-only)
 - **Full-Text (Feed Intelligence):** `fullTextMode` (`off`/`auto`/`selector`/`ai`), `fullTextSelector`, `fullTextRemoveSelectors`, `fullTextConditions`, `autoFetchFullText`, `defaultContentFormat` (`html`/`markdown`)
-- **Archiv:** `archived` (`true` archiviert, `false` stellt wieder her; archivierte Feeds werden nicht mehr synchronisiert und verschwinden aus Reader und Abo-Listen, ihre Artikel bleiben)
+- **Archiv:** `archived` (`true` archiviert, `false` stellt wieder her; archivierte Feeds werden nicht mehr synchronisiert und verschwinden aus Reader und Abo-Listen, ihre Artikel bleiben im Rahmen der üblichen Aufbewahrung erhalten)
 - **Content-Filter:** `filtersActionRead` (durch Zeilenumbrüche getrennte Stichwörter; passende neue Artikel werden beim Abruf als gelesen markiert)
 - **Reader-/Anzeige-Overrides (nullable, `null` = User-Default erben):** `hideArticleImage`, `hideFromAllFeeds`, `readerFontSizeOverride`, `readerWidthOverride`, `openOriginalOverride`
 - **Muting:** `autoMuted`
@@ -452,7 +454,7 @@ Listet Benachrichtigungen, neueste zuerst.
 
 ### `feedferret.get_stats`
 
-Gibt aggregierte Nutzungsstatistiken zurück.
+Gibt aggregierte Nutzungsstatistiken zurück. `totalFeeds` und `unreadArticles` ignorieren archivierte Feeds; `totalArticles` zählt deren erhaltene Artikel weiter mit.
 
 ```json
 {}

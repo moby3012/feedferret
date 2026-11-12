@@ -977,7 +977,8 @@
       "ai-failed": "Die KI-Anfrage ist fehlgeschlagen. Prüfe die KI-Einstellungen und versuche es erneut.",
       "page-tls-error": "Zertifikatsfehler: Die sichere Verbindung (HTTPS) zu dieser Website ist fehlgeschlagen. Aus Sicherheitsgründen wechseln wir nicht automatisch auf unverschlüsseltes http – wenn du der Seite vertraust, gib die Adresse mit http:// ein."
     },
-    "notAFeedHint": "Diese Adresse ist eine Webseite, kein Feed. Darauf verlinkte Feeds:"
+    "notAFeedHint": "Diese Adresse ist eine Webseite, kein Feed. Darauf verlinkte Feeds:",
+    "feedRestoredFromArchive": "„{name}“ war archiviert und ist wieder abonniert."
   },
   "articleList": {
     "newItems": "{count} neu",
@@ -1203,7 +1204,7 @@
       "archivedEmpty": "Keine archivierten Feeds",
       "archivedEmptyDescription": "Archiviere Feeds unter Defekte Feeds → Inaktiv. Archivierte Feeds werden nicht mehr synchronisiert, behalten aber ihre Artikel.",
       "archivedOn": "Archiviert am {date}",
-      "archivedArticles": "{count, plural, one {# Artikel} other {# Artikel}} erhalten",
+      "archivedArticles": "{count, plural, one {# Artikel} other {# Artikel}} gespeichert",
       "restore": "Wiederherstellen",
       "restored": "„{name}“ wiederhergestellt.",
       "restoreFailed": "Der Feed konnte nicht wiederhergestellt werden.",
@@ -2632,7 +2633,7 @@
       "done": "„{name}“ archiviert.",
       "undo": "Rückgängig",
       "failed": "Der Feed konnte nicht archiviert werden.",
-      "hint": "Beendet die Synchronisierung und blendet den Feed in Seitenleiste und Ungelesen-Zählern aus. Die Artikel bleiben erhalten; du kannst ihn jederzeit wiederherstellen."
+      "hint": "Beendet die Synchronisierung und blendet den Feed in Seitenleiste und Ungelesen-Zählern aus. Die Artikel bleiben erhalten (die üblichen Aufbewahrungsregeln gelten weiter); du kannst ihn jederzeit wiederherstellen."
     },
     "inactive": {
       "title": "Inaktive Feeds",
@@ -2648,7 +2649,7 @@
       "emptyDescription": "Jeder funktionierende Feed hat in den letzten {days, plural, one {# Tag} other {# Tagen}} etwas veröffentlicht.",
       "archiveAll": "Alle inaktiven archivieren ({count})",
       "archiveAllTitle": "{count, plural, one {# Feed} other {# Feeds}} archivieren?",
-      "archiveAllDescription": "Diese Feeds haben seit mehr als {days, plural, one {# Tag} other {# Tagen}} nichts veröffentlicht. Sie werden nicht mehr synchronisiert und verschwinden aus Seitenleiste und Ungelesen-Zählern. Ihre Artikel bleiben erhalten und durchsuchbar. Stelle sie jederzeit unter Feeds verwalten → Archiviert wieder her.",
+      "archiveAllDescription": "Diese Feeds haben seit mehr als {days, plural, one {# Tag} other {# Tagen}} nichts veröffentlicht. Sie werden nicht mehr synchronisiert und verschwinden aus Seitenleiste und Ungelesen-Zählern. Ihre Artikel bleiben durchsuchbar (die üblichen Aufbewahrungsregeln gelten weiter). Stelle sie jederzeit unter Feeds verwalten → Archiviert wieder her.",
       "archiveAllConfirm": "{count, plural, one {# Feed} other {# Feeds}} archivieren",
       "archiveAllDone": "{count, plural, one {# Feed archiviert} other {# Feeds archiviert}}.",
       "archiveAllFailed": "Die Feeds konnten nicht archiviert werden."
