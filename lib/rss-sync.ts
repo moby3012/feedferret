@@ -21,7 +21,8 @@ import { filterByFullTextConditions } from "./full-text-conditions";
 import { EscalationBudgetExhaustedError, fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
 import { RecentFullTextIndex, RECENT_FULL_TEXT_LIMIT, baselinesDiffer } from "./full-text-duplicates";
 import { decideFullText, leadCoverage } from "./extraction-quality";
-import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
+import { adaptiveInterval, publicationCadence, dueFeedWhere } from "./adaptive-refresh";
+import { HostDeferredError, withPoliteHost, recordHostFailure, classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
 import {
     FULL_TEXT_STATE_SELECT,
     MAX_FULL_TEXT_FETCHES_PER_SYNC,
@@ -595,6 +596,7 @@ export interface SyncFeedOptions {
      * articles would only evaluate (and fire) the same rules twice.
      */
     deferAutoReadRules?: boolean;
+    background?: boolean;
     /** Google News link resolution limits (tests / interactive add). */
     googleNews?: ResolveOptions;
 }
@@ -605,7 +607,7 @@ export interface SyncFeedOptions {
 export async function syncFeed(userId: string, feedId: string, options: SyncFeedOptions = {}) {
     const feed = await db.feed.findUnique({
         where: { id: feedId, userId },
-        include: { user: { select: { autoMuteFailingFeedsAfter: true } } },
+        include: { user: { select: { autoMuteFailingFeedsAfter: true, defaultUpdateFrequency: true } }, category: { include: { parent: true } } },
     });
 
     if (!feed) throw new Error("Feed not found");
@@ -620,7 +622,18 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
     const redact = (text: string) => redactConnectorTextWith(secretRules, text);
 
     try {
-        const remoteFeed = await fetchFeedArticles(feed);
+        const remoteFeed = options.background
+            ? await withPoliteHost(feed.url, () => fetchFeedArticles(feed))
+            : await fetchFeedArticles(feed);
+        const scheduleNext = async () => {
+            const items = await db.article.findMany({
+                where: { feedId: feed.id, publishedAt: { lte: new Date() } },
+                orderBy: { publishedAt: "desc" }, take: 40,
+                select: { publishedAt: true, createdAt: true },
+            });
+            const minutes = adaptiveInterval(items, feed.updateFrequency, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency));
+            return { nextSyncAt: new Date(Date.now() + minutes * 60_000), cadenceMinutes: publicationCadence(items) };
+        };
         // G1: Google News keyword feeds — resolve redirect links to publisher
         // URLs (bounded, cached; falls back to the Google link).
         const isGoogleNews = isGoogleNewsFeedUrl(feed.url);
@@ -637,6 +650,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             await db.feed.update({
                 where: { id: feed.id },
                 data: {
+                    ...await scheduleNext(),
                     lastFetchedAt: new Date(),
                     lastStatus: "ok",
                     lastError: null,
@@ -763,7 +777,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
         await db.feed.update({
             where: { id: feed.id },
-            data: feedPatch,
+            data: { ...feedPatch, ...await scheduleNext() },
         });
 
         // Auto full-text extraction — only for new rows, rows whose upstream
@@ -820,6 +834,12 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
 
         return { success: true, count: articles.length, createdArticleIds };
     } catch (error) {
+        const status = classifyFetchFailure(error).status;
+        if (error instanceof HostDeferredError || status === 429 || status === 503 || status === 403) {
+            const waitMs = error instanceof HostDeferredError ? error.waitMs : recordHostFailure(feed.url, error);
+            await db.feed.update({ where: { id: feed.id }, data: { nextSyncAt: new Date(Date.now() + waitMs) } });
+            return { success: true, skipped: true, deferred: true, count: 0, createdArticleIds: [] };
+        }
         // A saturated (`busy`, incl. a background queue-wait deadline) or missing
         // (`unavailable`) HTML worker pool says nothing about the feed: no failure
         // streak / auto-mute, no lastFetchedAt bump — the next sync retries it.
@@ -855,6 +875,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
             where: { id: feed.id },
             data: {
                 lastFetchedAt: new Date(),
+                nextSyncAt: new Date(Date.now() + Math.max(15, computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency)) * 60_000),
                 lastStatus: "error",
                 lastError: redact(String(error)).slice(0, 1000),
                 consecutiveFailureCount: failureUpdate.consecutiveFailureCount,
@@ -1287,40 +1308,21 @@ export async function autoTagNewArticles(
  * user waiting on one page (manual full text, previews) is served first.
  * Single-feed syncs (add feed, "refresh this feed") stay interactive.
  */
-export function syncUserFeeds(userId: string) {
-    return runAsBackgroundHtmlWork(() => syncUserFeedsNow(userId));
+export function syncUserFeeds(userId: string, options: { background?: boolean } = {}) {
+    return runAsBackgroundHtmlWork(() => syncUserFeedsNow(userId, options.background ?? false));
 }
 
-async function syncUserFeedsNow(userId: string) {
+async function syncUserFeedsNow(userId: string, background: boolean) {
     await syncDynamicOpmlCategories(userId).catch((e) =>
         logger.error("[rss-sync] dynamic OPML sync failed:", e),
     );
 
-    const user = await db.user.findUnique({
-        where: { id: userId },
-        select: { defaultUpdateFrequency: true },
-    });
-    const userDefaultUpdateFrequency = user?.defaultUpdateFrequency ?? 60;
+
 
     const feeds = await db.feed.findMany({
         // Archived feeds are never fetched in the background (restore re-enables them).
-        where: { userId, archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
-        select: {
-            id: true,
-            userId: true,
-            url: true,
-            updateFrequency: true,
-            lastFetchedAt: true,
-            autoMuted: true,
-            consecutiveFailureCount: true,
-            category: {
-                select: {
-                    parentId: true,
-                    updateFrequency: true,
-                    parent: { select: { updateFrequency: true } },
-                },
-            },
-        },
+        where: background ? { userId, ...dueFeedWhere() } : { userId, archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
+        select: { id: true, userId: true, url: true, autoMuted: true },
     });
 
     // Results reach clients (sync action, API v1, MCP): no connector secrets.
@@ -1335,19 +1337,7 @@ async function syncUserFeedsNow(userId: string) {
             return { feed: feed.url, success: true, skipped: true, count: 0 };
         }
 
-        const effectiveUpdateFrequency = politeUpdateFrequency(
-            feed,
-            computeEffectiveUpdateFrequency(feed, userDefaultUpdateFrequency),
-        );
-        const now = new Date();
-        const lastSync = feed.lastFetchedAt || new Date(0);
-        const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
-
-        if (diffMinutes < effectiveUpdateFrequency) {
-            return { feed: feed.url, success: true, skipped: true, count: 0 };
-        }
-
-        const res = await syncFeed(feed.userId, feed.id, { deferAutoReadRules: true });
+        const res = await syncFeed(feed.userId, feed.id, { deferAutoReadRules: true, background });
         return { feed: feed.url, ...res };
     });
 
@@ -1375,44 +1365,15 @@ async function syncAllFeedsNow() {
     );
 
     const feeds = await db.feed.findMany({
-        where: { archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
-        select: {
-            id: true,
-            userId: true,
-            url: true,
-            updateFrequency: true,
-            lastFetchedAt: true,
-            autoMuted: true,
-            consecutiveFailureCount: true,
-            category: {
-                select: {
-                    parentId: true,
-                    updateFrequency: true,
-                    parent: { select: { updateFrequency: true } },
-                },
-            },
-            user: { select: { defaultUpdateFrequency: true } },
-        },
+        where: dueFeedWhere(),
+        orderBy: [{ nextSyncAt: "asc" }, { id: "asc" }],
+        select: { id: true, userId: true, url: true, autoMuted: true },
     });
 
-    // JS sorting keeps null-first ordering identical on SQLite and PostgreSQL.
-    feeds.sort((a, b) => (a.lastFetchedAt?.getTime() ?? -Infinity) - (b.lastFetchedAt?.getTime() ?? -Infinity) || a.id.localeCompare(b.id));
     const results = await mapWithConcurrency(feeds, getSyncConcurrency(), async (feed) => {
         // F6: skip auto-muted feeds — see the equivalent comment in
         // syncUserFeeds.
         if (feed.autoMuted) {
-            return { feed: feed.url, success: true, skipped: true, count: 0 };
-        }
-
-        const effectiveUpdateFrequency = politeUpdateFrequency(
-            feed,
-            computeEffectiveUpdateFrequency(feed, feed.user.defaultUpdateFrequency),
-        );
-        const now = new Date();
-        const lastSync = feed.lastFetchedAt || new Date(0);
-        const diffMinutes = (now.getTime() - lastSync.getTime()) / (1000 * 60);
-
-        if (diffMinutes < effectiveUpdateFrequency) {
             return { feed: feed.url, success: true, skipped: true, count: 0 };
         }
 
@@ -1421,7 +1382,7 @@ async function syncAllFeedsNow() {
             return { feed: feed.url, success: true, skipped: true, deferred: true, count: 0 };
         }
 
-        const res = await syncFeed(feed.userId, feed.id);
+        const res = await syncFeed(feed.userId, feed.id, { background: true });
         return { feed: feed.url, ...res };
     });
 

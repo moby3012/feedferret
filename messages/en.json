@@ -1579,7 +1579,11 @@
     "fetch": {
       "updateInterval": "Update interval (minutes)",
       "globalDefault": "Global default",
-      "overrideSync": "Override global sync interval for this feed.",
+      "automatic": "Automatic",
+"cadence": "Automatic (avg. {count} posts/day)",
+"learning": "Automatic (learning publication cadence)",
+"nextSync": "Next fetch around {time}",
+"overrideSync": "Empty = automatic; inherited intervals are a minimum. Enter minutes to set a fixed interval for this feed.",
       "customUserAgent": "Custom User-Agent",
       "userAgentDefault": "FeedFerret/1.0 (default)",
       "timeout": "Timeout (seconds)",

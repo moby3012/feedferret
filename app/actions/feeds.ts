@@ -844,6 +844,7 @@ export async function updateFeed(feedId: string, data: {
         where: { id: feedId, userId: session.user.id },
         data: {
             ...allowed,
+            ...(data.updateFrequency !== undefined || data.categoryId !== undefined || data.autoMuted === false ? { nextSyncAt: null } : {}),
             ...(data.readerFontSizeOverride !== undefined ? {
                 readerFontSizeOverride: data.readerFontSizeOverride && READER_FONT_SIZES.has(data.readerFontSizeOverride)
                     ? data.readerFontSizeOverride

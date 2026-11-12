@@ -96,11 +96,11 @@ export function classifyFetchFailure(error: unknown): { kind: FetchFailureKind; 
 export function recordHostFailure(url: string, error: unknown, now = Date.now()): number {
     const host = hostOf(url);
     if (!host) return 0;
-    const { kind, retryAfterMs } = classifyFetchFailure(error);
+    const { kind, status, retryAfterMs } = classifyFetchFailure(error);
     if (kind === "permanent") return 0;
     const prior = hosts.get(host);
     const failures = (prior?.failures ?? 0) + 1;
-    const base = kind === "rate_limited" ? BASE_RATE_LIMIT_MS : kind === "blocked" ? BASE_BLOCKED_MS : BASE_NETWORK_MS;
+    const base = status === 403 ? 15 * 60 * 1000 : kind === "rate_limited" ? BASE_RATE_LIMIT_MS : kind === "blocked" ? BASE_BLOCKED_MS : BASE_NETWORK_MS;
     // Only our own exponential guess is capped at 6 h; a server's explicit
     // Retry-After is honoured as sent (sanity-capped at 7 days).
     const exponential = Math.min(MAX_BACKOFF_MS, base * 2 ** (failures - 1));
@@ -108,8 +108,8 @@ export function recordHostFailure(url: string, error: unknown, now = Date.now())
     const wait = Math.max(exponential, retryAfter);
     prune(now);
     hosts.delete(host); // re-insert so Map order approximates recency for pruning
-    hosts.set(host, { failures, until: now + wait, rateLimited: kind === "rate_limited" || retryAfterMs !== null });
-    return wait;
+    hosts.set(host, { failures, until: Math.max(prior?.until ?? 0, now + wait), rateLimited: kind === "rate_limited" || retryAfterMs !== null });
+    return Math.max(wait, (prior?.until ?? 0) - now);
 }
 
 /**
@@ -141,4 +141,48 @@ export function recordHostRateLimit(url: string, resetAt: number, now = Date.now
     if (!host || !Number.isFinite(resetAt) || resetAt <= now) return;
     prune(now);
     hosts.set(host, { failures: 0, until: Math.max(hosts.get(host)?.until ?? 0, Math.min(resetAt, now + MAX_RETRY_AFTER_MS)), rateLimited: true });
+}
+
+// Single-process gate shared by every user's unattended feed fetches. Different hosts proceed in parallel.
+const lanes = new Map<string, { tail: Promise<void>; next: number }>();
+export class HostDeferredError extends Error {
+    constructor(readonly waitMs: number) { super("Host fetch deferred"); }
+}
+export async function withPoliteHost<T>(url: string, task: () => Promise<T>): Promise<T> {
+    const host = hostOf(url);
+    if (!host) return task();
+    let lane = lanes.get(host);
+    if (!lane) { lane = { tail: Promise.resolve(), next: 0 }; lanes.set(host, lane); }
+    const prior = lane.tail;
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => { release = resolve; });
+    lane.tail = current;
+    await prior;
+    try {
+        let backoff = hostBackoffRemainingMs(url);
+        if (backoff) throw new HostDeferredError(backoff);
+        const delay = Math.max(0, lane.next - Date.now());
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+        backoff = hostBackoffRemainingMs(url);
+        if (backoff) throw new HostDeferredError(backoff);
+        const configured = Number(process.env.FEED_HOST_SPACING_MS);
+        lane.next = Date.now() + (Number.isFinite(configured) && configured >= 0 ? configured : 2000);
+        try {
+            const result = await task();
+            // A successful API response may itself have exhausted its quota.
+            if (!hostBackoffRemainingMs(url)) recordHostSuccess(url);
+            return result;
+        }
+        catch (error) {
+            const { status } = classifyFetchFailure(error);
+            if (status === 429 || status === 503 || status === 403) {
+                throw new HostDeferredError(recordHostFailure(url, error));
+            }
+            throw error;
+        }
+    } finally {
+        release();
+        // Keep spacing after completion, then release idle host state (bounded by active work).
+        setTimeout(() => { if (lane.tail === current) lanes.delete(host); }, Math.max(0, lane.next - Date.now())).unref?.();
+    }
 }

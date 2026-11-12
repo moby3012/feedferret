@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     try {
         isSyncing = true;
         lastSyncTime = now;
-        const results = await syncUserFeeds(session.user.id);
+        const results = await syncUserFeeds(session.user.id, { background: true });
         const synced = results.filter(r => r.success && !r.skipped).length;
 
         return NextResponse.json({

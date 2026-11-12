@@ -207,7 +207,7 @@ export async function unmuteBrokenFeed(feedId: string): Promise<{ success: true 
     await ownedFeed(userId, feedId);
     await db.feed.update({
         where: { id: feedId, userId },
-        data: { ...applyManualUnmute(), failingSince: null },
+        data: { ...applyManualUnmute(), failingSince: null, nextSyncAt: null },
     });
     revalidatePath("/");
     return { success: true };
@@ -479,7 +479,7 @@ export async function restoreFeeds(feedIds: string[]): Promise<{ restored: numbe
     if (ids.length === 0) return { restored: 0 };
     const { count } = await db.feed.updateMany({
         where: { id: { in: ids }, userId, archivedAt: { not: null } },
-        data: { archivedAt: null },
+        data: { archivedAt: null, nextSyncAt: null },
     });
     revalidatePath("/");
     return { restored: count };

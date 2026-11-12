@@ -42,7 +42,7 @@ import {
 } from "../../app/actions/broken-feeds";
 import { updateGlobalSettings } from "../../app/actions/settings";
 import { addFeed } from "../../app/actions/feeds";
-import { syncUserFeeds } from "../../lib/rss-sync";
+import { syncAllFeeds, syncUserFeeds } from "../../lib/rss-sync";
 import { getCounts, loadFeeds, loadArchivedFeeds, loadReadingPreferences } from "../../server/bootstrap";
 import { buildViewScope } from "../../server/articles/view-scope";
 
@@ -350,12 +350,12 @@ describe("archived feeds leave the reader but keep their articles", () => {
     const live = await makeFeed(alice, { name: "live", lastFetchedAt: daysAgo(2) });
     const archived = await makeFeed(alice, { name: "archived", lastFetchedAt: daysAgo(2), archivedAt: daysAgo(1) });
 
-    await syncUserFeeds(alice);
+    await syncAllFeeds();
     expect(h.syncedUrls).toEqual([live.url]);
 
     h.syncedUrls.length = 0;
     await restoreFeeds([archived.id]);
-    await syncUserFeeds(alice);
+    await syncAllFeeds();
     // `live` was just synced and is not due again; the restored feed is picked up on the next pass.
     expect(h.syncedUrls).toEqual([archived.url]);
   });

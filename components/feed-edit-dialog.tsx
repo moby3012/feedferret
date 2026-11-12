@@ -52,6 +52,8 @@ interface FeedEditDialogProps {
     id: string;
     name: string;
     url: string;
+    nextSyncAt?: Date | string | null;
+    cadenceMinutes?: number | null;
     authType?: string | null;
     customUserAgent?: string | null;
     fetchTimeoutSecs?: number | null;
@@ -671,10 +673,14 @@ export function FeedEditDialog({ feed, open, onOpenChange }: FeedEditDialogProps
                   max={1440}
                   value={updateFrequency}
                   onChange={(e) => setUpdateFrequency(e.target.value)}
-                  placeholder={t("fetch.globalDefault")}
+                  placeholder={t("fetch.automatic")}
                   className="rounded-panel h-10 border-border/70 bg-background/70"
                 />
                 <p className="text-footnote text-muted-foreground">{t("fetch.overrideSync")}</p>
+                {!updateFrequency && <p className="text-footnote text-muted-foreground">{feed.cadenceMinutes
+                  ? t("fetch.cadence", { count: Math.round(1440 / feed.cadenceMinutes * 10) / 10 })
+                  : t("fetch.learning")}</p>}
+                {feed.nextSyncAt && <p className="text-footnote text-muted-foreground">{t("fetch.nextSync", { time: format.dateTime(new Date(feed.nextSyncAt), { dateStyle: "short", timeStyle: "short" }) })}</p>}
               </div>
 
               <div className="space-y-1.5">
