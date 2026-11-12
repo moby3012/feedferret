@@ -16,6 +16,7 @@ import type { AiProvider } from "@/lib/ai-summary";
 import { fetchViaHostedApiDetailed, type HostedFetchProvider } from "@/lib/hosted-fetch";
 import { loadReadingPreferences } from "@/server/bootstrap";
 import { isCountDisplay, type CountDisplay } from "@/lib/count-display";
+import { normalizeInactiveDays } from "@/lib/broken-feeds";
 import { pickFields } from "@/lib/pick-fields";
 import { verifyStepUp } from "@/lib/step-up";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
@@ -208,6 +209,7 @@ const GLOBAL_SETTINGS_TYPES = {
   hideEmptyLabels: "boolean",
   countDisplay: "string",
   autoMuteFailingFeedsAfter: "number",
+  inactiveFeedDays: "number",
 } as const;
 const GLOBAL_SETTINGS_FIELDS = Object.keys(GLOBAL_SETTINGS_TYPES) as (keyof typeof GLOBAL_SETTINGS_TYPES)[];
 
@@ -232,6 +234,7 @@ export async function updateGlobalSettings(data: {
   hideEmptyLabels?: boolean;
   countDisplay?: CountDisplay;
   autoMuteFailingFeedsAfter?: number;
+  inactiveFeedDays?: number;
 }) {
   const session = await requireUser();
 
@@ -252,6 +255,11 @@ export async function updateGlobalSettings(data: {
     // 0 = disabled/opt-out; otherwise clamp to a sane range.
     updateData.autoMuteFailingFeedsAfter =
       data.autoMuteFailingFeedsAfter <= 0 ? 0 : Math.min(1000, Math.round(data.autoMuteFailingFeedsAfter));
+  }
+
+  if (data.inactiveFeedDays !== undefined) {
+    // Threshold of the "inactive" group in Defekte Feeds; clamp to the supported range.
+    updateData.inactiveFeedDays = normalizeInactiveDays(data.inactiveFeedDays);
   }
 
   if (data.clusterReadMode !== undefined && data.clusterReadMode !== "story" && data.clusterReadMode !== "article") {

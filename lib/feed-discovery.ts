@@ -1,4 +1,5 @@
 import { canonicalApiSourceUrl, matchApiPlatform, parseApiSourceUrl } from "./feed-adapters/api-source-url";
+import { telegramChannel, fetchTelegram } from "./feed-adapters/telegram";
 import { fetchTextWithSsrfProtection, fetchWithSsrfProtection, isTrustedFeedFetchingAllowed } from "./ssrf";
 import { parseHttpLinkHeader } from "./http-link-header";
 import { hintForFetchError } from "./fetch-error-hint";
@@ -31,9 +32,11 @@ export type DiscoveredFeed = {
 
 export type FeedVia = { family: AdapterFamily | "rsshub"; name: string };
 
-export type DiscoveryHint = "needs-twitch" | "needs-rsshub" | "rate-limited" | "blocked" | "tls-error";
+export type DiscoveryHint = "needs-twitch" | "public-preview-unavailable" | "needs-rsshub" | "rate-limited" | "blocked" | "tls-error";
 
 export type DiscoveryResult = {
+  /** Actionable error for a recognized public platform whose preview is unavailable. */
+  error?: string;
   /** "topic" = the input was a plain phrase and `feeds` are search-engine feeds to pick from. */
   mode: "url" | "topic" | "empty";
   feeds: DiscoveredFeed[];
@@ -1136,6 +1139,20 @@ export async function discoverFeeds(input: string, options: DiscoverOptions = {}
 }
 
 async function discoverUrl(cleaned: string, url: URL, pageUrl: string, httpFallback: boolean, budget: DiscoveryBudget): Promise<DiscoveryResult> {
+  const channel = telegramChannel(pageUrl);
+  if (channel) {
+    try {
+      const feed = await fetchTelegram(channel, { signal: budget.signal, budget });
+      return { mode: "url", pageUrl, feeds: [{ url: `https://t.me/s/${channel}`, title: feed.title || channel,
+        type: "unknown", source: "resolver", platform: "telegram", kind: "posts", via: { family: "platform", name: "Telegram" } }] };
+    } catch (error) {
+      const radar = await resolveWithRadarRules(`https://t.me/${channel}`, budget);
+      if (radar.feeds.length) return { mode: "url", pageUrl, feeds: radar.feeds };
+      const transient = hintForFetchError(error) ?? (/^Fetch failed: (?:5\d\d|429)\b/.test(error instanceof Error ? error.message : "") ? "rate-limited" as const : undefined);
+      return { mode: "url", pageUrl, feeds: [], hint: transient ?? "public-preview-unavailable", error: error instanceof Error ? error.message : "Telegram preview unavailable",
+        ...(budget.stopReason ? { partial: budget.stopReason } : {}) };
+    }
+  }
   // Must a platform rule answer before the page is read (one-step lookups,
   // resolver feeds, registry platform adapters)? Otherwise the page fetch
   // starts right away, in parallel with the resolver, RSSHub radar and the

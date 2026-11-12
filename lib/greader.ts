@@ -266,7 +266,8 @@ export function buildStreamWhere(userId: string, streamId?: string | null, inclu
     const lt = new Date((Math.trunc(newestSec) + 1) * 1000);
     AND.push({ createdAt: { lt }, updatedAt: { lt } });
   }
-  return { userId, extId: { not: null }, feed: { extId: { not: null } }, AND };
+  // Archived feeds are not subscriptions anymore: none of their articles show up in any stream.
+  return { userId, extId: { not: null }, feed: { extId: { not: null }, archivedAt: null }, AND };
 }
 
 export function buildCursorWhere(continuation: GReaderContinuation, ascending = false) {
@@ -409,7 +410,7 @@ const READING_LIST_PRIORITIES = ["category", "main", "important"];
  */
 async function loadGReaderCounts(userId: string) {
   const [feeds, categories, labels, unreadByFeed, noExtId, anyNoExtId, newestByFeed, tagged] = await Promise.all([
-    db.feed.findMany({ where: { userId }, select: { id: true, extId: true, url: true, priority: true, categoryId: true } }),
+    db.feed.findMany({ where: { userId, archivedAt: null }, select: { id: true, extId: true, url: true, priority: true, categoryId: true } }),
     db.category.findMany({ where: { userId }, select: { id: true, name: true } }),
     db.label.findMany({ where: { userId }, select: { name: true } }),
     unreadCountsByFeed(userId),
@@ -428,6 +429,7 @@ async function loadGReaderCounts(userId: string) {
       WHERE al."userId" = ${userId} AND l."userId" = ${userId}
         AND a."userId" = ${userId}
         AND f."priority" IN ('category', 'main', 'important')
+        AND f."archivedAt" IS NULL
         AND NOT (f."priority" IN ('category', 'main', 'important')
           AND COALESCE(c."userId", '') = ${userId} AND COALESCE(c."name", '') = l."name"
           AND c."id" IS NOT NULL)

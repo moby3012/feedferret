@@ -736,6 +736,59 @@ export function insertBrokenFeed(
   };
 }
 
+/**
+ * A healthy feed (fetches fine, no failure streak) whose newest item is `lastItemDaysAgo` days old
+ * (null = it never delivered an item). `createdDaysAgo` backdates the feed itself.
+ */
+export function insertInactiveFeed(
+  userKey: string,
+  opts: { name: string; url: string; lastItemDaysAgo: number | null; createdDaysAgo?: number; archived?: boolean },
+): { id: string; cleanup: () => void } {
+  const { userId } = manifest().users[userKey];
+  const id = `e2e-inactive-${userKey}-${opts.name.replace(/\W+/g, "-")}-${Date.now()}`;
+  const db = open();
+  try {
+    const now = new Date();
+    const ago = (days: number) => sqliteIso(new Date(now.getTime() - days * 86_400_000));
+    db.prepare(
+      `INSERT INTO "Feed" (id, url, name, userId, createdAt, updatedAt, lastStatus, lastFetchedAt, consecutiveFailureCount, archivedAt)
+       VALUES (?, ?, ?, ?, ?, ?, 'success', ?, 0, ?)`,
+    ).run(id, opts.url, opts.name, userId, ago(opts.createdDaysAgo ?? 900), sqliteIso(now), sqliteIso(now), opts.archived ? sqliteIso(now) : null);
+    if (opts.lastItemDaysAgo != null) {
+      const at = ago(opts.lastItemDaysAgo);
+      db.prepare(
+        `INSERT INTO "Article" (id, feedId, userId, title, link, content, excerpt, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, '<p>old</p>', 'old', ?, ?, ?)`,
+      ).run(`${id}-a1`, id, userId, `${opts.name} last post`, `https://inactive.e2e.test/${id}`, at, at, at);
+    }
+  } finally {
+    db.close();
+  }
+  return {
+    id,
+    cleanup: () => {
+      const c = open();
+      try {
+        c.prepare(`DELETE FROM "Article" WHERE feedId = ?`).run(id);
+        c.prepare(`DELETE FROM "Feed" WHERE id = ?`).run(id);
+      } finally {
+        c.close();
+      }
+    },
+  };
+}
+
+/** What the server persisted about a feed's archive state, plus its (untouched) articles. */
+export function feedArchiveState(feedId: string): { exists: boolean; archived: boolean; articleCount: number; articlesUpdatedAt: string[] } {
+  const db = open();
+  try {
+    const feed = db.prepare(`SELECT archivedAt FROM "Feed" WHERE id = ?`).get(feedId) as { archivedAt: string | null } | undefined;
+    const articles = db.prepare(`SELECT updatedAt FROM "Article" WHERE feedId = ? ORDER BY id`).all(feedId) as { updatedAt: string }[];
+    return { exists: !!feed, archived: !!feed?.archivedAt, articleCount: articles.length, articlesUpdatedAt: articles.map((a) => String(a.updatedAt)) };
+  } finally {
+    db.close();
+  }
+}
+
 export function brokenFeedState(feedId: string): { exists: boolean; url: string; autoMuted: boolean; consecutiveFailureCount: number } {
   const db = open();
   try {

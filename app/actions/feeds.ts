@@ -44,6 +44,7 @@ import {
 } from "@/lib/add-feed-input";
 import { httpFallbackUrl, isConnectError } from "@/lib/url-input";
 import { pickFields } from "@/lib/pick-fields";
+import { restoreArchivedFeedByUrl } from "@/lib/archived-feed";
 import { clampFeedLimits } from "@/lib/feed-limits";
 import { assertOwnedCategories, MAX_REORDER_ITEMS } from "@/lib/owned-categories";
 import { connectorFeedUrlError, redactArticleForClient, redactFeedForClient, redactFeedsForClient, stripConnectorSecrets } from "@/lib/connector-secrets";
@@ -291,6 +292,12 @@ export async function addFeed(rawUrl: string, categoryId?: string) {
     try {
         // Stored URLs never carry connector secrets; the fetcher adds them (N3).
         url = await stripConnectorSecrets(url);
+        // Already subscribed but archived: bring it back instead of tripping the unique (userId, url) constraint.
+        const restored = await restoreArchivedFeedByUrl(session.user.id, url);
+        if (restored) {
+            revalidatePath("/");
+            return { success: true as const, restored: true as const, feed: await redactFeedForClient(stripFeedSecrets(restored)) };
+        }
         let remoteFeed;
         try {
             remoteFeed = await fetchFeedArticles({ url });
@@ -316,7 +323,7 @@ export async function addFeed(rawUrl: string, categoryId?: string) {
 
         await syncFeed(session.user.id, feed.id);
         revalidatePath("/");
-        return { success: true as const, feed: await redactFeedForClient(stripFeedSecrets(feed)) };
+        return { success: true as const, restored: false as const, feed: await redactFeedForClient(stripFeedSecrets(feed)) };
     } catch (error) {
         logger.error("Failed to add feed:", error);
         // "Add directly" with a web page (not a feed): fall back to discovery
@@ -871,7 +878,8 @@ export async function getFeedHealth() {
     if (!session?.user?.id) throw new Error("Unauthorized");
 
     const feeds = await db.feed.findMany({
-        where: { userId: session.user.id },
+        // Archived feeds are not synced anymore: they have no health to report.
+        where: { userId: session.user.id, archivedAt: null },
         select: {
             ...FEED_CLIENT_SELECT,
             category: true,

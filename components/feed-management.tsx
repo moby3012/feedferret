@@ -104,6 +104,8 @@ import {
 } from "lucide-react";
 import { FeedEditDialog } from "@/components/feed-edit-dialog";
 import { BrokenFeeds } from "@/components/broken-feeds";
+import { ArchivedFeeds } from "@/components/archived-feeds";
+import { useArchivedFeeds } from "@/hooks/use-broken-feeds";
 import { countBrokenFeeds } from "@/lib/broken-feeds";
 import { toast } from "sonner";
 import {
@@ -818,6 +820,8 @@ export function FeedManagement({
   const setSavedSearchSharing = useSetSavedSearchSharing();
   const applyRetention = useApplyRetentionPolicies();
   const { data: feedHealth = [] } = useFeedHealth();
+  const [feedFilter, setFeedFilter] = useState<"active" | "archived">("active");
+  const { data: archivedFeeds = [] } = useArchivedFeeds();
   const brokenFeedCount = countBrokenFeeds(feeds as any[]);
   const { data: readingPreferences } = useReadingPreferences();
   const updateGlobalSettings = useUpdateGlobalSettings();
@@ -1098,8 +1102,17 @@ export function FeedManagement({
             >
               <ScrollArea className="h-full px-6 sm:px-8">
                 <div className="space-y-4 pb-8">
+                  <div className="ff-seg w-fit" role="group" aria-label={t("feeds.filterLabel")} data-size="md" data-testid="feed-filter">
+                    <button type="button" className="ff-seg-item focus-ring" aria-pressed={feedFilter === "active"} data-state={feedFilter === "active" ? "active" : "inactive"} onClick={() => setFeedFilter("active")} data-testid="feed-filter-active">
+                      {t("feeds.filterActive")}
+                    </button>
+                    <button type="button" className="ff-seg-item focus-ring" aria-pressed={feedFilter === "archived"} data-state={feedFilter === "archived" ? "active" : "inactive"} onClick={() => setFeedFilter("archived")} data-testid="feed-filter-archived">
+                      {t("feeds.filterArchived", { count: archivedFeeds.length })}
+                    </button>
+                  </div>
+                  {feedFilter === "archived" && <ArchivedFeeds />}
                   {/* Category groups */}
-                  {[
+                  {feedFilter === "active" && [
                     ...categories.map((cat: any) => ({
                       id: cat.id,
                       name: cat.name,
@@ -1222,7 +1235,7 @@ export function FeedManagement({
                       </div>
                     );
                   })}
-                  {feeds.length === 0 && (
+                  {feedFilter === "active" && feeds.length === 0 && (
                     <Empty className="my-4 border-0">
                       <EmptyMedia variant="icon"><Rss className="size-5" /></EmptyMedia>
                       <EmptyContent>

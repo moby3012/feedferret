@@ -124,7 +124,7 @@ Response:
 
 ### `GET /api/v1/articles`
 
-Searches or lists articles.
+Searches or lists articles. Like the in-app search, this endpoint **includes articles of archived feeds** (they stay, subject to the usual retention rules); filter by `feedId` or query to narrow it down.
 
 Query parameters:
 
@@ -231,7 +231,7 @@ Error responses use the uniform error format:
 
 ### `POST /api/v1/articles/mark-all-read`
 
-Marks matching unread articles as read.
+Marks matching unread articles as read. Without `feedId`, `labelId` or `query` (everything, or a `categoryId`) **archived feeds are skipped**, matching the reader's "All articles"; naming a feed, a label or a search addresses those articles explicitly.
 
 Body filters can be combined:
 
@@ -361,6 +361,12 @@ Feed object:
 Lists all feeds including category, health/status, unread count, and the full
 per-feed configuration shown above.
 
+**Archived feeds.** A feed can be archived (UI: Defekte Feeds → *Archivieren*): it stops syncing,
+disappears from the reader sidebar and unread counts, and keeps all of its articles. Every feed
+object carries `archived` (boolean) and `archivedAt` (ISO date or `null`). `GET /feeds` returns
+active feeds only by default; `?archived=only` lists just the archived ones, `?archived=include`
+both. `PATCH /feeds/{id}` accepts `"archived": true|false` to archive or restore.
+
 ### `POST /api/v1/feeds`
 
 Adds a feed and syncs it immediately by default.
@@ -458,6 +464,9 @@ Example — switch a feed to selector-based markdown extraction and mute it:
 }
 ```
 
+`archived` (boolean) archives (`true`) or restores (`false`) the feed; it is not a field of the
+configuration table above. Archiving does not touch any article.
+
 ### `DELETE /api/v1/feeds/{id}`
 
 Deletes a feed along with its articles.
@@ -552,7 +561,7 @@ Enables/disables public RSS/web sharing of the search.
 
 ### `GET /api/v1/opml`
 
-Exports all feeds and categories as OPML/XML.
+Exports all feeds and categories as OPML/XML. Archived feeds are included (a backup keeps everything) but carry no archive marker, so importing the file makes them active subscriptions again; archive them once more afterwards if needed. (GReader's `subscription/export` is a subscription list and omits archived feeds.)
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
@@ -866,7 +875,7 @@ Marks a single notification as read.
 
 ### `GET /api/v1/stats`
 
-Returns aggregate values: feeds, articles, unread, starred, read later, labels, categories, saved searches, alerts, rules, notifications.
+Returns aggregate values: feeds, articles, unread, starred, read later, labels, categories, saved searches, alerts, rules, notifications. `totalFeeds` and `unreadArticles` exclude archived feeds; `totalArticles` (like `/articles`) still counts their stored articles.
 
 Response:
 

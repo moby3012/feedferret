@@ -23,6 +23,7 @@ import { getSanitizer } from "@/lib/sanitize-html";
 import { parseOpmlInProcess } from "@/lib/opml-parse-core";
 import { extractCatalogOpmlEntries } from "@/lib/catalog-opml-core";
 import { renderMarkdownToHtmlInProcess } from "@/lib/markdown-render-core";
+import { parseTelegramPreview } from "@/lib/telegram-preview-core";
 import { htmlToMarkdown } from "@/lib/html-to-markdown";
 
 /**
@@ -38,6 +39,7 @@ function assertTestTasksEnabled() {
 }
 
 export const htmlTasks = {
+  telegram: parseTelegramPreview,
   /** Loads the parsers and the sanitizer's window (boot warm-up). */
   async warm(_input: null): Promise<true> {
     const DOMPurify = await getSanitizer();

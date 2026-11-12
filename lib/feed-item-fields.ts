@@ -33,6 +33,11 @@ export type FetchedFeedArticle = {
   categories?: string[];
   /** RSS `<source>` element text (publisher name on aggregators like Google News). */
   sourceName?: string | null;
+  /**
+   * Optional enrichment (e.g. Bluesky media) was unavailable this run: sync must
+   * keep the row it already has instead of replacing it with the plainer text.
+   */
+  keepStored?: true;
 };
 
 export type FetchedFeed = {
@@ -115,3 +120,9 @@ export function categoriesFrom(value: unknown) {
   return raw ? raw.split(",").map((item) => item.trim()).filter(Boolean) : [];
 }
 
+
+/** Enclosures deduped by href (first wins). */
+export function dedupeEnclosures<T extends { href: string }>(list: T[]): T[] {
+  const seen = new Set<string>();
+  return list.filter((entry) => (seen.has(entry.href) ? false : (seen.add(entry.href), true)));
+}

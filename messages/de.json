@@ -758,6 +758,7 @@
     "topicFeeds": "News- und Suchfeeds zu diesem Thema – such dir einen aus",
     "resolverNoResult": "Dazu wurde nichts gefunden. Probier die Adresse der Seite oder eine Feed-URL.",
     "hints": {
+      "publicPreviewUnavailable": "Dieser Kanal hat keine zugängliche öffentliche Web-Vorschau. Er ist möglicherweise privat oder existiert nicht mehr.",
       "needsRsshub": "Braucht RSSHub – unter Einstellungen › Server einrichten",
       "rateLimited": "Später erneut versuchen",
       "blocked": "Seite blockiert automatischen Abruf – probier stattdessen einen direkten Feed des Anbieters",
@@ -976,7 +977,8 @@
       "ai-failed": "Die KI-Anfrage ist fehlgeschlagen. Prüfe die KI-Einstellungen und versuche es erneut.",
       "page-tls-error": "Zertifikatsfehler: Die sichere Verbindung (HTTPS) zu dieser Website ist fehlgeschlagen. Aus Sicherheitsgründen wechseln wir nicht automatisch auf unverschlüsseltes http – wenn du der Seite vertraust, gib die Adresse mit http:// ein."
     },
-    "notAFeedHint": "Diese Adresse ist eine Webseite, kein Feed. Darauf verlinkte Feeds:"
+    "notAFeedHint": "Diese Adresse ist eine Webseite, kein Feed. Darauf verlinkte Feeds:",
+    "feedRestoredFromArchive": "„{name}“ war archiviert und ist wieder abonniert."
   },
   "articleList": {
     "newItems": "{count} neu",
@@ -1195,7 +1197,18 @@
       "categoryPlaceholder": "Kategorie",
       "settings": "Einstellungen",
       "delete": "Löschen",
-      "noFeedsInCategory": "Keine Feeds in dieser Kategorie."
+      "noFeedsInCategory": "Keine Feeds in dieser Kategorie.",
+      "filterActive": "Aktiv",
+      "filterArchived": "Archiviert ({count})",
+      "filterLabel": "Feed-Filter",
+      "archivedEmpty": "Keine archivierten Feeds",
+      "archivedEmptyDescription": "Archiviere Feeds unter Defekte Feeds → Inaktiv. Archivierte Feeds werden nicht mehr synchronisiert, behalten aber ihre Artikel.",
+      "archivedOn": "Archiviert am {date}",
+      "archivedArticles": "{count, plural, one {# Artikel} other {# Artikel}} gespeichert",
+      "restore": "Wiederherstellen",
+      "restored": "„{name}“ wiederhergestellt.",
+      "restoreFailed": "Der Feed konnte nicht wiederhergestellt werden.",
+      "openArticles": "Artikel öffnen"
     },
     "categories": {
       "newCategoryPlaceholder": "Neuer Kategoriename…",
@@ -2546,7 +2559,8 @@
       "repair": "Reparieren",
       "edit": "Bearbeiten",
       "unmute": "Stummschaltung aufheben",
-      "remove": "Entfernen"
+      "remove": "Entfernen",
+      "archive": "Archivieren"
     },
     "retest": {
       "recovered": "„{name}“ läuft wieder und ist reaktiviert.",
@@ -2599,6 +2613,46 @@
     "removeConfirm": "Feed entfernen",
     "removed": "„{name}“ entfernt.",
     "removeFailed": "Der Feed konnte nicht entfernt werden.",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "groups": {
+      "label": "Gruppen der Feed-Gesundheit",
+      "broken": "Kaputt",
+      "brokenCount": "Kaputt ({count})",
+      "inactive": "Inaktiv",
+      "inactiveCount": "Inaktiv ({count})"
+    },
+    "kinds": {
+      "gone": "Nicht mehr vorhanden",
+      "blocked": "Blockiert"
+    },
+    "kindHints": {
+      "blocked": "Die Seite weist diesen Server ab (Bot-Schutz oder Ratenlimit). Der Feed kann in einem anderen Netz funktionieren, liefert hier aber nichts Neues.",
+      "gone": "Die Adresse existiert nicht mehr. Suche mit „Reparieren“ nach der neuen Feed-Adresse oder entferne den Feed."
+    },
+    "archive": {
+      "done": "„{name}“ archiviert.",
+      "undo": "Rückgängig",
+      "failed": "Der Feed konnte nicht archiviert werden.",
+      "hint": "Beendet die Synchronisierung und blendet den Feed in Seitenleiste und Ungelesen-Zählern aus. Die Artikel bleiben erhalten (die üblichen Aufbewahrungsregeln gelten weiter); du kannst ihn jederzeit wiederherstellen."
+    },
+    "inactive": {
+      "title": "Inaktive Feeds",
+      "description": "Diese Feeds werden fehlerfrei abgerufen, haben aber seit mehr als {days, plural, one {# Tag} other {# Tagen}} nichts Neues veröffentlicht.",
+      "summary": "{count, plural, one {# inaktiver Feed} other {# inaktive Feeds}}",
+      "threshold": "Inaktiv nach",
+      "thresholdOption": "Nach {days, plural, one {# Tag} other {# Tagen}}",
+      "thresholdFailed": "Die Einstellung konnte nicht gespeichert werden.",
+      "lastItem": "Letzter Beitrag: {date} (vor {days, plural, one {# Tag} other {# Tagen}})",
+      "neverPublished": "Noch nie einen Beitrag veröffentlicht ({days, plural, one {# Tag} other {# Tage}} seit dem Hinzufügen)",
+      "articles": "{count, plural, one {# Artikel} other {# Artikel}} gespeichert",
+      "empty": "Keine inaktiven Feeds",
+      "emptyDescription": "Jeder funktionierende Feed hat in den letzten {days, plural, one {# Tag} other {# Tagen}} etwas veröffentlicht.",
+      "archiveAll": "Alle inaktiven archivieren ({count})",
+      "archiveAllTitle": "{count, plural, one {# Feed} other {# Feeds}} archivieren?",
+      "archiveAllDescription": "Diese Feeds haben seit mehr als {days, plural, one {# Tag} other {# Tagen}} nichts veröffentlicht. Sie werden nicht mehr synchronisiert und verschwinden aus Seitenleiste und Ungelesen-Zählern. Ihre Artikel bleiben durchsuchbar (die üblichen Aufbewahrungsregeln gelten weiter). Stelle sie jederzeit unter Feeds verwalten → Archiviert wieder her.",
+      "archiveAllConfirm": "{count, plural, one {# Feed} other {# Feeds}} archivieren",
+      "archiveAllDone": "{count, plural, one {# Feed archiviert} other {# Feeds archiviert}}.",
+      "archiveAllFailed": "Die Feeds konnten nicht archiviert werden."
+    }
   }
 }

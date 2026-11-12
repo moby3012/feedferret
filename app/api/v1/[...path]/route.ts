@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 import { assertSafeHttpOptionsProxy } from "@/lib/ssrf";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { restoreArchivedFeedByUrl } from "@/lib/archived-feed";
 import { markWhereRead, parseCutoffMs, setReadStateByIds, type BulkReadResult } from "@/server/articles/bulk-read";
 import { userStateGroups, userStateStatements, writeUserState, type UserStatePatch } from "@/server/articles/user-state";
 import { readPlainColumn, readPlainColumnOrNull } from "@/lib/secret-box";
@@ -94,6 +95,9 @@ function feedPayload(rawFeed: any, rules: Awaited<ReturnType<typeof getConnector
     lastError: feed.lastError,
     consecutiveFailureCount: feed.consecutiveFailureCount,
     autoMuted: feed.autoMuted,
+    // Archived feeds stop syncing and are left out of GET /feeds unless ?archived=only|include is given.
+    archived: Boolean(feed.archivedAt),
+    archivedAt: feed.archivedAt ?? null,
     customUserAgent: feed.customUserAgent,
     fetchTimeoutSecs: feed.fetchTimeoutSecs,
     sslVerify: feed.sslVerify,
@@ -295,6 +299,11 @@ async function markAllRead(user: ApiUser, request: Request) {
     const advancedWhere = await buildAdvancedSearchWhere(user.id, body.query);
     if (Object.keys(advancedWhere).length) where.AND = [...(where.AND || []), advancedWhere];
   }
+  // Aggregate scopes (everything / a category) skip archived feeds like the reader's "All articles" does; a feed,
+  // a label or a search addresses articles explicitly and keeps them.
+  if (typeof body.feedId !== "string" && typeof body.labelId !== "string" && !(typeof body.query === "string" && body.query.trim())) {
+    where.feed = { ...(where.feed || {}), archivedAt: null };
+  }
   // `before` (optional, epoch ms or ISO): arrival cutoff, like GReader `ts` / Fever `before`.
   const now = new Date();
   const before = typeof body.before === "number" ? body.before : typeof body.before === "string" ? Date.parse(body.before) : undefined;
@@ -316,9 +325,11 @@ function bulkReadResponse(result: BulkReadResult) {
   );
 }
 
-async function listFeeds(user: ApiUser) {
+async function listFeeds(user: ApiUser, request: Request) {
+  // `archived`: exclude (default) | only | include. Archived feeds did not exist for older clients, so the default list is unchanged for them.
+  const archived = new URL(request.url).searchParams.get("archived");
   const feeds = await db.feed.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, ...(archived === "only" ? { archivedAt: { not: null } } : archived === "include" ? {} : { archivedAt: null }) },
     include: { category: true, _count: { select: { articles: { where: { isRead: false } } } } },
     orderBy: [{ order: "asc" }, { name: "asc" }],
   });
@@ -342,6 +353,9 @@ async function createFeedFromUrl(
   const connectorError = await connectorFeedUrlError(url);
   if (connectorError) return apiError(connectorError, 400);
   url = await stripConnectorSecrets(url);
+  // An archived subscription to this URL is restored (200 + `restored: true`) instead of a duplicate error.
+  const restored = await restoreArchivedFeedByUrl(user.id, url);
+  if (restored) return NextResponse.json({ ...feedPayload(restored, await getConnectorSecretRules()), restored: true });
   const remoteFeed = await fetchFeedArticles({ url }).catch(() => null);
   const order = await db.feed.count({ where: { userId: user.id } });
   const feed = await db.feed.create({
@@ -511,8 +525,16 @@ async function patchFeed(user: ApiUser, feedId: string, request: Request) {
       return apiError(error instanceof Error ? error.message : "Invalid proxy", 422);
     }
   }
-  const result = await db.feed.updateMany({ where: { id: feedId, userId: user.id }, data });
-  if (!result.count) return apiError("Feed not found", 404);
+  if (typeof body.archived === "boolean") {
+    // Archive / restore. Archiving an already archived feed keeps its original archive date.
+    if (body.archived) await db.feed.updateMany({ where: { id: feedId, userId: user.id, archivedAt: null }, data: { archivedAt: new Date() } });
+    else data.archivedAt = null;
+  }
+  // An archive-only request leaves `data` empty (Prisma matches nothing then): existence is checked instead.
+  const matched = Object.keys(data).length
+    ? (await db.feed.updateMany({ where: { id: feedId, userId: user.id }, data })).count
+    : await db.feed.count({ where: { id: feedId, userId: user.id } });
+  if (!matched) return apiError("Feed not found", 404);
   const feed = await db.feed.findFirst({ where: { id: feedId, userId: user.id }, include: { category: true } });
   return NextResponse.json(feedPayload(feed, await getConnectorSecretRules()));
 }
@@ -887,9 +909,10 @@ async function getStats(user: ApiUser) {
     totalAutoReadRules,
     unreadNotifications,
   ] = await db.$transaction([
-    db.feed.count({ where: { userId: user.id } }),
+    // Archived feeds are not subscriptions: not counted as feeds, their unread articles are not "unread".
+    db.feed.count({ where: { userId: user.id, archivedAt: null } }),
     db.article.count({ where: { userId: user.id } }),
-    db.article.count({ where: { userId: user.id, isRead: false } }),
+    db.article.count({ where: { userId: user.id, isRead: false, feed: { archivedAt: null } } }),
     db.article.count({ where: { userId: user.id, isStarred: true } }),
     db.article.count({ where: { userId: user.id, isReadLater: true } }),
     db.label.count({ where: { userId: user.id } }),
@@ -943,7 +966,7 @@ function openApiSpec(request: Request) {
           },
         },
       },
-      "/api/v1/feeds": { get: { summary: "List feeds" }, post: { summary: "Add feed" } },
+      "/api/v1/feeds": { get: { summary: "List feeds (?archived=exclude|only|include; archived feeds are excluded by default)" }, post: { summary: "Add feed" } },
       "/api/v1/feeds/{id}": { get: { summary: "Get feed" }, patch: { summary: "Update feed" }, delete: { summary: "Delete feed" } },
       "/api/v1/feeds/{id}/sync": { post: { summary: "Sync one feed" } },
       "/api/v1/sync": { post: { summary: "Sync all feeds for the current user" } },
@@ -1021,7 +1044,7 @@ async function handle(request: Request, context: { params: Promise<{ path?: stri
       else if (method === "POST" && path.length === 3 && path[2] === "fetch-full-text") { const se = scopeError(user, "write"); if (se) res = se; else res = await fetchArticleFullText(user, path[1]); }
       else res = apiError("Not found", 404);
     } else if (path[0] === "feeds") {
-      if (method === "GET" && path.length === 1) res = await listFeeds(user);
+      if (method === "GET" && path.length === 1) res = await listFeeds(user, request);
       else if (method === "POST" && path.length === 1) { const se = scopeError(user, "write"); if (se) res = se; else res = await createFeed(user, request); }
       else if (method === "GET" && path.length === 2) res = await getFeed(user, path[1]);
       else if (method === "PATCH" && path.length === 2) { const se = scopeError(user, "write"); if (se) res = se; else res = await patchFeed(user, path[1], request); }

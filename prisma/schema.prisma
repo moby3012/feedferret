@@ -145,6 +145,9 @@ model User {
   newsletterQuotas    NewsletterQuota[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // "Defekte Feeds" → inactive group: a feed that still fetches fine but whose newest
+  // article is older than this many days counts as inactive (not broken).
+  inactiveFeedDays Int @default(180)
   @@index([digestEnabled])
   @@index([pushEnabled])
 }
@@ -347,6 +350,11 @@ model Feed {
   // and the last time a sync succeeded (null = never recorded).
   failingSince            DateTime?
   lastSuccessAt           DateTime?
+  // Archived feeds: stop syncing, vanish from the sidebar / unread counts / "All articles"
+  // and the API subscription lists, but keep every article (search + the feed's own view
+  // still work). Unlike `autoMuted` a successful sync never clears it; only an explicit
+  // restore does. null = active.
+  archivedAt              DateTime?
   // Conditional GET (HTTP caching): sent as If-None-Match / If-Modified-Since on the next fetch.
   etag              String?
   lastModifiedHeader String?
@@ -384,6 +392,7 @@ model Feed {
   @@unique([userId, url])
   @@index([userId])
   @@index([categoryId])
+  @@index([userId, archivedAt])
 }
 
 model Article {

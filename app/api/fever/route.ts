@@ -83,7 +83,7 @@ async function getGroups(userId: string) {
 async function getFeedsAndGroups(userId: string) {
   // Connector secrets (RSSHub key, changedetection token) never leave the server (N3).
   const feeds = await redactFeedsForClient(await db.feed.findMany({
-    where: { userId },
+    where: { userId, archivedAt: null },
     include: { category: true },
     orderBy: { name: "asc" },
   }));
@@ -136,7 +136,7 @@ async function getItems(
   if (groupIds?.length) where.AND = [{ feed: { userId, category: { userId, extId: { in: numericIds(groupIds.join(",")) } } } }];
 
   const articles = await db.article.findMany({
-    where: { AND: [where, { feed: { extId: { not: null } } }] },
+    where: { AND: [where, { feed: { extId: { not: null }, archivedAt: null } }] },
     orderBy: { extId: since ? "asc" : "desc" },
     take: 50,
     select: {
@@ -175,7 +175,7 @@ async function getItems(
 
 async function getUnreadIds(userId: string): Promise<string> {
   const articles = await db.article.findMany({
-    where: { userId, isRead: false },
+    where: { userId, isRead: false, feed: { archivedAt: null } },
     select: { extId: true },
     orderBy: { publishedAt: "desc" },
   });
@@ -184,7 +184,7 @@ async function getUnreadIds(userId: string): Promise<string> {
 
 async function getSavedIds(userId: string): Promise<string> {
   const articles = await db.article.findMany({
-    where: { userId, isStarred: true },
+    where: { userId, isStarred: true, feed: { archivedAt: null } },
     select: { extId: true },
     orderBy: { publishedAt: "desc" },
   });
@@ -221,7 +221,7 @@ async function handleMark(
       mark === "feed"
         ? { feed: { userId, extId: { in: numericIds(id || "") } } }
         : id?.trim() === "0"
-          ? {} // Special group ID 0 = all feeds
+          ? { feed: { archivedAt: null } } // Special group ID 0 = all (active) feeds
           : { feed: { userId, category: { userId, extId: { in: numericIds(id || "") } } } };
     // Fever has no partial-success answer: a partial write throws PartialBulkWriteError → 503 (retry is idempotent).
     assertComplete(await markWhereRead(userId, scope, { cutoff, now }));
@@ -327,7 +327,7 @@ async function handle(request: Request) {
     }
 
     if (params.has("favicons")) {
-      const feeds = await db.feed.findMany({ where: { userId: user.id }, select: { extId: true, icon: true } });
+      const feeds = await db.feed.findMany({ where: { userId: user.id, archivedAt: null }, select: { extId: true, icon: true } });
       result.favicons = feeds.filter((feed) => feed.extId).map((feed) => ({ id: decimalExternalId(feed.extId), data: feed.icon?.startsWith("data:") ? feed.icon : "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=" }));
     }
 

@@ -70,6 +70,8 @@ export interface ArticleSyncInput {
     publishedAt: Date;
     imageUrl?: string | null;
     enclosures?: string | null;
+    /** Optional enrichment missing this run: an existing row is left untouched (monotonic content). */
+    keepStored?: boolean;
     // List metadata (lib/article-kind.ts#computeArticleMeta). Optional so callers
     // that do not provide it leave the nullable columns for the backfill.
     kind?: string | null;
@@ -362,6 +364,10 @@ export async function upsertArticleBatch(
 
         const next = updatableFields(article);
         const linkChanged = existing.link !== next.link;
+        // Optional enrichment missing this run: the content-derived fields of the
+        // stored row are frozen (neither compared nor written). Everything else
+        // (link/title rewrites, full-text retries) proceeds as usual.
+        const keep = article.keepStored === true;
 
         // Full text (lib/full-text-store.ts): when `content` holds extracted full
         // text, the feed item lives in `feedContent` and upstream changes are
@@ -371,6 +377,7 @@ export async function upsertArticleBatch(
         let legacyFullText = false;
         if (
             !hasFullText &&
+            !keep &&
             options.fullTextActive &&
             existing.fullTextStatus === null &&
             existing.content !== next.content &&
@@ -382,22 +389,25 @@ export async function upsertArticleBatch(
             legacyFullText = true;
         }
         const baseline = hasFullText && !legacyFullText ? existing.feedContent! : existing.content;
-        const contentChanged = !legacyFullText && baseline !== next.content;
+        const contentChanged = !legacyFullText && !keep && baseline !== next.content;
 
         const otherChanged =
             existing.externalId !== next.externalId ||
             contentChanged ||
             // With stored full text the excerpt is derived from it, not the feed.
-            (!hasFullText && existing.excerpt !== next.excerpt) ||
+            (!hasFullText && !keep && existing.excerpt !== next.excerpt) ||
             existing.author !== next.author ||
             existing.publishedAt.getTime() !== next.publishedAt.getTime() ||
-            (existing.imageUrl ?? null) !== next.imageUrl ||
-            (existing.enclosures ?? null) !== next.enclosures ||
+            (!keep && (existing.imageUrl ?? null) !== next.imageUrl) ||
+            (!keep && (existing.enclosures ?? null) !== next.enclosures) ||
             existing.title !== next.title;
 
         // Fields an update writes: with stored full text the feed's content goes
         // to feedContent and content/excerpt/readMinutes stay the full text's.
         const writable: Record<string, unknown> = { ...next };
+        if (keep) {
+            for (const key of ["content", "excerpt", "imageUrl", "enclosures", "kind", "readMinutes", "mediaUrl", "mediaType", "mediaDurationSecs"]) delete writable[key];
+        }
         if (hasFullText) {
             delete writable.content;
             delete writable.excerpt;
@@ -731,6 +741,7 @@ export async function syncFeed(userId: string, feedId: string, options: SyncFeed
                 ...(item.publishedAt ? {} : { publishedAtSynthetic: true }),
                 imageUrl: item.imageUrl,
                 enclosures: item.enclosures?.length ? JSON.stringify(item.enclosures) : null,
+                ...(item.keepStored ? { keepStored: true } : {}),
                 ...meta,
                 ...computeHeuristicEnrichment({
                     title,
@@ -1292,7 +1303,8 @@ async function syncUserFeedsNow(userId: string) {
     const userDefaultUpdateFrequency = user?.defaultUpdateFrequency ?? 60;
 
     const feeds = await db.feed.findMany({
-        where: { userId, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
+        // Archived feeds are never fetched in the background (restore re-enables them).
+        where: { userId, archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
         select: {
             id: true,
             userId: true,
@@ -1363,7 +1375,7 @@ async function syncAllFeedsNow() {
     );
 
     const feeds = await db.feed.findMany({
-        where: { sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
+        where: { archivedAt: null, sourceType: { not: NEWSLETTER_SOURCE_TYPE } },
         select: {
             id: true,
             userId: true,
