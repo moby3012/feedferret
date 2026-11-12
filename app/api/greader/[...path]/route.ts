@@ -9,6 +9,7 @@ import { importOpmlXml } from "@/lib/import/opml-import";
 import { decimalExternalId, externalItemWhere, storedExternalId } from "@/lib/external-ids";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { markWhereRead } from "@/server/articles/bulk-read";
 import { syncFeed } from "@/lib/rss-sync";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
 import { checkRateLimit, getClientIdentifier, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
@@ -369,15 +370,17 @@ async function handleMarkAllAsRead(userId: string, form: FormData) {
     ? new Date(olderThanMs)
     : null;
 
-  const where = buildStreamWhere(userId, streamId, [], []);
-  const readWhere: any = { ...where, isRead: false };
   if (tsParam && (Number(tsParam) !== 0) && (!cutoff || !Number.isFinite(cutoff.getTime()))) return textResponse("Invalid ts", 400);
-  if (cutoff) readWhere.createdAt = { lte: cutoff };
 
-  await db.article.updateMany({
-    where: readWhere,
-    data: { isRead: true, readAt: new Date() },
-  });
+  // Chunked, set-based, `updatedAt` untouched (server/articles/bulk-read.ts). Without `ts` the
+  // request time is the cutoff, so items a concurrent sync inserts stay unread.
+  const now = new Date();
+  const result = await markWhereRead(userId, buildStreamWhere(userId, streamId, [], []), { cutoff: cutoff ?? now, now });
+  // GReader has no partial-success answer: some chunks committed, the rest did not → retryable
+  // 5xx. A retry is idempotent (same stream + cutoff; already-read rows are skipped).
+  if (!result.complete) {
+    return new NextResponse("Partially applied; retry", { status: 503, headers: { "content-type": "text/plain; charset=utf-8", "retry-after": "1" } });
+  }
   return okResponse();
 }
 

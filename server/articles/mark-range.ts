@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { parseListParams, type Scope, type Sort } from "@/features/articles/scope";
 import { keysetWhere } from "./list";
 import { MAX_ID_LENGTH, MAX_MARK_IDS, markIdsRead } from "./state";
+import { setReadStateByIds, type BulkReadResult } from "./bulk-read";
 import { buildViewScope } from "./view-scope";
 
 // "Alles bis hier als gelesen" (row context menu) as one server-side range of
@@ -71,10 +72,10 @@ export function parseMarkRange(input: unknown): { ok: true; range: MarkRangeInpu
  * "Alles bis hier als gelesen" as one server-side range: every unread row of
  * the view from the list's first loaded row down to `toId` (inclusive, in the
  * list's keyset order), plus `extraIds`. Same view `where` as the list
- * endpoint, user-scoped, bounded (MAX_RANGE_IDS), one transaction; returns
+ * endpoint, user-scoped, bounded (MAX_RANGE_IDS), chunked writes; returns
  * exactly the ids this call changed (the undo set, one token for all).
  */
-export async function markRangeRead(userId: string, range: MarkRangeInput): Promise<string[]> {
+export async function markRangeRead(userId: string, range: MarkRangeInput): Promise<BulkReadResult> {
   const { where, keyset } = await buildViewScope(userId, range.scope);
   const direction = range.sort === "old" ? "asc" : "desc";
   const reverse = direction === "desc" ? "asc" : "desc";
@@ -90,7 +91,7 @@ export async function markRangeRead(userId: string, range: MarkRangeInput): Prom
   const to = valuesOf(range.toId);
   if (!from || !to) {
     if (range.extraIds.length > MAX_MARK_IDS) throw new RangeTooLargeError(MAX_MARK_IDS);
-    return range.extraIds.length ? markIdsRead(userId, range.extraIds) : [];
+    return range.extraIds.length ? markIdsRead(userId, range.extraIds) : { ids: [], complete: true, remaining: [] };
   }
 
   where.isRead = false;
@@ -104,30 +105,14 @@ export async function markRangeRead(userId: string, range: MarkRangeInput): Prom
     { createdAt: { lte: new Date(range.maxCreatedAt) } },
   ];
 
-  const readAt = new Date();
-  return db.$transaction(
-    async (tx) => {
-      const inRange = await tx.article.findMany({ where, select: { id: true }, take: MAX_RANGE_IDS + 1 });
-      if (inRange.length > MAX_RANGE_IDS) throw new RangeTooLargeError(MAX_RANGE_IDS);
-      const extra: Array<{ id: string }> = [];
-      for (let i = 0; i < range.extraIds.length; i += 500) {
-        extra.push(...(await tx.article.findMany({ where: { userId, id: { in: range.extraIds.slice(i, i + 500) }, isRead: false }, select: { id: true } })));
-      }
-      const candidates = [...new Set([...inRange, ...extra].map((a) => a.id))];
-      if (candidates.length > MAX_RANGE_IDS) throw new RangeTooLargeError(MAX_RANGE_IDS);
-      const changed: string[] = [];
-      for (let i = 0; i < candidates.length; i += 500) {
-        const chunk = candidates.slice(i, i + 500);
-        const result = await tx.article.updateMany({ where: { userId, id: { in: chunk }, isRead: false }, data: { isRead: true, readAt } });
-        if (result.count === chunk.length) changed.push(...chunk);
-        else if (result.count > 0) {
-          // Another writer got to some rows first: keep only the ones this call changed.
-          const mine = await tx.article.findMany({ where: { userId, id: { in: chunk }, isRead: true, readAt }, select: { id: true } });
-          changed.push(...mine.map((a) => a.id));
-        }
-      }
-      return changed;
-    },
-    { timeout: 60_000, maxWait: 10_000 },
-  );
+  // Read-only sizing first (nothing changes above the bound), then short chunked writes.
+  const inRange = await db.article.findMany({ where, select: { id: true }, take: MAX_RANGE_IDS + 1 });
+  if (inRange.length > MAX_RANGE_IDS) throw new RangeTooLargeError(MAX_RANGE_IDS);
+  const extra: Array<{ id: string }> = [];
+  for (let i = 0; i < range.extraIds.length; i += 500) {
+    extra.push(...(await db.article.findMany({ where: { userId, id: { in: range.extraIds.slice(i, i + 500) }, isRead: false }, select: { id: true } })));
+  }
+  const candidates = [...new Set([...inRange, ...extra].map((a) => a.id))];
+  if (candidates.length > MAX_RANGE_IDS) throw new RangeTooLargeError(MAX_RANGE_IDS);
+  return setReadStateByIds(userId, candidates, true);
 }

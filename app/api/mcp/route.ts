@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { assertComplete, markWhereRead, setReadStateByIds } from "@/server/articles/bulk-read";
 import { apiError, clampInt, readJson, requireApiUser, scopeError, type ApiUser } from "@/lib/api-auth";
 import { buildAdvancedSearchWhere } from "@/lib/search";
 import { fetchFeedArticles } from "@/lib/feed-fetcher";
@@ -345,8 +346,10 @@ async function callTool(user: ApiUser, name: string, args: any) {
         const advancedWhere = await buildAdvancedSearchWhere(user.id, args.query);
         if (Object.keys(advancedWhere).length) where.AND = [...(where.AND || []), advancedWhere];
       }
-      const result = await db.article.updateMany({ where, data: { isRead: true, readAt: new Date() } });
-      return { updated: result.count };
+      const now = new Date();
+      // Partial write → tool error with counts (PartialBulkWriteError); re-running is idempotent.
+      const result = assertComplete(await markWhereRead(user.id, where, { cutoff: now, now }));
+      return { updated: result.ids.length };
     }
     // Feed management
     case "feedferret.delete_feed": {
@@ -433,6 +436,10 @@ async function callTool(user: ApiUser, name: string, args: any) {
       else if (action === "unread") { data = { isRead: false, readAt: null }; }
       else if (action === "star") { data = { isStarred: true }; }
       else if (action === "unstar") { data = { isStarred: false }; }
+      if (action === "read" || action === "unread") {
+        const result = assertComplete(await setReadStateByIds(user.id, ownedIds, action === "read"));
+        return { updated: result.ids.length, notFound: ids.length - ownedIds.length };
+      }
       const result = await db.article.updateMany({ where: { id: { in: ownedIds } }, data });
       return { updated: result.count, notFound: ids.length - ownedIds.length };
     }

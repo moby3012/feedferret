@@ -22,6 +22,7 @@ import { scrapeXPathArticles } from "@/lib/feed-fetcher";
 import { createUndoToken, claimUndoToken, releaseUndoToken } from "@/lib/undo-tokens";
 import { isMarkAllAllowed } from "@/lib/view-scope";
 import { buildViewScope, legacyViewScopeInput } from "@/server/articles/view-scope";
+import { markWhereRead, parseCutoffMs, setReadStateByIds } from "@/server/articles/bulk-read";
 import { loadCategories, loadFeeds, loadLabels, loadNotifications, loadSavedSearches } from "@/server/bootstrap";
 import { applyRetentionPoliciesForUser } from "@/lib/retention";
 import { randomBytes } from "crypto";
@@ -1172,116 +1173,106 @@ export async function fetchFullText(articleId: string) {
 }
 
 /**
+ * Upper bound of changed ids a bulk mark (or its Undo) sends back. Larger
+ * results return only `count`: the client already patched the rows it holds
+ * (optimistically, by scope) and refetches counts; shipping and walking 45 k
+ * ids would only cost bandwidth and main-thread time.
+ */
+const MAX_RETURNED_IDS = 2000;
+
+export interface BulkReadActionResult {
+    /** Number of articles this call changed. */
+    count: number;
+    /** The changed ids, or `[]` when `count` > MAX_RETURNED_IDS (`idsTruncated`). */
+    ids: string[];
+    idsTruncated?: true;
+    undoToken: string | null;
+    /**
+     * A chunk failed after others had been written: `count` / `undoToken` cover what changed.
+     * Mark-all: re-running the same request finishes it (idempotent: same scope + cutoff).
+     */
+    incomplete?: true;
+    /** Undo only, with `incomplete`: a fresh token for the rows this Undo did not restore yet. */
+    retryToken?: string;
+}
+
+function bulkResult(ids: string[], complete: boolean, undoToken: string | null): BulkReadActionResult {
+    const truncated = ids.length > MAX_RETURNED_IDS;
+    return {
+        count: ids.length,
+        ids: truncated ? [] : ids,
+        ...(truncated ? { idsTruncated: true as const } : {}),
+        undoToken,
+        ...(complete ? {} : { incomplete: true as const }),
+    };
+}
+
+/**
  * Marks exactly the current list view read: the scope is built by the same
  * view scope as the list (GET /api/app/articles) / `getViewUnreadCount`, so feed / category /
  * label / saved search / free-text search / "hide duplicates" / spoiler rules
  * all match what the user sees. Read-only views ("Recently Read", "Spoiler")
  * change nothing.
  *
- * The select + update run in one transaction (all or nothing) and the result
- * lists the ids that were really changed plus a server-side, user-scoped
+ * `cutoff` (epoch ms, optional): the list's snapshot time — only articles that
+ * arrived at or before it are marked, so items a sync delivered after the
+ * user loaded the list (or while this runs) stay unread. Without it the
+ * server's request time is the cutoff.
+ *
+ * Set-based and chunked (server/articles/bulk-read.ts): short write
+ * statements instead of one long transaction, `updatedAt` untouched. Returns
+ * the count (+ ids for small results) and a server-side, user-scoped
  * `undoToken` for `markArticlesAsUnread`.
  */
-export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null; categoryId?: string | null; search?: string | null }) {
+export async function markAllAsRead(scope?: { feedId?: string | null; category?: string | null; categoryId?: string | null; search?: string | null; cutoff?: number | null }): Promise<BulkReadActionResult> {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
     const userId = session.user.id;
 
-    const feedId = scope?.feedId || null;
-    const category = scope?.category || undefined;
-    const search = scope?.search?.trim() || undefined;
+    const str = (value: unknown) => (typeof value === "string" ? value : undefined);
+    const feedId = str(scope?.feedId) || null;
+    const category = str(scope?.category) || undefined;
+    const search = str(scope?.search)?.trim() || undefined;
+    const now = new Date();
+    const cutoff = parseCutoffMs(scope?.cutoff, now.getTime());
+    if (cutoff === undefined) throw new Error("Invalid cutoff");
 
-    if (!isMarkAllAllowed(feedId, category)) return { ids: [] as string[], undoToken: null as string | null };
+    if (!isMarkAllAllowed(feedId, category)) return bulkResult([], true, null);
 
-    const { where } = await buildLegacyViewScope(userId, feedId, category, search, scope?.categoryId || null);
-    where.isRead = false;
-
-    const readAt = new Date();
-    const ids = await db.$transaction(
-        async (tx) => {
-            const affected = await tx.article.findMany({ where, select: { id: true } });
-            const candidates = affected.map((a) => a.id);
-            const changed: string[] = [];
-            for (const chunk of chunkIds(candidates)) {
-                const result = await tx.article.updateMany({
-                    where: { id: { in: chunk }, userId, isRead: false },
-                    data: { isRead: true, readAt },
-                });
-                if (result.count === chunk.length) {
-                    changed.push(...chunk);
-                } else if (result.count > 0) {
-                    // Another writer got to some rows first: keep only the ones this call changed.
-                    const mine = await tx.article.findMany({
-                        where: { id: { in: chunk }, userId, isRead: true, readAt },
-                        select: { id: true },
-                    });
-                    changed.push(...mine.map((a) => a.id));
-                }
-            }
-            return changed;
-        },
-        { timeout: 60_000, maxWait: 10_000 },
-    );
-
-
-    // Note: rows are attributed to this call via `readAt`. Two concurrent mark-all
-    // calls of the same user in the same millisecond could share it; worst case
-    // an Undo restores a few rows the other call also marked. Acceptable for a
-    // user-initiated action; revisit with UPDATE … RETURNING if it ever matters.
-    return { ids, undoToken: createUndoToken(userId, ids) };
+    const { where } = await buildLegacyViewScope(userId, feedId, category, search, str(scope?.categoryId) || null);
+    const result = await markWhereRead(userId, where, { cutoff: cutoff ?? now, now });
+    return bulkResult(result.ids, result.complete, createUndoToken(userId, result.ids));
 }
 
 /**
  * Undo for `markAllAsRead`. Takes only the opaque token that call returned
  * (random, bound to the signed-in user, valid ~10 minutes) — never article ids
  * from the client. Restores exactly the articles that call changed and that are
- * still read; returns their ids.
+ * still read (chunked, `updatedAt` untouched).
+ *
+ * The token is consumed for the rows this call restores: a failure before
+ * anything changed puts it back; a failure after some chunks returns
+ * `incomplete` plus a `retryToken` holding exactly the rows not restored yet,
+ * so a retry finishes the Undo instead of losing it.
  */
-export async function markArticlesAsUnread(undoToken: string) {
+export async function markArticlesAsUnread(undoToken: string): Promise<BulkReadActionResult> {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
     const userId = session.user.id;
 
     const claim = claimUndoToken(userId, undoToken);
     if (!claim) throw new Error("Undo expired");
-    const candidates = claim.ids;
 
-    let ids: string[];
+    let result: Awaited<ReturnType<typeof setReadStateByIds>>;
     try {
-    ids = await db.$transaction(
-        async (tx) => {
-            const restored: string[] = [];
-            for (const chunk of chunkIds(candidates)) {
-                const stillRead = await tx.article.findMany({
-                    where: { id: { in: chunk }, userId, isRead: true },
-                    select: { id: true },
-                });
-                if (stillRead.length === 0) continue;
-                const restoreIds = stillRead.map((a) => a.id);
-                await tx.article.updateMany({
-                    where: { id: { in: restoreIds }, userId },
-                    data: { isRead: false, readAt: null },
-                });
-                restored.push(...restoreIds);
-            }
-            return restored;
-        },
-        { timeout: 60_000, maxWait: 10_000 },
-    );
+        result = await setReadStateByIds(userId, claim.ids, false);
     } catch (error) {
         releaseUndoToken(undoToken, claim);
         throw error;
     }
-
-
-    return { count: ids.length, ids };
-}
-
-// Keeps `IN (...)` lists below SQLite's bound-variable limit for huge views.
-function chunkIds(ids: string[], size = 500): string[][] {
-    const chunks: string[][] = [];
-    for (let i = 0; i < ids.length; i += size) chunks.push(ids.slice(i, i + size));
-    return chunks;
+    if (result.complete) return bulkResult(result.ids, true, null);
+    const retryToken = createUndoToken(userId, result.remaining);
+    return { ...bulkResult(result.ids, false, null), ...(retryToken ? { retryToken } : {}) };
 }
 
 // ─── Auto-Read Rules ────────────────────────────────────────────────────────

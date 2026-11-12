@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { setReadStateByIds, type BulkReadResult } from "./bulk-read";
 
 // Batched article state writes (.pm/spec-shell-design.md §2.4): the client's
 // state batcher sends every read / star / read-later toggle of one flush as a
@@ -208,21 +209,9 @@ export function parseMarkIds(input: unknown): { ok: true; ids: string[] } | { ok
 /**
  * Bulk mark-read of explicit ids ("Alles bis hier als gelesen"): only the
  * user's own, still-unread articles change; returns exactly those ids (the
- * undo set). One `updateMany` per chunk inside one transaction; `readAt` is
- * stamped so the changed rows can be told apart from concurrent writers.
+ * undo set, via UPDATE … RETURNING). Chunked short statements, `updatedAt`
+ * untouched (server/articles/bulk-read.ts).
  */
-export async function markIdsRead(userId: string, ids: string[]): Promise<string[]> {
-  const readAt = new Date();
-  return db.$transaction(async (tx) => {
-    const changed: string[] = [];
-    for (let i = 0; i < ids.length; i += 500) {
-      const chunk = ids.slice(i, i + 500);
-      const candidates = await tx.article.findMany({ where: { userId, id: { in: chunk }, isRead: false }, select: { id: true } });
-      if (candidates.length === 0) continue;
-      const candidateIds = candidates.map((a) => a.id);
-      await tx.article.updateMany({ where: { userId, id: { in: candidateIds }, isRead: false }, data: { isRead: true, readAt } });
-      changed.push(...candidateIds);
-    }
-    return changed;
-  });
+export async function markIdsRead(userId: string, ids: string[]): Promise<BulkReadResult> {
+  return setReadStateByIds(userId, ids, true);
 }

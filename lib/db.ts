@@ -3,19 +3,11 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
+import { getDatabaseProvider } from "./db-provider";
 
-const aliases: Record<string, string> = {
-  sqlite: "sqlite",
-  file: "sqlite",
-  postgres: "postgresql",
-  postgresql: "postgresql",
-};
-
-// Shared provider resolution so other modules (e.g. lib/search.ts, lib/search-indexes.ts)
-// agree with the adapter on whether we're running against SQLite or PostgreSQL.
-export function getDatabaseProvider(): "sqlite" | "postgresql" {
-  return (aliases[(process.env.DATABASE_PROVIDER ?? "sqlite").toLowerCase()] as "sqlite" | "postgresql" | undefined) ?? "sqlite";
-}
+// Provider resolution lives in its own module so code that must not depend on a mocked
+// `@/lib/db` (tests replace it with their own client) can still ask for the provider.
+export { getDatabaseProvider } from "./db-provider";
 
 function getDatabaseUrl() {
   const url = process.env.DATABASE_URL;
@@ -50,7 +42,7 @@ export function applySqlitePragmas(client: { pragma: (source: string) => unknown
 }
 
 function createAdapter() {
-  const provider = aliases[(process.env.DATABASE_PROVIDER ?? "sqlite").toLowerCase()] ?? "sqlite";
+  const provider = getDatabaseProvider();
   const url = getDatabaseUrl();
 
   if (provider === "sqlite") {

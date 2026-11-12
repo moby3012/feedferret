@@ -240,9 +240,12 @@ Body filters can be combined:
   "query": "feed:verge after:30d",
   "feedId": "clf1",
   "categoryId": "cat1",
-  "labelId": "lbl1"
+  "labelId": "lbl1",
+  "before": 1767225600000
 }
 ```
+
+`before` (optional, epoch milliseconds or ISO 8601): only articles that **arrived** (were fetched) at or before this time are marked — pass the time your client last synced so items that came in since stay unread. Without it the server's request time is the cutoff. A time in the future is clamped to now. Read state never changes an article's `updated` / `updatedAt`.
 
 Response:
 

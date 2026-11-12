@@ -851,6 +851,9 @@
     "undo": "Rückgängig",
     "markAllReadFailed": "Die Artikel konnten nicht als gelesen markiert werden. Bitte versuche es erneut.",
     "undoFailed": "Rückgängig machen war nicht möglich. Vielleicht ist die Frist abgelaufen – lade die Seite neu, um den Stand zu prüfen.",
+    "markAllReadIncomplete": "Teilweise erledigt: nur {count, plural, one {# Artikel} other {# Artikel}} als gelesen markiert. Erneut versuchen, um den Rest zu markieren.",
+    "undoIncomplete": "Teilweise erledigt: nur {count, plural, one {# Artikel} other {# Artikel}} wiederhergestellt. Erneut versuchen, um den Rest wiederherzustellen.",
+    "retry": "Erneut versuchen",
     "signOutConfirmTitle": "Abmelden?",
     "signOutConfirmDescription": "Du musst dich auf diesem Gerät erneut anmelden, um deine Feeds zu lesen.",
     "errors": {

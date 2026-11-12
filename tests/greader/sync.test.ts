@@ -158,8 +158,12 @@ describe("FreshRSS stream contracts", () => {
     expect(await db.articleLabel.count()).toBe(1);
     await request("edit-tag", { r: label }, "POST", [["i", "a"]]);
     expect(await db.articleLabel.count()).toBe(0);
+    const stamp = (await db.article.findUniqueOrThrow({ where: { id: "a" } })).updatedAt;
     await request("mark-all-as-read", { s: label, ts: String(epoch * 1000000) }, "POST");
-    expect((await db.article.findUniqueOrThrow({ where: { id: "a" } })).isRead).toBe(true);
+    const marked = await db.article.findUniqueOrThrow({ where: { id: "a" } });
+    expect(marked.isRead).toBe(true);
+    // Read state is user state: the bulk mark leaves the GReader `updated` / ot clock alone.
+    expect(marked.updatedAt).toEqual(stamp);
     expect((await db.article.findUniqueOrThrow({ where: { id: "b" } })).isRead).toBe(false);
     await request("mark-all-as-read", { s: "unknown" }, "POST", [], 400);
     expect((await db.article.findUniqueOrThrow({ where: { id: "b" } })).isRead).toBe(false);
@@ -287,7 +291,7 @@ it("returns 401 only for failed authentication and 500 for server failures", asy
   await request("stream/items/ids", {}, "GET", [], 401);
   vi.mocked(authenticateGReaderRequest).mockRejectedValueOnce(new Error("DB unavailable"));
   await request("stream/items/ids", {}, "GET", [], 500);
-  const spy = vi.spyOn(db.article, "updateMany").mockRejectedValueOnce(new Error("DB unavailable"));
+  const spy = vi.spyOn(db.article, "findMany").mockRejectedValueOnce(new Error("DB unavailable"));
   await request("mark-all-as-read", {}, "POST", [], 500);
   spy.mockRestore();
 });

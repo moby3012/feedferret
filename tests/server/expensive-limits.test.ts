@@ -44,7 +44,7 @@ vi.mock("@/server/articles/view-scope", () => ({ buildViewScope: vi.fn(async () 
 vi.mock("@/server/articles/state", () => ({
   parseStateOps: (ops: unknown) => ({ ok: true, ops }),
   parseMarkIds: (ids: unknown) => ({ ok: true, ids }),
-  markIdsRead: vi.fn(async () => []),
+  markIdsRead: vi.fn(async () => ({ ids: [], complete: true, remaining: [] })),
   applyArticleStateOps: vi.fn(async () => {
     h.applyCalls++;
     return { failed: [], affected: [], cascades: [] };
@@ -55,7 +55,7 @@ vi.mock("@/server/articles/mark-range", () => ({
   parseMarkRange: (input: unknown) => ({ ok: true, range: input }),
   markRangeRead: vi.fn(async () => {
     h.markRangeCalls++;
-    return ["a1"];
+    return { ids: ["a1"], complete: true, remaining: [] };
   }),
 }));
 
