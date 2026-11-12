@@ -1,4 +1,5 @@
 import { validateAuthSecret } from "./lib/auth-secret";
+import { isProxyCountExplicit, proxyCountUnsetWarning } from "./lib/client-ip";
 
 export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -122,12 +123,8 @@ function validateEnvironment() {
     }
 
     // TRUSTED_PROXY_COUNT: per-IP rate limits and the sign-in IP throttle key on the client IP (lib/client-ip.ts).
-    // Unset/invalid falls back to 1 hop, which is only right behind exactly one proxy.
-    const proxyCount = process.env.TRUSTED_PROXY_COUNT ?? "";
-    const parsedProxyCount = Number(proxyCount);
-    if (proxyCount === "" || !Number.isSafeInteger(parsedProxyCount) || parsedProxyCount < 1) {
-        warnings.push(`TRUSTED_PROXY_COUNT is ${proxyCount === "" ? "not set" : `invalid ("${proxyCount}")`}; assuming 1 trusted proxy hop. Set TRUSTED_PROXY_COUNT=1 behind Coolify/Traefik, Nginx or Caddy (2 behind Cloudflare → Traefik), or 0 when FeedFerret is exposed directly with no proxy, so clients cannot spoof their IP for rate limits; see docs/reverse-proxy.md.`);
-    }
+    // Unset/invalid = legacy mode (any private peer is believed), which a directly exposed instance must not run in.
+    if (!isProxyCountExplicit()) warnings.push(proxyCountUnsetWarning());
 
     // AUTH_URL check
     const authUrl = process.env.AUTH_URL ?? "";

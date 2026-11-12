@@ -1,16 +1,41 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { db } from "@/lib/db";
 import authConfig from "./auth.config";
 import Credentials from "next-auth/providers/credentials";
 import Nodemailer from "next-auth/providers/nodemailer";
 import bcrypt from "bcryptjs";
+import { createHash } from "node:crypto";
+import { DUMMY_PASSWORD_HASH, hashPassword, needsRehash } from "@/lib/password-hash";
 import { consumeTotpToken } from "@/lib/totp-consume";
 import { sendSignInEmail } from "@/lib/mail";
 
 import { validateAuthSecret } from "@/lib/auth-secret";
-import { getClientIp } from "@/lib/rate-limit";
-import { reserveLoginAttempt, releaseLoginAttempt } from "@/lib/account-lockout";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { ACCOUNT_LOCKOUT, reserveLoginAttempt, releaseLoginAttempt } from "@/lib/account-lockout";
+
+/**
+ * Thrown (and surfaced to the client as `code`) only AFTER the password has been verified for an account
+ * with two-factor authentication when no code was sent, so the login form can ask for it. Everything
+ * else stays an anonymous failure, so nothing is revealed to someone who does not know the password.
+ */
+class OtpRequiredError extends CredentialsSignin {
+  code = "otp_required";
+}
+
+/**
+ * Stand-in for the per-account database lockout for addresses that have none (unknown or passwordless):
+ * same budget and window as `ACCOUNT_LOCKOUT`, kept in memory, keyed by the address. Without it an
+ * attacker could tell real accounts from invented ones by when the refusals start. Evicts the oldest
+ * entry when full (an attacker flooding invented addresses only ages out other invented addresses).
+ */
+const SYNTHETIC_LOCKOUT = {
+  limit: ACCOUNT_LOCKOUT.limit,
+  windowSecs: ACCOUNT_LOCKOUT.windowMs / 1000,
+  prefix: "auth-unknown-account",
+  critical: true,
+  overflow: "evict-oldest",
+} as const;
 
 const isBuild = process.env.NEXT_PHASE === "phase-production-build";
 
@@ -67,25 +92,48 @@ const config = {
           (await db.user.findUnique({ where: { email } })) ??
           (normalizedEmail && normalizedEmail !== email ? await db.user.findUnique({ where: { email: normalizedEmail } }) : null);
 
-        if (!user?.password) { await logAttempt(false, undefined, "no_account"); return null; }
+        if (!user?.password) {
+          // Indistinguishable from a real account: same throttle (a refused attempt writes no audit
+          // row and skips bcrypt, like a locked account) and one bcrypt verification either way.
+          if (!isBuild && !checkRateLimit(`email:${createHash("sha256").update(normalizedEmail).digest("hex").slice(0, 32)}`, SYNTHETIC_LOCKOUT).success) return null;
+          await bcrypt.compare(String(credentials.password), DUMMY_PASSWORD_HASH);
+          await logAttempt(false, undefined, "no_account");
+          return null;
+        }
 
         // Per-account lockout (persisted, across IPs): reserve an attempt before any password or
         // OTP check; a locked account is refused like a wrong password and writes no audit row
         // (anonymous traffic must not mean unbounded inserts). Released again on full success.
-        if (!isBuild && !await reserveLoginAttempt(user.id)) return null;
+        const reservation = isBuild ? null : await reserveLoginAttempt(user.id);
+        if (!isBuild && !reservation) return null;
 
         const passwordsMatch = await bcrypt.compare(credentials.password as string, user.password);
         if (!passwordsMatch) { await logAttempt(false, user.id, "password"); return null; }
 
         if (user.twoFactorEnabled) {
-          const otp = String(credentials.otp || "");
+          const otp = String(credentials.otp || "").trim();
+          if (!otp && user.twoFactorSecret) {
+            // Correct password, code still to come: not a guess, so the attempt is given back and the
+            // form is told to ask for the code (this replaces the old unauthenticated
+            // /api/auth/credentials-status lookup that revealed which addresses exist and use 2FA).
+            if (!isBuild) await releaseLoginAttempt(user.id, "web", reservation);
+            throw new OtpRequiredError();
+          }
           if (!user.twoFactorSecret || !await consumeTotpToken(user.id, user.twoFactorSecret, otp)) {
             await logAttempt(false, user.id, "otp");
             return null;
           }
         }
 
-        if (!isBuild) await releaseLoginAttempt(user.id);
+        if (!isBuild) await releaseLoginAttempt(user.id, "web", reservation);
+        // Accounts hashed at an older cost move to the current one, so real accounts and the dummy
+        // verification for unknown addresses keep costing the same. Compare-and-set on the old hash;
+        // a failure here must never fail a correct sign-in.
+        if (!isBuild && needsRehash(user.password)) {
+          try {
+            await db.user.updateMany({ where: { id: user.id, password: user.password }, data: { password: await hashPassword(credentials.password as string) } });
+          } catch { /* retried on the next sign-in */ }
+        }
         await logAttempt(true, user.id);
         return user as any;
       },

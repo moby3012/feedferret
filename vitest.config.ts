@@ -21,6 +21,10 @@ export default defineConfig({
       FEEDFERRET_HTML_WORKER_INLINE: "1",
       // Enables the pool's __test* tasks (busy loop, memory bomb); refused in production.
       FEEDFERRET_HTML_WORKER_TEST_TASKS: "1",
+      // Tests have no TCP peer (no preload) and tell clients apart by X-Forwarded-For / X-Real-IP, which
+      // lib/client-ip.ts believes without peer information only for an explicit count. Tests of the
+      // unset / 0 modes stub the variable themselves.
+      TRUSTED_PROXY_COUNT: "1",
     },
   },
   resolve: {

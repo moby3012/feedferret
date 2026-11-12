@@ -26,11 +26,18 @@ This variable is already included in `.env.example` and is set to `true` by defa
 > | One proxy: Coolify/Traefik, Nginx, Caddy | `TRUSTED_PROXY_COUNT=1` (right-most `X-Forwarded-For` entry) |
 > | Cloudflare → Traefik → FeedFerret | `TRUSTED_PROXY_COUNT=2` |
 >
-> Unset, empty or invalid means 1, plus a startup warning and a one-time warning on the first request that carries `X-Forwarded-For`. The bundled compose files leave it empty on purpose so that warning stays live until you set it.
+> **Unset, empty or invalid = legacy mode (will be removed).** It behaves like `1` as long as the TCP peer is known (Docker image), so existing installs keep working — but any private-network peer is then believed, which on a **directly exposed** instance (LAN or Tailscale clients, or Docker's userland proxy presenting every external client as `172.17.0.1`) lets clients choose their own limiter key. Without peer information (`next dev`, or `next start` started without the preload) legacy mode believes the forwarded headers without being able to check who sent them (failing closed would key every client `unknown`, so one user could lock everybody out of sign-in); `pnpm start` loads the preload. A loud warning is logged at startup and on the first request that carries `X-Forwarded-For`. The bundled compose files leave the variable empty on purpose so that warning stays live until you set it. **Set the variable.**
 
 Restrict origin access to Cloudflare and app access to Traefik; only trust headers appended by this controlled chain.
 
-**Peer check (Docker image).** The image starts the server with `scripts/peer-address-preload.cjs`, which records the real TCP peer of every request. With `TRUSTED_PROXY_COUNT` ≥ 1, `X-Forwarded-For` is only believed when that peer is loopback, private (10/8, 172.16/12, 192.168/16), link-local, CGNAT (100.64/10) or ULA (fc00::/7) — i.e. your proxy on the Docker network — or is listed in `TRUSTED_PROXIES` (comma separated IPs/CIDRs). A request arriving **directly from a public address** is keyed by that address and its `X-Forwarded-For` is ignored (logged once). If your proxy has a public address (separate host), list it in `TRUSTED_PROXIES`, otherwise all clients share the proxy's key. Without the preload (`next dev`, `next start`) the header-only behaviour applies.
+**Peer check (Docker image).** The image starts the server with `scripts/peer-address-preload.cjs`, which records the real TCP peer of every request. `X-Forwarded-For` is only believed when `TRUSTED_PROXY_COUNT` is ≥ 1 and the peer is a trusted proxy:
+
+| `TRUSTED_PROXIES` | Trusted peers |
+|---|---|
+| unset | loopback, private (10/8, 172.16/12, 192.168/16), link-local, ULA (fc00::/7) — i.e. your proxy on the Docker network. **Not** CGNAT / Tailscale (100.64/10): those peers are treated as clients |
+| set (comma separated IPs/CIDRs) | exactly the listed peers, nothing else — list every proxy address, private ones included |
+
+Any other peer is a direct client: it is keyed by its own address and its `X-Forwarded-For` is ignored (logged once). With `TRUSTED_PROXY_COUNT=0` the peer is always the client. If your proxy shares a CGNAT/Tailscale or public address, list it in `TRUSTED_PROXIES`, otherwise all clients share the proxy's key. Without the preload (`next dev`, `next start`) there is no peer to check: an explicit count `≥ 1` is taken at its word, the legacy unset mode believes the headers (warned), and an explicit `0` keys every client as `unknown` (warned) because the peer is the only thing it may use. `pnpm start` and the Docker image load the preload.
 
 ### Cloudflare directly to FeedFerret
 

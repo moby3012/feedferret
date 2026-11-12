@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { getClientIdentifier, getClientIp, resetProxyCountWarning } from "../../lib/rate-limit";
-import { ipLimiterKey, isTrustedProxyPeer, normalizeIp } from "../../lib/client-ip";
+import { ipLimiterKey, isProxyCountExplicit, isTrustedProxyPeer, normalizeIp } from "../../lib/client-ip";
 
 const TOKEN = "test-peer-token";
 const req = (headers: Record<string, string>) => new Request("https://example.test", { headers });
@@ -41,14 +41,17 @@ describe("address normalisation", () => {
 });
 
 describe("trusted peers", () => {
-  it.each(["127.0.0.1", "::1", "10.1.2.3", "172.18.0.4", "192.168.1.1", "169.254.1.1", "100.64.0.9", "fd12:3456::1", "fe80::2", "::ffff:172.17.0.2"])("%s is a proxy candidate", (ip) => {
+  it.each(["127.0.0.1", "::1", "10.1.2.3", "172.18.0.4", "192.168.1.1", "169.254.1.1", "fd12:3456::1", "fe80::2", "::ffff:172.17.0.2"])("%s is a proxy candidate", (ip) => {
     expect(isTrustedProxyPeer(ip)).toBe(true);
   });
-  it.each(["8.8.8.8", "172.32.0.1", "2001:db8::1", "::ffff:8.8.8.8", "garbage"])("%s is not", (ip) => {
+  it.each(["8.8.8.8", "172.32.0.1", "2001:db8::1", "::ffff:8.8.8.8", "garbage", "100.64.0.9", "100.127.255.254"])("%s is not (CGNAT / Tailscale peers are clients unless listed)", (ip) => {
     expect(isTrustedProxyPeer(ip)).toBe(false);
   });
-  it("TRUSTED_PROXIES adds addresses and CIDRs", () => {
-    vi.stubEnv("TRUSTED_PROXIES", "203.0.113.10, 198.51.100.0/24, 2001:db8:aaaa::/48, bogus, 1.2.3.4/99");
+  it("TRUSTED_PROXIES, when set, is the whole list (addresses and CIDRs); private peers are no longer implied", () => {
+    vi.stubEnv("TRUSTED_PROXIES", "203.0.113.10, 198.51.100.0/24, 2001:db8:aaaa::/48, 100.64.0.0/10, bogus, 1.2.3.4/99");
+    expect(isTrustedProxyPeer("100.64.0.9")).toBe(true);
+    expect(isTrustedProxyPeer("172.18.0.4")).toBe(false);
+    expect(isTrustedProxyPeer("127.0.0.1")).toBe(false);
     expect(isTrustedProxyPeer("203.0.113.10")).toBe(true);
     expect(isTrustedProxyPeer("198.51.100.77")).toBe(true);
     expect(isTrustedProxyPeer("2001:db8:aaaa:5::1")).toBe(true);
@@ -66,6 +69,7 @@ describe("with the TCP peer available (production server)", () => {
     expect(getClientIdentifier(withPeer("198.51.100.20", { "x-forwarded-for": "2.2.2.2" }))).toBe("ip:198.51.100.20");
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toContain("TRUSTED_PROXIES");
+    expect(warn.mock.calls[0][0]).not.toContain("198.51.100.20"); // no client addresses in logs
   });
   it("believes X-Forwarded-For from a private peer (Traefik) and from a TRUSTED_PROXIES peer", () => {
     vi.stubEnv("FEEDFERRET_PEER_TOKEN", TOKEN);
@@ -73,6 +77,13 @@ describe("with the TCP peer available (production server)", () => {
     expect(getClientIdentifier(withPeer("172.18.0.4", { "x-forwarded-for": "spoof, 203.0.113.9" }))).toBe("ip:203.0.113.9");
     vi.stubEnv("TRUSTED_PROXIES", "198.51.100.20");
     expect(getClientIdentifier(withPeer("198.51.100.20", { "x-forwarded-for": "203.0.113.9" }))).toBe("ip:203.0.113.9");
+  });
+  it("with TRUSTED_PROXIES set, a private peer that is not listed is a client", () => {
+    vi.stubEnv("FEEDFERRET_PEER_TOKEN", TOKEN);
+    vi.stubEnv("TRUSTED_PROXY_COUNT", "1");
+    vi.stubEnv("TRUSTED_PROXIES", "198.51.100.20");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(getClientIdentifier(withPeer("172.18.0.4", { "x-forwarded-for": "1.1.1.1" }))).toBe("ip:172.18.0.4");
   });
   it("TRUSTED_PROXY_COUNT=0 means no proxy: the peer is the client, headers are ignored, no warning", () => {
     vi.stubEnv("FEEDFERRET_PEER_TOKEN", TOKEN);
@@ -85,7 +96,7 @@ describe("with the TCP peer available (production server)", () => {
   it("a forged peer header (wrong or missing token) is ignored", () => {
     vi.stubEnv("FEEDFERRET_PEER_TOKEN", TOKEN);
     vi.stubEnv("TRUSTED_PROXY_COUNT", "1");
-    expect(getClientIdentifier(req({ "x-feedferret-peer": "guess|172.18.0.4", "x-forwarded-for": "7.7.7.7" }))).toBe("ip:7.7.7.7");
+    expect(getClientIdentifier(req({ "x-feedferret-peer": "guess|172.18.0.4", "x-forwarded-for": "7.7.7.7" }))).toBe("ip:7.7.7.7"); // explicit count, no valid peer: the operator's word
     vi.stubEnv("FEEDFERRET_PEER_TOKEN", "");
     expect(getClientIdentifier(req({ "x-feedferret-peer": `${TOKEN}|172.18.0.4`, "x-forwarded-for": "7.7.7.7" }))).toBe("ip:7.7.7.7");
   });
@@ -95,6 +106,112 @@ describe("with the TCP peer available (production server)", () => {
     expect(getClientIdentifier(req({ "x-forwarded-for": "7.7.7.7" }))).toBe("ip:unknown");
     getClientIdentifier(req({}));
     expect(warn).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Matrix: TRUSTED_PROXY_COUNT (unset | 0 | 1 | 2) × TRUSTED_PROXIES (unset | set) × peer (none | private |
+ * public | listed) with a forged X-Forwarded-For. The key is what the limiter would use.
+ */
+describe("trust matrix", () => {
+  const SPOOF = "9.9.9.9";
+  const key = (peer: string | null, headers: Record<string, string> = { "x-forwarded-for": `${SPOOF}, 203.0.113.9` }) =>
+    getClientIdentifier(peer === null ? req(headers) : withPeer(peer, headers));
+  const setup = (count: string | undefined, proxies?: string) => {
+    vi.stubEnv("FEEDFERRET_PEER_TOKEN", TOKEN);
+    if (count !== undefined) vi.stubEnv("TRUSTED_PROXY_COUNT", count);
+    else vi.stubEnv("TRUSTED_PROXY_COUNT", "");
+    if (proxies !== undefined) vi.stubEnv("TRUSTED_PROXIES", proxies);
+    return vi.spyOn(console, "warn").mockImplementation(() => {});
+  };
+
+  describe("TRUSTED_PROXY_COUNT explicit ≥ 1, TRUSTED_PROXIES unset", () => {
+    it("private / loopback peer → the Nth-from-right forwarded entry", () => {
+      setup("1");
+      expect(key("172.18.0.4")).toBe("ip:203.0.113.9");
+      expect(key("127.0.0.1")).toBe("ip:203.0.113.9");
+      setup("2");
+      expect(key("10.0.0.2", { "x-forwarded-for": "7.7.7.7, 203.0.113.9, 10.0.0.1" })).toBe("ip:203.0.113.9");
+    });
+    it("public peer → the peer, the forged header is ignored (and warned about once)", () => {
+      const warn = setup("1");
+      expect(key("198.51.100.20")).toBe("ip:198.51.100.20");
+      expect(key("198.51.100.21")).toBe("ip:198.51.100.21");
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+    it("CGNAT / Tailscale peer → a client, not a proxy", () => {
+      setup("1");
+      expect(key("100.101.102.103")).toBe("ip:100.101.102.103");
+    });
+    it("no peer information → the operator's explicit count is taken at its word", () => {
+      setup("1");
+      expect(key(null)).toBe("ip:203.0.113.9");
+    });
+  });
+
+  describe("TRUSTED_PROXY_COUNT explicit ≥ 1, TRUSTED_PROXIES set", () => {
+    it("only a listed peer is a proxy: listed → header, private-but-unlisted → peer, public-unlisted → peer", () => {
+      setup("1", "203.0.113.200, 192.0.2.0/24");
+      expect(key("203.0.113.200")).toBe("ip:203.0.113.9");
+      expect(key("192.0.2.55")).toBe("ip:203.0.113.9");
+      expect(key("172.18.0.4")).toBe("ip:172.18.0.4");
+      expect(key("198.51.100.20")).toBe("ip:198.51.100.20");
+    });
+    it("an unparsable list is the same as an unset one", () => {
+      setup("1", "bogus, 1.2.3.4/99");
+      expect(key("172.18.0.4")).toBe("ip:203.0.113.9");
+    });
+  });
+
+  describe("TRUSTED_PROXY_COUNT=0", () => {
+    it("the peer is the client whatever it is, with or without TRUSTED_PROXIES; no peer → shared key", () => {
+      const warn = setup("0", "172.18.0.4");
+      expect(key("172.18.0.4")).toBe("ip:172.18.0.4");
+      expect(key("100.101.102.103")).toBe("ip:100.101.102.103");
+      expect(key("198.51.100.20")).toBe("ip:198.51.100.20");
+      expect(warn).not.toHaveBeenCalled();
+      expect(key(null)).toBe("ip:unknown");
+    });
+  });
+
+  describe("TRUSTED_PROXY_COUNT unset / invalid (legacy compatibility mode)", () => {
+    it.each([undefined, "abc", "-1", "1.5"])("count %j: a private peer is still believed, with a loud warning", (count) => {
+      const warn = setup(count);
+      expect(key("172.18.0.4")).toBe("ip:203.0.113.9");
+      expect(warn).toHaveBeenCalledTimes(1);
+      const text = String(warn.mock.calls[0][0]);
+      expect(text).toContain("TRUSTED_PROXY_COUNT");
+      expect(text).toContain("clients can choose their own rate-limit key");
+      expect(text).toContain("TRUSTED_PROXY_COUNT=0");
+    });
+    it("a public or CGNAT peer is a client; TRUSTED_PROXIES narrows the trust here too", () => {
+      setup(undefined);
+      expect(key("198.51.100.20")).toBe("ip:198.51.100.20");
+      expect(key("100.101.102.103")).toBe("ip:100.101.102.103");
+      setup(undefined, "203.0.113.200");
+      expect(key("172.18.0.4")).toBe("ip:172.18.0.4");
+      expect(key("203.0.113.200")).toBe("ip:203.0.113.9");
+    });
+    it("no peer information (pnpm start without preload): headers are still believed, with a warning once, so one client cannot lock out everybody", () => {
+      const warn = setup(undefined);
+      expect(key(null)).toBe("ip:203.0.113.9");
+      expect(key(null, { "x-forwarded-for": "5.5.5.5", "x-real-ip": "6.6.6.6" })).toBe("ip:5.5.5.5");
+      expect(key(null, {})).toBe("ip:unknown");
+      expect(warn.mock.calls.filter(([m]) => String(m).includes("No TCP peer information"))).toHaveLength(1);
+    });
+    it("a forged peer header does not make a client a proxy", () => {
+      setup(undefined);
+      expect(getClientIdentifier(req({ "x-feedferret-peer": "guess|172.18.0.4", "x-forwarded-for": "7.7.7.7" }))).toBe("ip:7.7.7.7"); // no valid peer = no peer
+    });
+  });
+
+  it("an explicit 0 never triggers the unset-count warning", () => {
+    const warn = setup("0");
+    key("172.18.0.4");
+    expect(warn).not.toHaveBeenCalled();
+    expect(isProxyCountExplicit()).toBe(true);
+    vi.stubEnv("TRUSTED_PROXY_COUNT", "");
+    expect(isProxyCountExplicit()).toBe(false);
   });
 });
 

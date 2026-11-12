@@ -109,7 +109,7 @@ it("invalidates on 2FA setup, enable and disable", async () => {
   await confirmTwoFactorSetup(generateTotpToken(setup.secret));
   expect(await state.db.emailChangeRequest.count()).toBe(0);
   await requestEmailChange("u", "old@test.org", "new@test.org", "en");
-  await disableTwoFactor(generateTotpToken(setup.secret));
+  await disableTwoFactor(generateTotpToken(setup.secret, Date.now() + 30_000)); // the setup code is spent: use the next step
   expect(await state.db.emailChangeRequest.count()).toBe(0);
 });
 it("redacts confirmation and cancellation links from diagnostics", () => {

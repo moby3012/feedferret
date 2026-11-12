@@ -1,4 +1,4 @@
-import bcrypt from "bcryptjs";
+import { hashPassword } from "@/lib/password-hash";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
         }
         const { name, email, password } = parsed.data;
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await hashPassword(password);
         const result = await db.$transaction(async (tx) => {
             const settings = await tx.globalSettings.findUnique({ where: { id: "global" } });
             const userCount = await tx.user.count();

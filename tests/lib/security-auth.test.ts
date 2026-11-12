@@ -14,7 +14,7 @@ vi.mock("@/lib/rate-limit", async importOriginal => ({
 }));
 import { authenticateGReaderPassword, authenticateGReaderRequest, createGReaderToken } from "../../lib/greader";
 import { POST as fever } from "../../app/api/fever/route";
-const user = { id: "u1", email: "user@test.com", password: "hash", isActive: true, twoFactorEnabled: false };
+const user = { id: "u1", email: "user@test.com", password: "hash", isActive: true, twoFactorEnabled: false, failedApiLoginWindowEnd: new Date("2099-01-01T00:00:00Z") };
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.user.mockResolvedValue(user);

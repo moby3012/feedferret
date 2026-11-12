@@ -116,7 +116,7 @@ try {
     const email = arg('email');
     const password = arg('password');
     if (!email || !password) throw new Error('Missing --email or --password');
-    const hash = await bcrypt.hash(password, 12);
+    const hash = await bcrypt.hash(password, 12); // BCRYPT_COST in lib/password-hash.ts
     await prisma.user.upsert({ where: { email }, update: { password: hash, failedLoginCount: 0, failedLoginWindowEnd: null, failedApiLoginCount: 0, failedApiLoginWindowEnd: null }, create: { email, name: arg('name'), password: hash, role: arg('admin') === 'true' ? 'ADMIN' : 'USER' } });
     console.log(`User ready: ${email}`);
   } else if (cmd === 'sync') await syncUser(await findUser());
