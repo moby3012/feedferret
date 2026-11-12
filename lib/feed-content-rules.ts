@@ -1,3 +1,4 @@
+import { RegExpParser, visitRegExpAST } from "@eslint-community/regexpp";
 import safeRegex from "safe-regex";
 import { z } from "zod";
 
@@ -17,6 +18,32 @@ const gate = z.discriminatedUnion("type", [
 const schema = z.object({ transforms: z.array(transform).max(20).default([]), gates: z.array(gate).max(10).default([]) }).strict();
 export type FeedContentRules = z.infer<typeof schema>;
 
+/** Conservative AST policy supplements safe-regex's star-height heuristic.
+ * Reject backrefs, quantified alternations/nested repetition and chains of
+ * more than two unbounded quantifiers, including lookbehind repetition.
+ */
+function assertConservativeRegex(re: RegExp) {
+  const ast = new RegExpParser().parsePattern(re.source, 0, re.source.length, { unicode: re.unicode });
+  let unbounded = 0;
+  let quantified = 0;
+  let lookbehind = 0;
+  let unsafe = false;
+  visitRegExpAST(ast, {
+    onBackreferenceEnter() { unsafe = true; },
+    onAssertionEnter(node) { if (node.kind === "lookbehind") lookbehind++; },
+    onAssertionLeave(node) { if (node.kind === "lookbehind") lookbehind--; },
+    onQuantifierEnter(node) {
+      if (node.max === Infinity) unbounded++;
+      if (quantified > 0 || lookbehind > 0) unsafe = true;
+      quantified++;
+    },
+    onQuantifierLeave() { quantified--; },
+    onGroupEnter(group) { if (quantified && group.alternatives.length > 1) unsafe = true; },
+    onCapturingGroupEnter(group) { if (quantified && group.alternatives.length > 1) unsafe = true; },
+  });
+  if (unsafe || unbounded > 2) throw new Error("Unsafe regular expression");
+}
+
 /** Validate on every write, including imports. Execution is additionally worker bounded. */
 export function parseFeedContentRules(raw: unknown): FeedContentRules {
   if (raw == null || raw === "") return { transforms: [], gates: [] };
@@ -25,6 +52,7 @@ export function parseFeedContentRules(raw: unknown): FeedContentRules {
   for (const rule of [...config.transforms, ...config.gates]) {
     if (!("pattern" in rule)) continue;
     const re = new RegExp(rule.pattern, rule.flags);
+    assertConservativeRegex(re);
     if (!safeRegex(re)) throw new Error("Unsafe regular expression");
   }
   return config;

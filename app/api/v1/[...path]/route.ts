@@ -615,7 +615,6 @@ async function patchCategory(user: ApiUser, categoryId: string, request: Request
     const owned = await db.category.findFirst({ where: { id: String(data.parentId), userId: user.id }, select: { id: true } });
     if (!owned || data.parentId === categoryId) return apiError("Invalid parent category", 422);
   }
-  try { if (data.contentRules !== undefined) parseFeedContentRules(data.contentRules); } catch { return apiError("Invalid or unsafe content rules", 422); }
   clampFeedLimits(data);
   const result = await db.category.updateMany({ where: { id: categoryId, userId: user.id }, data });
   if (!result.count) return apiError("Category not found", 404);

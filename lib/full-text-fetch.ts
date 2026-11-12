@@ -112,7 +112,7 @@ export async function refetchArticleFullText(userId: string, articleId: string) 
     }
 
     const feed = await db.feed.findFirst({ where: { id: article.feedId, userId }, select: { contentRules: true, fullTextRemoveSelectors: true } });
-    if (feed && (feed.contentRules || feed.fullTextRemoveSelectors)) {
+    if (feed && feed.contentRules) {
         const [clean] = await applyFeedContentRules([{ title: article.title, html: result.html }], feed.contentRules, feed.fullTextRemoveSelectors);
         result = { ...result, html: clean.html, excerpt: clean.excerpt, quality: assessExtraction(clean.html) };
     }

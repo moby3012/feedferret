@@ -48,6 +48,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.6)
+      '@eslint-community/regexpp':
+        specifier: 4.12.2
+        version: 4.12.2
       '@extractus/article-extractor':
         specifier: ^8.1.0
         version: 8.1.0

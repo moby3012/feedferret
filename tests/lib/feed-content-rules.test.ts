@@ -6,7 +6,7 @@ import { generateOpml, parseOpml } from "@/lib/opml";
 const json = (transforms: unknown[] = [], gates: unknown[] = []) => JSON.stringify({ transforms, gates });
 describe("feed content rules", () => {
   it("rejects unsafe regex, invalid flags and oversized configs on save", () => {
-    for (const pattern of ["(a+)+$", "("]) {
+    for (const pattern of ["(a+)+$", "(", "(a|aa)+$", "(a|a)*$", "(a*)\\1+b", "a.*a.*a.*a.*a.*a.*b", "(.*)(.*)(.*)(.*)(.*)(.*)z", "(?<=a+)b"]) {
       expect(() => parseFeedContentRules(json([{ type: "replace_regex", pattern, replacement: "" }]))).toThrow();
     }
     expect(() => parseFeedContentRules(json([], [{ type: "title_include", pattern: "x", flags: "ii" }]))).toThrow();

@@ -21,11 +21,19 @@ const state = vi.hoisted(() => ({
   fetchFeed: null as unknown as ReturnType<typeof import("vitest").vi.fn>,
   page: null as unknown as (url: string) => Promise<string>,
   pageFetches: [] as string[],
+  ruleTimeout: false,
   aiCalls: 0,
   renderConfigured: false,
   renderCalls: 0,
   render: async (): Promise<string | null> => null,
 }));
+vi.mock("@/lib/html-worker/pool", async original => {
+  const actual = await original<typeof import("@/lib/html-worker/pool")>();
+  return { ...actual, runHtmlTask: async (...args: Parameters<typeof actual.runHtmlTask>) => {
+    if (state.ruleTimeout && args[0] === "feedContentRules") throw new actual.HtmlWorkerError("timeout", "simulated hostile item exceeded worker deadline");
+    return actual.runHtmlTask(...args);
+  } };
+});
 vi.mock("@/lib/ai-extraction", () => ({
   extractArticleWithAi: async () => {
     state.aiCalls++;
@@ -123,6 +131,7 @@ beforeEach(async () => {
   resetHostBackoff();
   resetTransportMemory();
   state.pageFetches = [];
+  state.ruleTimeout = false;
   state.aiCalls = 0;
   state.renderConfigured = false;
   state.renderCalls = 0;
@@ -170,6 +179,52 @@ describe("auto full text: no churn", () => {
     await syncFeed(userId, feed.id);
     expect(await rows(feed.id)).toEqual(before);
     expect(state.pageFetches).toEqual([]);
+  });
+
+  it("normal feeds do not acquire upstream hashes or perform article writes on re-sync", async () => {
+    const feed = await autoFeed();
+    await syncFeed(userId, feed.id);
+    expect(await state.db.article.findMany({ where: { feedId: feed.id }, select: { upstreamContentHash: true } })).toEqual(Array.from({ length: 3 }, () => ({ upstreamContentHash: null })));
+    const write = vi.spyOn(state.db.article, "update");
+    await syncFeed(userId, feed.id);
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it("rule feeds preserve enclosure and media corrections when the sanitized body is unchanged", async () => {
+    const feed = await autoFeed();
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off", contentRules: "{}" } });
+    await syncFeed(userId, feed.id);
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items().map(item => ({ ...item, imageUrl: "https://media.example/new.jpg", enclosures: [{ url: "https://media.example/fixed.mp3", type: "audio/mpeg" }], media: { url: "https://media.example/fixed.mp3", type: "audio/mpeg" } })) }));
+    await syncFeed(userId, feed.id);
+    const after = await state.db.article.findMany({ where: { feedId: feed.id } });
+    expect(after.every(row => row.imageUrl === "https://media.example/new.jpg" && row.enclosures?.includes("fixed.mp3") && row.mediaUrl === "https://media.example/fixed.mp3")).toBe(true);
+  });
+
+  it("hashes default-sanitized content so volatile raw HTML plus a rule edit cannot cause churn", async () => {
+    const feed = await autoFeed();
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off", contentRules: "{}", fullTextRemoveSelectors: ".ad" } });
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items().map(item => ({ ...item, content: item.content + '<script nonce="one">volatile1</script><div class="ad">one</div>' })) }));
+    await syncFeed(userId, feed.id);
+    const before = await state.db.article.findMany({ where: { feedId: feed.id }, orderBy: { externalId: "asc" } });
+    await state.db.feed.update({ where: { id: feed.id }, data: { contentRules: JSON.stringify({ transforms: [{ type: "replace_regex", pattern: "Teaser", replacement: "Clean" }] }) } });
+    state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items().map(item => ({ ...item, content: item.content + '<script nonce="two">volatile2</script><div class="ad">two</div>' })) }));
+    const write = vi.spyOn(state.db.article, "update");
+    await syncFeed(userId, feed.id);
+    expect(await state.db.article.findMany({ where: { feedId: feed.id }, orderBy: { externalId: "asc" } })).toEqual(before);
+    expect(write).not.toHaveBeenCalled();
+    write.mockRestore();
+  });
+
+  it("a hostile rule item falls back to default sanitizing without failing or muting the feed", async () => {
+    const feed = await autoFeed();
+    await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off", contentRules: "{}" } });
+    state.ruleTimeout = true;
+    for (let n = 0; n < 3; n++) expect((await syncFeed(userId, feed.id)).success).toBe(true);
+    const saved = await state.db.feed.findUniqueOrThrow({ where: { id: feed.id } });
+    expect(saved).toMatchObject({ autoMuted: false, consecutiveFailureCount: 0, lastStatus: "ok" });
+    expect(await state.db.article.count({ where: { feedId: feed.id } })).toBe(3);
+    expect((await rows(feed.id)).every(row => row.content.startsWith("<p>Teaser"))).toBe(true);
   });
 
   it("a genuine upstream change re-extracts only that article; a failed fetch keeps the stored full text", async () => {

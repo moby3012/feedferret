@@ -23,7 +23,7 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => state.session) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn(), revalidateTag: vi.fn() }));
 
-import { getAutoReadRules, getFeedEditConfig, getFeedHealth, getFeeds, updateFeed } from "../../app/actions/feeds";
+import { getAutoReadRules, getFeedEditConfig, getFeedHealth, getFeeds, updateFeed, previewFeedContentRules } from "../../app/actions/feeds";
 import { getNotificationChannels, updateProfile } from "../../app/actions/settings";
 import { sealSecret } from "../../lib/secret-box";
 import { getBootstrap } from "../../server/bootstrap";
@@ -126,6 +126,12 @@ describe("N4: feed secrets never reach list / bootstrap payloads", () => {
     for (const secret of [SECRETS.password, SECRETS.cookie, SECRETS.proxy]) expect(JSON.stringify(config)).not.toContain(secret);
     state.session = { user: { id: ids.bob } };
     await expect(getFeedEditConfig(ids.feed)).rejects.toThrow("Feed not found");
+  });
+
+  it("bounds content-rule preview selectors and rate-limits requests on the server", async () => {
+    await expect(previewFeedContentRules(ids.feed, "{}", "x".repeat(1001))).rejects.toThrow("1000");
+    for (let i = 0; i < 30; i++) await previewFeedContentRules(ids.feed, "{}");
+    await expect(previewFeedContentRules(ids.feed, "{}")).rejects.toThrow("Too many previews");
   });
 
   it("updateFeed keeps the stored password when the dialog omits it", async () => {

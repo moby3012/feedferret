@@ -2011,9 +2011,11 @@ export async function createChangedetectionFeed(input: { url: string; useAiSelec
 export async function previewFeedContentRules(feedId: string, rules: string, removeSelectors?: string | null) {
     const session = await auth();
     if (!session?.user?.id) throw new Error("Unauthorized");
+    if (removeSelectors != null && (typeof removeSelectors !== "string" || removeSelectors.length > 1000)) throw new Error("Remove selectors exceed 1000 characters");
+    if (!checkRateLimit(`user:${session.user.id}`, { prefix: "content-rules-preview", limit: 30, windowSecs: 60 }).success) throw new Error("Too many previews; try again in a minute");
     parseFeedContentRules(rules);
     const article = await db.article.findFirst({ where: { feedId, userId: session.user.id }, orderBy: { publishedAt: "desc" }, select: { title: true, content: true, feedContent: true } });
     if (!article) return null;
-    const [result] = await applyFeedContentRules([{ title: article.title, html: article.feedContent ?? article.content ?? "" }], rules, removeSelectors);
+    const [result] = await applyFeedContentRules([{ title: article.title, html: article.feedContent ?? article.content ?? "" }], rules, removeSelectors, { priority: "background" });
     return { ...result, title: article.title };
 }
