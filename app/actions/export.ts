@@ -125,14 +125,14 @@ export async function updateExportSettings(data: {
   if (data.clearReadeckApiKey) {
     updateData.exportReadeckApiKey = null;
   } else if (data.readeckApiKey) {
-    updateData.exportReadeckApiKey = encryptIfValue(data.readeckApiKey);
+    updateData.exportReadeckApiKey = encryptIfValue(data.readeckApiKey, "user.exportReadeckApiKey");
   }
 
   if ("linkwardenUrl" in data) updateData.exportLinkwardenUrl = data.linkwardenUrl?.trim() || null;
   if (data.clearLinkwardenApiKey) {
     updateData.exportLinkwardenApiKey = null;
   } else if (data.linkwardenApiKey) {
-    updateData.exportLinkwardenApiKey = encryptIfValue(data.linkwardenApiKey);
+    updateData.exportLinkwardenApiKey = encryptIfValue(data.linkwardenApiKey, "user.exportLinkwardenApiKey");
   }
 
   await db.user.update({ where: { id: session.user.id }, data: updateData });
