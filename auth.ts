@@ -9,7 +9,7 @@ import { consumeTotpToken } from "@/lib/totp-consume";
 import { sendSignInEmail } from "@/lib/mail";
 
 import { validateAuthSecret } from "@/lib/auth-secret";
-import { getClientIdentifier } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/rate-limit";
 import { reserveLoginAttempt, releaseLoginAttempt } from "@/lib/account-lockout";
 
 const isBuild = process.env.NEXT_PHASE === "phase-production-build";
@@ -50,7 +50,7 @@ const config = {
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = credentials.email as string;
-        const ip = getClientIdentifier(req).replace(/^ip:/, "");
+        const ip = getClientIp(req);
         const userAgent = (req as any)?.headers?.get?.("user-agent") ?? null;
 
         const logAttempt = async (success: boolean, userId?: string, failReason?: string) => {

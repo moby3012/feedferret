@@ -12,44 +12,70 @@ import { db } from "@/lib/db";
  * checks until the window ends. Refused attempts do not extend the window, so a lockout lasts at most
  * `windowMs`.
  *
+ * Two independent counters ("scopes"): "web" (browser sign-in, Auth.js Credentials) and "api" (Google
+ * Reader / Fever Basic auth when it accepts the main password). Separate so a sync client with a stale
+ * password cannot lock the owner out of the web sign-in; the cost is that a guesser gets at most
+ * 2 × limit tries per window.
+ *
  * DoS trade-off (documented in docs/security.md): anyone who knows an address can burn its 10
  * attempts and keep the password sign-in refused for up to 15 minutes at a time. That is deliberately
- * bounded and limited to password sign-in: existing sessions, magic-link/OAuth sign-in, API tokens and
- * Fever/GReader are unaffected, and a correct password + TOTP still unlocks nothing before the window
- * ends (exempting "correct credentials" would let the attacker keep guessing).
+ * bounded and limited to password sign-in: existing sessions, magic-link/OAuth sign-in and API
+ * tokens are unaffected, and a correct password + TOTP does not bypass an active lockout (exempting
+ * "correct credentials" would let the attacker keep guessing). An operator can clear a lockout with
+ * `node scripts/auth-cli.mjs unlock-user <email>` (also done by `create-user`).
+ *
+ * Clock: windows are compared against the application server's clock (`new Date()`), not the
+ * database's. With several replicas keep them NTP-synchronised; skew of a few seconds only shifts the
+ * window end by that much. Writes touch `User.updatedAt` (Prisma `@updatedAt`); nothing reads it for
+ * users.
  */
 export const ACCOUNT_LOCKOUT = { limit: 10, windowMs: 15 * 60 * 1000 } as const;
+
+export type LockoutScope = "web" | "api";
+
+const FIELDS = {
+  web: { count: "failedLoginCount", end: "failedLoginWindowEnd" },
+  api: { count: "failedApiLoginCount", end: "failedApiLoginWindowEnd" },
+} as const;
 
 /**
  * Reserves one sign-in attempt for the account. Returns false when the account is locked (nothing is
  * reserved, the caller must not verify the password).
  */
-export async function reserveLoginAttempt(userId: string, now: Date = new Date()): Promise<boolean> {
+export async function reserveLoginAttempt(userId: string, scope: LockoutScope = "web", now: Date = new Date()): Promise<boolean> {
+  const f = FIELDS[scope];
   // 1. A finished window starts over.
   await db.user.updateMany({
-    where: { id: userId, failedLoginWindowEnd: { lt: now } },
-    data: { failedLoginCount: 0, failedLoginWindowEnd: null },
+    where: { id: userId, [f.end]: { lt: now } },
+    data: { [f.count]: 0, [f.end]: null },
   });
   // 2. Start a window if none is running (idempotent under concurrency: the first writer wins).
   await db.user.updateMany({
-    where: { id: userId, failedLoginWindowEnd: null },
-    data: { failedLoginWindowEnd: new Date(now.getTime() + ACCOUNT_LOCKOUT.windowMs) },
+    where: { id: userId, [f.end]: null },
+    data: { [f.end]: new Date(now.getTime() + ACCOUNT_LOCKOUT.windowMs) },
   });
   // 3. Atomic reserve: only succeeds while below the limit.
   const reserved = await db.user.updateMany({
-    where: { id: userId, failedLoginCount: { lt: ACCOUNT_LOCKOUT.limit } },
-    data: { failedLoginCount: { increment: 1 } },
+    where: { id: userId, [f.count]: { lt: ACCOUNT_LOCKOUT.limit } },
+    data: { [f.count]: { increment: 1 } },
   });
   return reserved.count === 1;
 }
 
 /** Gives back the attempt of a fully successful sign-in. */
-export async function releaseLoginAttempt(userId: string): Promise<void> {
+export async function releaseLoginAttempt(userId: string, scope: LockoutScope = "web"): Promise<void> {
+  const f = FIELDS[scope];
   await db.user.updateMany({
-    where: { id: userId, failedLoginCount: { gt: 0 } },
-    data: { failedLoginCount: { decrement: 1 } },
+    where: { id: userId, [f.count]: { gt: 0 } },
+    data: { [f.count]: { decrement: 1 } },
   });
 }
 
-/** Data fragment that clears the lockout (password change, admin reset). */
-export const CLEAR_LOGIN_LOCKOUT = { failedLoginCount: 0, failedLoginWindowEnd: null } as const;
+/**
+ * `User` update fragment that clears BOTH lockouts. Used when the credential itself changes (password
+ * change), by `create-user` (re-provisioning an account) and by `unlock-user`
+ * (scripts/auth-cli.mjs duplicates these four fields; keep them in sync).
+ */
+export const CLEAR_LOGIN_LOCKOUT = {
+  failedLoginCount: 0, failedLoginWindowEnd: null, failedApiLoginCount: 0, failedApiLoginWindowEnd: null,
+} as const;

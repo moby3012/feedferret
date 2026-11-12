@@ -3,6 +3,9 @@
  * Uses sliding window algorithm per identifier (IP, userId, etc.)
  */
 
+import { getClientIpKey } from "@/lib/client-ip";
+export { getClientIp, resetProxyCountWarning, warnIfProxyCountUnset } from "@/lib/client-ip";
+
 interface RateLimitEntry {
   count: number;
   resetAt: number;
@@ -19,16 +22,22 @@ interface RateLimitEntry {
  *  - ordinary limiters drop expired entries, then the oldest ones;
  *  - `critical` limiters (credential guessing: sign-in, step-up, webhook auth failures, …) are
  *    FAIL-SAFE: expired entries go first, then lightly used entries (below half of their limit), then
- *    any entry that is not yet locked. Entries at/over their limit (active lockouts) are NEVER
- *    evicted: if nothing else can be freed, new keys are refused ("limited") until the earliest
- *    lockout expires. Trade-off: filling the table with active lockouts needs `cap × limit`
- *    requests from `cap` distinct keys and then denies sign-in for brand-new keys (IPs) until the
- *    first lockout expires, which beats silently resetting password-guess throttling.
+ *    any entry that is not yet locked. What happens when only active lockouts are left depends on
+ *    `overflow`:
+ *      - "refuse" (default): lockouts are never evicted, new keys are refused ("limited") until the
+ *        earliest lockout expires. For limiters without a backstop (internal API key, webhook
+ *        secret, step-ups). Filling the table needs `cap × limit` requests from `cap` distinct keys.
+ *      - "evict-oldest": the oldest lockouts go. For IP-keyed limiters whose accounts are also
+ *        protected elsewhere (sign-in: the per-account DB lockout; magic link: the unlock path must
+ *        never be globally deniable), so one host cannot deny everyone else.
  */
+type Overflow = "refuse" | "evict-oldest";
+
 interface Namespace {
   entries: Map<string, RateLimitEntry>;
   cap: number;
   critical: boolean;
+  overflow: Overflow;
   /** Critical namespaces only: while now < this, a full scan already found nothing evictable. */
   saturatedUntil: number;
 }
@@ -44,7 +53,7 @@ const EVICTION_BATCH_FRACTION = 0.01;
 function namespaceFor(config: RateLimitConfig): Namespace {
   let ns = namespaces.get(config.prefix);
   if (!ns) {
-    ns = { entries: new Map(), cap: MAX_STORE_ENTRIES, critical: false, saturatedUntil: 0 };
+    ns = { entries: new Map(), cap: MAX_STORE_ENTRIES, critical: false, overflow: config.overflow ?? "refuse", saturatedUntil: 0 };
     namespaces.set(config.prefix, ns);
   }
   if (config.critical) ns.critical = true;
@@ -81,13 +90,13 @@ function makeRoom(ns: Namespace, now: number): boolean {
   if (ns.critical) {
     evict((entry) => entry.count * 2 < entry.limit);
     evict((entry) => entry.count < entry.limit);
-    if (freed === 0) {
+    if (freed === 0 && ns.overflow === "refuse") {
       let earliest = Infinity;
       for (const entry of ns.entries.values()) earliest = Math.min(earliest, entry.resetAt);
       ns.saturatedUntil = earliest;
       return false;
     }
-    return true;
+    if (freed > 0) return true;
   }
   evict(() => true);
   return true;
@@ -105,6 +114,8 @@ export interface RateLimitConfig {
    * never dropped to make room, new keys are refused instead). See `Namespace`.
    */
   critical?: boolean;
+  /** Critical limiters only: what to do when the store holds nothing but active lockouts. */
+  overflow?: Overflow;
 }
 
 export interface RateLimitResult {
@@ -260,6 +271,7 @@ export const RATE_LIMITS = {
     windowSecs: 15 * 60,
     prefix: "auth-signin",
     critical: true,
+    overflow: "evict-oldest",
   } satisfies RateLimitConfig,
 
   // Auth: sign-out. Not a credential guess, so it must NEVER draw from the sign-in budget: a refused
@@ -277,6 +289,7 @@ export const RATE_LIMITS = {
     windowSecs: 10 * 60,
     prefix: "auth-magic",
     critical: true,
+    overflow: "evict-oldest",
   } satisfies RateLimitConfig,
 
   // REST API v1 write operations — 60 per minute per user/IP
@@ -455,56 +468,16 @@ export function rateLimitResponse(result: RateLimitResult): Response {
   );
 }
 
-let warnedProxyCount = false;
-
 /**
- * Per-IP limits trust one `X-Forwarded-For` hop, counted from the right (`TRUSTED_PROXY_COUNT`,
- * default 1). That default is right behind a single reverse proxy (Coolify/Traefik, Nginx, Caddy)
- * but lets a client choose its own limiter key when FeedFerret is exposed directly. Requests that
- * carry the header while the variable is unset/0/invalid therefore log a one-time warning.
- * `TRUSTED_PROXY_COUNT=1` set explicitly silences it (docs/reverse-proxy.md, docs/self-hosting.md).
- */
-export function warnIfProxyCountUnset(): void {
-  if (warnedProxyCount) return;
-  const raw = process.env.TRUSTED_PROXY_COUNT;
-  const configured = Number(raw);
-  if (raw !== undefined && raw !== "" && Number.isSafeInteger(configured) && configured >= 1) return;
-  warnedProxyCount = true;
-  console.warn(
-    `[rate-limit] Requests carry X-Forwarded-For but TRUSTED_PROXY_COUNT is ${raw === undefined || raw === "" ? "unset" : `invalid (${raw})`}; assuming 1 trusted proxy hop. ` +
-      "Set TRUSTED_PROXY_COUNT=1 behind a single reverse proxy (Coolify/Traefik, Nginx, Caddy) so per-IP limits and sign-in lockouts cannot be evaded with a spoofed header; see docs/reverse-proxy.md."
-  );
-}
-
-/** Test hook: lets the one-time warning fire again. */
-export function resetProxyCountWarning(): void {
-  warnedProxyCount = false;
-}
-
-/**
- * Helper to get identifier from request (IP or user ID)
+ * Helper to get identifier from request (IP or user ID). The IP part comes from `lib/client-ip.ts`
+ * (IPv6 collapses to its /64; forwarded headers are only believed from a trusted proxy peer).
  */
 export function getClientIdentifier(
   request: Request,
   userId?: string | null
 ): string {
   if (userId) return `user:${userId}`;
-
-  // Try common proxy headers
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    warnIfProxyCountUnset();
-    const hops = forwarded.split(",").map(hop => hop.trim());
-    const configured = Number(process.env.TRUSTED_PROXY_COUNT ?? 1);
-    const count = Number.isSafeInteger(configured) && configured >= 1 ? configured : 1;
-    return `ip:${hops[Math.max(0, hops.length - count)] || "unknown"}`;
-  }
-
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) return `ip:${realIp}`;
-
-  // Fallback to unknown (still rate-limited globally)
-  return "ip:unknown";
+  return getClientIpKey(request);
 }
 
 /** Which limiter guards a POST to the Auth.js route (`/api/auth/<action>/…`). */

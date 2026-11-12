@@ -152,6 +152,10 @@ model User {
   // fixed window; the window (and the lockout once the count hits the limit) ends at failedLoginWindowEnd.
   failedLoginCount     Int       @default(0)
   failedLoginWindowEnd DateTime?
+  // Same, separate counter for the Google Reader / Fever endpoints when they accept the MAIN password
+  // (lib/greader.ts), so a sync client with a stale password cannot lock the owner out of the web sign-in.
+  failedApiLoginCount     Int       @default(0)
+  failedApiLoginWindowEnd DateTime?
   @@index([digestEnabled])
   @@index([pushEnabled])
 }

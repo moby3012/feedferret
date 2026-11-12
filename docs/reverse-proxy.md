@@ -18,9 +18,23 @@ This variable is already included in `.env.example` and is set to `true` by defa
 
 ## Trusted proxy count
 
-`TRUSTED_PROXY_COUNT=1` selects the right-most `X-Forwarded-For` entry for a single Nginx, Caddy or Traefik proxy. For Cloudflare → Traefik → FeedFerret, set `TRUSTED_PROXY_COUNT=2`. Restrict origin access to Cloudflare and app access to Traefik; only trust headers appended by this controlled chain.
+> **Warning — set this to match your setup.** Per-IP rate limits and the sign-in throttle key on the client address. If FeedFerret is reachable **without** a proxy in front, a client can send its own `X-Forwarded-For` and pick any limiter key, which defeats the per-IP limits. Choose the value that matches how traffic reaches the container:
+>
+> | Setup | Value |
+> |---|---|
+> | Directly exposed, no proxy | `TRUSTED_PROXY_COUNT=0` (the TCP peer is the client, forwarded headers are ignored) |
+> | One proxy: Coolify/Traefik, Nginx, Caddy | `TRUSTED_PROXY_COUNT=1` (right-most `X-Forwarded-For` entry) |
+> | Cloudflare → Traefik → FeedFerret | `TRUSTED_PROXY_COUNT=2` |
+>
+> Unset, empty or invalid means 1, plus a startup warning and a one-time warning on the first request that carries `X-Forwarded-For`. The bundled compose files leave it empty on purpose so that warning stays live until you set it.
 
-**Coolify (Traefik):** exactly one proxy hop, so `TRUSTED_PROXY_COUNT=1` (the bundled compose files default to it). If the variable is unset, empty, `0` or not a positive integer, FeedFerret assumes `1`, logs a startup warning and logs another one the first time a request carries `X-Forwarded-For`: with no proxy in front, a client could choose its own rate-limit key by sending that header. Expose the container only through the proxy.
+Restrict origin access to Cloudflare and app access to Traefik; only trust headers appended by this controlled chain.
+
+**Peer check (Docker image).** The image starts the server with `scripts/peer-address-preload.cjs`, which records the real TCP peer of every request. With `TRUSTED_PROXY_COUNT` ≥ 1, `X-Forwarded-For` is only believed when that peer is loopback, private (10/8, 172.16/12, 192.168/16), link-local, CGNAT (100.64/10) or ULA (fc00::/7) — i.e. your proxy on the Docker network — or is listed in `TRUSTED_PROXIES` (comma separated IPs/CIDRs). A request arriving **directly from a public address** is keyed by that address and its `X-Forwarded-For` is ignored (logged once). If your proxy has a public address (separate host), list it in `TRUSTED_PROXIES`, otherwise all clients share the proxy's key. Without the preload (`next dev`, `next start`) the header-only behaviour applies.
+
+**IPv6.** IPv6 clients are limited per `/64` prefix (a single host owns millions of addresses in its `/64`); IPv4-mapped IPv6 addresses count as their IPv4 address.
+
+**Coolify (Traefik):** exactly one proxy hop, so `TRUSTED_PROXY_COUNT=1`.
 
 ## Nginx
 

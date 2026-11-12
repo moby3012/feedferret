@@ -69,7 +69,7 @@ export HOSTNAME="0.0.0.0"
 
 # server.js is the entry point for Next.js standalone mode
 if [ -f "server.js" ]; then
-    node server.js
+    node --require ./scripts/peer-address-preload.cjs server.js
 else
     log "❌ Error: server.js not found! Standalone build might have failed."
     exit 1

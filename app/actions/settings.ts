@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs";
 import { sendDigestEmail, getDigestArticles, markArticlesAsDigested } from "@/lib/digest-email";
 import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
-import { readTotpSecret } from "@/lib/totp-consume";
+import { consumeTotpToken, readTotpSecret } from "@/lib/totp-consume";
 import { readPlainColumnOrNull } from "@/lib/secret-box";
 import { readChannelTokens } from "@/lib/user-secrets";
 import { ChangePasswordSchema } from "@/lib/validation";
@@ -173,7 +173,7 @@ export async function changePassword(data: {
 
   // The current password is a guessable secret for whoever holds a session: throttle (fail-safe store).
   if (!checkRateLimit(session.user.id, { prefix: "password-change", limit: 10, windowSecs: 900, critical: true }).success) {
-    return { success: false, error: t("emailChangeRateLimited") };
+    return { success: false, error: t("passwordChangeRateLimited") };
   }
   const currentMatches = await bcrypt.compare(parsed.data.currentPassword, user.password);
   if (!currentMatches) return { success: false, error: t("currentPasswordIncorrect") };
@@ -358,20 +358,22 @@ export async function disableTwoFactor(code: string) {
   const session = await requireUser();
   const user = await db.user.findUnique({
     where: { id: session.user.id },
-    select: { twoFactorEnabled: true, twoFactorSecret: true },
+    select: { twoFactorEnabled: true, twoFactorSecret: true, uiLanguage: true },
   });
 
   if (!user?.twoFactorEnabled || !user.twoFactorSecret) {
     throw new Error("Two-factor authentication is not enabled");
   }
-  const secret = readTotpSecret(user.twoFactorSecret);
-  if (!secret) throw new Error(TOTP_UNREADABLE);
+  if (!readTotpSecret(user.twoFactorSecret)) throw new Error(TOTP_UNREADABLE);
 
   // A 6-digit code is guessable online by whoever holds a session: throttle (fail-safe store).
   if (!checkRateLimit(session.user.id, { prefix: "2fa-disable", limit: 10, windowSecs: 900, critical: true }).success) {
-    throw new Error("Too many attempts. Wait 15 minutes and try again.");
+    const { getTranslations } = await import("next-intl/server");
+    const t = await getTranslations({ locale: user.uiLanguage ?? "en", namespace: "profile" });
+    throw new Error(t("twoFactorRateLimited"));
   }
-  if (!verifyTotpToken(secret, code)) {
+  // Consuming (not just verifying) the code makes it single-use, like at sign-in.
+  if (!await consumeTotpToken(session.user.id, user.twoFactorSecret, code)) {
     throw new Error("Invalid one-time code");
   }
 

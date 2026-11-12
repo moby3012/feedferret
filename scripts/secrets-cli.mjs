@@ -45,7 +45,7 @@ async function importPackage(name) {
   }
 }
 
-async function createPrisma() {
+export async function createPrisma() {
   const { PrismaClient } = await import("@prisma/client");
   const provider = (process.env.DATABASE_PROVIDER ?? "sqlite").toLowerCase();
   const url = process.env.DATABASE_URL || "file:./dev.db";

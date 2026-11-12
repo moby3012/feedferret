@@ -49,14 +49,14 @@ describe("reserveLoginAttempt", () => {
   it("allows exactly `limit` attempts per window, then refuses without extending the window", async () => {
     const u = await makeUser();
     const t0 = new Date("2030-01-01T00:00:00Z");
-    for (let i = 0; i < LIMIT; i++) expect(await reserveLoginAttempt(u.id, new Date(t0.getTime() + i * 1000))).toBe(true);
+    for (let i = 0; i < LIMIT; i++) expect(await reserveLoginAttempt(u.id, "web", new Date(t0.getTime() + i * 1000))).toBe(true);
     const end = (await state(u.id)).failedLoginWindowEnd!;
     expect(end.getTime()).toBe(t0.getTime() + ACCOUNT_LOCKOUT.windowMs);
-    expect(await reserveLoginAttempt(u.id, new Date(t0.getTime() + 60_000))).toBe(false);
-    expect(await reserveLoginAttempt(u.id, new Date(t0.getTime() + ACCOUNT_LOCKOUT.windowMs - 1))).toBe(false);
+    expect(await reserveLoginAttempt(u.id, "web", new Date(t0.getTime() + 60_000))).toBe(false);
+    expect(await reserveLoginAttempt(u.id, "web", new Date(t0.getTime() + ACCOUNT_LOCKOUT.windowMs - 1))).toBe(false);
     expect((await state(u.id)).failedLoginWindowEnd!.getTime()).toBe(end.getTime());
     // window over → fresh budget
-    expect(await reserveLoginAttempt(u.id, new Date(end.getTime() + 1))).toBe(true);
+    expect(await reserveLoginAttempt(u.id, "web", new Date(end.getTime() + 1))).toBe(true);
     expect((await state(u.id)).failedLoginCount).toBe(1);
   });
 
@@ -94,6 +94,35 @@ describe("reserveLoginAttempt", () => {
     for (let i = 0; i < LIMIT; i++) await reserveLoginAttempt(u.id);
     await h.db.user.update({ where: { id: u.id }, data: CLEAR_LOGIN_LOCKOUT });
     expect(await reserveLoginAttempt(u.id)).toBe(true);
+  });
+});
+
+describe("API scope and operator unlock", () => {
+  it("the GReader/Fever counter is independent of the web sign-in counter", async () => {
+    const u = await makeUser();
+    for (let i = 0; i < LIMIT; i++) expect(await reserveLoginAttempt(u.id, "api")).toBe(true);
+    expect(await reserveLoginAttempt(u.id, "api")).toBe(false);
+    expect(await reserveLoginAttempt(u.id, "web")).toBe(true); // the owner can still sign in
+    await releaseLoginAttempt(u.id, "api");
+    expect(await reserveLoginAttempt(u.id, "api")).toBe(true);
+  });
+
+  it("`auth-cli unlock-user` clears both lockouts (case-insensitive lookup) and reports unknown users", async () => {
+    const u = await makeUser();
+    for (let i = 0; i < LIMIT; i++) { await reserveLoginAttempt(u.id, "web"); await reserveLoginAttempt(u.id, "api"); }
+    expect(await reserveLoginAttempt(u.id, "web")).toBe(false);
+    vi.stubEnv("DATABASE_PROVIDER", "sqlite");
+    vi.stubEnv("DATABASE_URL", `file:${dbFile}`);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { main } = await import("../../scripts/auth-cli.mjs");
+    expect(await main(["unlock-user", u.email!.toUpperCase().replace("@EXAMPLE.ORG", "@example.org")])).toBe(0);
+    expect(await main(["unlock-user", "--user", "nobody@example.org"])).toBe(1);
+    expect(await main(["unlock-user"])).toBe(1);
+    log.mockRestore(); err.mockRestore(); vi.unstubAllEnvs();
+    expect(await state(u.id)).toMatchObject({ failedLoginCount: 0, failedLoginWindowEnd: null });
+    expect(await reserveLoginAttempt(u.id, "web")).toBe(true);
+    expect(await reserveLoginAttempt(u.id, "api")).toBe(true);
   });
 });
 

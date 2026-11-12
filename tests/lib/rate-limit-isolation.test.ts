@@ -80,6 +80,32 @@ describe("fail-safe eviction of critical limiters", () => {
     expect(rateLimitStoreSize(cfg.prefix)).toBeLessThan(MAX_STORE_ENTRIES);
   });
 
+  it.each([["sign-in", signIn], ["magic link", RATE_LIMITS.authMagicLink]])("%s: a store full of active lockouts evicts the OLDEST one instead of refusing every new IP", (_name, cfg) => {
+    const c = { ...cfg, prefix: `iso-evict-${cfg.prefix}` }; // own store, same policy
+    for (let i = 0; i < MAX_STORE_ENTRIES; i++) for (let n = 0; n <= c.limit; n++) checkRateLimit(`ip:locked-${i}`, c);
+    expect(rateLimitStoreSize(c.prefix)).toBe(MAX_STORE_ENTRIES);
+    expect(checkRateLimit("ip:newcomer", c).success).toBe(true); // not denied
+    expect(rateLimitStoreSize(c.prefix)).toBeLessThanOrEqual(MAX_STORE_ENTRIES);
+    expect(checkRateLimit(`ip:locked-${MAX_STORE_ENTRIES - 1}`, c).success).toBe(false); // newest lockouts stay
+    expect(peekRateLimit("ip:locked-0", c).success).toBe(true); // the oldest was the one dropped
+  });
+
+  it("the same refuse-when-full policy stays on limiters without a backstop (internal API key)", () => {
+    expect(RATE_LIMITS.internalApi.critical).toBe(true);
+    expect((RATE_LIMITS.internalApi as RateLimitConfig).overflow).toBeUndefined();
+    expect((RATE_LIMITS.authSignIn as RateLimitConfig).overflow).toBe("evict-oldest");
+    expect((RATE_LIMITS.authMagicLink as RateLimitConfig).overflow).toBe("evict-oldest");
+  });
+
+  it("an IPv6 /64 cannot mint limiter keys: 5 000 addresses of one prefix are one entry", () => {
+    vi.stubEnv("TRUSTED_PROXY_COUNT", "1");
+    const cfg: RateLimitConfig = { ...signIn, prefix: "iso-v6" };
+    for (let i = 0; i < 5_000; i++) {
+      checkRateLimit(getClientIdentifier(new Request("https://example.test", { headers: { "x-forwarded-for": `2001:db8:abcd:1234:${i.toString(16)}::${i.toString(16)}` } })), cfg);
+    }
+    expect(rateLimitStoreSize(cfg.prefix)).toBe(1);
+  });
+
   it("derived limiters (GReader/Fever/credentials-status) are critical in their own store", () => {
     const greader = { ...signIn, prefix: "iso-greader-ip" };
     lock("ip:victim-c", greader);
@@ -90,7 +116,7 @@ describe("fail-safe eviction of critical limiters", () => {
 
 describe("X-Forwarded-For without TRUSTED_PROXY_COUNT", () => {
   const request = () => new Request("https://example.test", { headers: { "x-forwarded-for": "1.2.3.4" } });
-  it.each([undefined, "", "0", "garbage"])("warns once when it is %s", (value) => {
+  it.each([undefined, "", "garbage"])("warns once when it is %s", (value) => {
     resetProxyCountWarning();
     if (value === undefined) vi.stubEnv("TRUSTED_PROXY_COUNT", undefined as never); else vi.stubEnv("TRUSTED_PROXY_COUNT", value);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

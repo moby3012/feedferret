@@ -2,7 +2,8 @@ import { decimalExternalId, storedExternalId } from "./external-ids";
 import { hashApiToken } from "@/lib/token";
 import { Prisma, type User } from "@prisma/client";
 import { hmacHex, legacyMacSecret, verifyMac } from "@/lib/secret-box";
-import { checkRateLimit, peekRateLimit, releaseRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/rate-limit";
+import { checkRateLimit, peekRateLimit, releaseRateLimit, getClientIdentifier, getClientIp, RATE_LIMITS } from "@/lib/rate-limit";
+import { reserveLoginAttempt, releaseLoginAttempt } from "@/lib/account-lockout";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { renderMarkdownToHtml } from "@/lib/markdown-render";
@@ -70,10 +71,15 @@ export async function authenticateGReaderPassword(request: Request, email: strin
   let user: Awaited<ReturnType<typeof db.user.findUnique>> = null;
   let failReason: string | undefined;
   let reserved = false;
-  const reserve = () => {
+  let reservedAccount = false;
+  let reservedDb = false;
+  // `chargeAccount` is false for addresses without an account: invented addresses must not create
+  // entries in the per-address store (only the IP budget is charged).
+  const reserve = (chargeAccount = true) => {
     const ipLimit = checkRateLimit(ip, ipConfig);
-    const accountLimit = checkRateLimit(identity, emailConfig);
+    const accountLimit = chargeAccount ? checkRateLimit(identity, emailConfig) : { success: true };
     reserved = true;
+    reservedAccount = chargeAccount;
     return ipLimit.success && accountLimit.success;
   };
   // A login verified within the last minute (same identity + password) skips
@@ -89,7 +95,7 @@ export async function authenticateGReaderPassword(request: Request, email: strin
     user = email ? await db.user.findUnique({ where: { email } }) : null;
     // Addresses are stored lower-case since the email-change normalization.
     if (!user && identity && identity !== email) user = await db.user.findUnique({ where: { email: identity } });
-    if (!user || (!user.password && !user.apiPasswordHash)) failReason = reserve() ? "no_account" : "rate_limit";
+    if (!user || (!user.password && !user.apiPasswordHash)) failReason = reserve(false) ? "no_account" : "rate_limit";
     else if (!user.isActive) failReason = reserve() ? "inactive" : "rate_limit";
     else {
       const hash = user.apiPasswordHash || (!user.twoFactorEnabled && !user.apiPasswordRequired ? user.password : null);
@@ -98,7 +104,13 @@ export async function authenticateGReaderPassword(request: Request, email: strin
       const cached = passwordCache.get(user.id);
       const verified = !!hash && cached?.key === key && cached.expires > Date.now();
       if (!verified) passwordCache.delete(user.id);
+      // Accepting the MAIN web password here makes this endpoint a second guessing surface for it, so it
+      // is also charged to the persistent per-account budget (its own counter, so a sync client with a
+      // stale password cannot lock the owner out of the web sign-in). The separate API password has no
+      // such exposure and is not charged.
+      const exposesWebPassword = !!hash && !user.apiPasswordHash;
       if (!verified && !reserve()) failReason = "rate_limit";
+      else if (!verified && exposesWebPassword && !(reservedDb = await reserveLoginAttempt(user.id, "api"))) failReason = "rate_limit";
       else if (!hash || (!verified && !(await bcrypt.compare(password, hash)))) failReason = "password";
       else {
         if (!passwordCache.has(user.id)) {
@@ -115,8 +127,9 @@ export async function authenticateGReaderPassword(request: Request, email: strin
     // A correct password gives its reserved attempt back.
     if (reserved) {
       releaseRateLimit(ip, ipConfig);
-      releaseRateLimit(identity, emailConfig);
+      if (reservedAccount) releaseRateLimit(identity, emailConfig);
     }
+    if (reservedDb && user) await releaseLoginAttempt(user.id, "api");
     return user;
   }
   // N12: no audit row while rate-limited — otherwise anonymous steady traffic
@@ -125,7 +138,7 @@ export async function authenticateGReaderPassword(request: Request, email: strin
   try {
     await db.loginAttempt.create({ data: {
       email, userId: user?.id, success: false, failReason,
-      ip: ip.replace(/^ip:/, ""), userAgent: request.headers.get("user-agent"),
+      ip: getClientIp(request), userAgent: request.headers.get("user-agent"),
     } });
   } catch { /* Audit failures must not crash authentication. */ }
   return null;
