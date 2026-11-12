@@ -2,7 +2,9 @@
 --
 -- Every statement is idempotent so an interrupted deploy can simply be re-run
 -- (`prisma migrate resolve --rolled-back 20261112130000_article_search_table`, restart).
--- Each phase is its own short transaction; no phase locks ArticleSearch and then Article.
+-- Each phase is its own short transaction. Phase 1 creates ArticleSearch and then locks Article,
+-- but the new table is uncommitted and invisible to other sessions until COMMIT, so nobody can
+-- wait on it; no later phase locks ArticleSearch and then Article.
 -- On a populated database this migration builds NO index: GIN builds would hold a SHARE
 -- lock on ArticleSearch (blocking ingestion through the trigger) for minutes.
 DO $$ BEGIN

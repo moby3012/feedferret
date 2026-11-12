@@ -17,7 +17,7 @@ vi.mock("@/lib/db", () => ({
 import { articleSearchProjectionStatus, backfillArticleSearch, ensureArticleSearchStorage, isArticleSearchReady, setPostgresSearchIndexStatus, POSTGRES_SEARCH_DDL, SQLITE_SEARCH_TRIGGERS } from "@/lib/article-search-storage";
 import pg from "pg";
 import { buildAdvancedSearchWhere } from "@/lib/search";
-import { ensureSearchIndexes, postgresSearchIndexStatus } from "@/lib/search-indexes";
+import { ensureSearchIndexes, postgresSearchIndexStatus, schedulePostgresIndexRetry } from "@/lib/search-indexes";
 import { pureDdlViolations } from "../../scripts/migration-utils.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "ff-search-projection-"));
@@ -127,6 +127,41 @@ it("preserves search results, NULL negation, user isolation, wildcard and field 
     expect(await ids(await buildAdvancedSearchWhere("a", query)), `indexed: ${query}`).toEqual(expected.get(query));
   }
 });
+
+it.runIf(pgUrl)("never sticks on unindexed Article columns: lock held elsewhere or a transient error is retried until ready", async () => {
+  const db = state.db;
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const until = async (cond: () => boolean) => { for (let i = 0; i < 300 && !cond(); i++) await sleep(50); return cond(); };
+  const other = new pg.Client({ connectionString: url });
+  await other.connect();
+  try {
+    // Another instance holds the build lock and all five indexes are valid: switch without building.
+    await other.query("SELECT pg_advisory_lock(4207513662990112)");
+    setPostgresSearchIndexStatus({ state: "error", detail: "simulated restart after a transient error" });
+    await ensureSearchIndexes({ postgresUrl: url });
+    expect(postgresSearchIndexStatus().state).toBe("ready");
+
+    // Lock still held elsewhere, one index missing: "building", search stays on Article columns,
+    // and the backoff retry builds it once the lock is free.
+    await db.$executeRawUnsafe('DROP INDEX "ArticleSearch_author_trgm_idx"');
+    setPostgresSearchIndexStatus({ state: "pending" });
+    await ensureSearchIndexes({ postgresUrl: url, maintenance: true, retryBaseMs: 50 });
+    expect(postgresSearchIndexStatus().state).toBe("building");
+    expect(isArticleSearchReady()).toBe(false);
+    await other.query("SELECT pg_advisory_unlock(4207513662990112)");
+    expect(await until(() => postgresSearchIndexStatus().state === "ready")).toBe(true);
+    const author = await db.$queryRawUnsafe<{ valid: boolean }[]>(`SELECT indisvalid AS valid FROM pg_index WHERE indexrelid = to_regclass('"ArticleSearch_author_trgm_idx"')`);
+    expect(author[0]?.valid).toBe(true);
+    expect(isArticleSearchReady()).toBe(true);
+
+    // A transient error state alone is retried as well.
+    setPostgresSearchIndexStatus({ state: "error", detail: "statement timeout" });
+    schedulePostgresIndexRetry(url, 50);
+    expect(await until(() => postgresSearchIndexStatus().state === "ready")).toBe(true);
+  } finally {
+    await other.end().catch(() => {});
+  }
+}, 60_000);
 
 it("serves complete results from the Article columns while the projection is incomplete (deferred copy)", async () => {
   const db = state.db;

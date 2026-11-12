@@ -32,7 +32,9 @@ not only on restart; a verified projection is re-checked hourly. The legacy Arti
 indexes are dropped only once the projection is verified and its indexes are valid, right after
 search switched over, so search never runs unindexed (an unindexed `content:` query was measured
 at 2.7 s vs 0.18 s on 100k). The newsletter test-mail lookup uses the same routing
-(`articleTextWhere`). db-push test databases use
+(`articleTextWhere`). If the index check fails transiently (connection loss, statement
+timeout) or another instance holds the build lock, it is retried with backoff (30 s … 15 min)
+until ready; with the lock held elsewhere it only checks validity and switches without building. db-push test databases use
 tests/helpers/sqlite-test-db.ts (schema + triggers + verified), mirroring production.
 
 SQLite's existing external-content trigram FTS now reads ArticleSearch. The old
@@ -142,14 +144,18 @@ total content size (the content index dominates).
    1.5× that during the copy and the index builds (WAL, build temp files). The legacy Article
    indexes are freed only at the end.
 2. Deploy normally. Expected startup log: `Applying migration 20261112130000_article_search_table`,
-   then `…except the search index swap the app finishes in the background…`.
+   then `…except the search index swap the app finishes in the background…`. During the
+   migration, Article writers (and `SELECT … FOR UPDATE`) wait at most ~2 s at a time in phase 1
+   and up to 15 s (the `lock_timeout` of the copy's lock request) plus the copy itself in phase 2;
+   plain reads are never blocked.
 3. Watch `[search-indexes] … built in N s` / `Dropped legacy Article_*` lines, or poll
    `/api/health` until `search.indexes` is `ready` and `search.projection.state` is `complete`.
    Search works meanwhile (slower). Ingestion continues.
 4. If the container is killed during the migration, or it fails: just restart. Prisma records
    the migration as failed (P3009); because it is listed in `IDEMPOTENT_MIGRATIONS`
    (scripts/migration-utils.mjs), startup logs `♻️ Migration … failed or was interrupted (P3009)…`,
-   marks it rolled back and runs it again (under the schema lock), **at most 3 times**. After that
+   marks it rolled back and runs it again (under the schema lock), **at most 3 times** (manual
+   `--rolled-back` runs count toward that limit). After that
    (a permanent cause such as a full disk, SQLSTATE 53100) it stops with manual steps instead of
    re-taking the Article lock on every start. Prisma then often shows only `current transaction
    is aborted…` and `_prisma_migrations.logs` is empty: the real error is in the Postgres server

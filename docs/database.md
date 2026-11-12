@@ -235,7 +235,8 @@ interrupted (killed container, lost connection), startup does steps 1–3 itself
 `♻️ Migration … failed or was interrupted (P3009)…`, runs `migrate resolve --rolled-back` and lets
 `migrate deploy` run it again, under the schema lock. If any *other* migration is unfinished,
 nothing is resolved automatically. The automatic re-run happens at most 3 times per migration
-(counted from its rolled-back rows); after that startup stops and prints these manual steps, so a
+(counted from its rolled-back rows, so a manual `migrate resolve --rolled-back` counts too: after
+three rolled-back rows every further re-run of that migration needs the manual steps); after that startup stops and prints these manual steps, so a
 permanent cause (disk full, a lock never granted, missing privilege) cannot loop on every start.
 CI and `scripts/bench-search-migration.mjs` test this, including a kill in the middle of the copy.
 

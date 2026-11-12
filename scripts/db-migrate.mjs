@@ -224,7 +224,8 @@ async function main() {
             log(`❌ Migration ${name} failed or was interrupted again after ${rolledBack} automatic re-runs; not retrying automatically.
    Find the cause first: the Postgres server log has the real error (Prisma often only shows "current transaction is aborted").
    Typical causes: disk full, a lock that is never granted (long-running transaction), missing privileges.
-   Then: prisma migrate resolve --config prisma/startup.config.mjs --rolled-back ${name}  and restart. See docs/database.md ("Recovering from a failed migration").`);
+   Then: prisma migrate resolve --config prisma/startup.config.mjs --rolled-back ${name}  and restart
+   (manual resolves count toward the limit too, so each further failure needs this step). See docs/database.md ("Recovering from a failed migration").`);
             continue;
           }
           log(`♻️ Migration ${name} failed or was interrupted (P3009). It is idempotent: marking it rolled back and running it again (automatic re-run ${rolledBack + 1}/${MAX_AUTO_RERUNS}).`);

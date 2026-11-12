@@ -1,6 +1,6 @@
 import { db, getDatabaseProvider } from "./db";
 import pg from "pg";
-import { ensureArticleSearchStorage, isArticleSearchProjectionComplete, scheduleArticleSearchMaintenance, setPostgresSearchIndexStatus } from "./article-search-storage";
+import { ensureArticleSearchStorage, isArticleSearchProjectionComplete, postgresSearchIndexStatus, scheduleArticleSearchMaintenance, setPostgresSearchIndexStatus } from "./article-search-storage";
 
 // Audit finding P-11: free-text search (lib/search.ts) uses leading-wildcard
 // `contains` (LIKE '%term%') matching, which can't use a normal B-tree index.
@@ -39,8 +39,11 @@ export type EnsureSearchIndexesOptions = {
      * "none": schema + triggers only, caller drives runSqliteFtsBackfill() (tests).
      */
     backfill?: "background" | "await" | "none";
-    /** Server startup only: schedule projection re-checks/retries (lib/article-search-storage.ts). */
+    /** Server startup only: schedule projection re-checks/retries (lib/article-search-storage.ts)
+     *  and, on Postgres, retry the index check/build with backoff until it is ready. */
     maintenance?: boolean;
+    /** Postgres index retry backoff base (default 30 s; tests use a few ms). */
+    retryBaseMs?: number;
     /** Postgres only: connection for the index builds (default DATABASE_URL). */
     postgresUrl?: string;
 };
@@ -55,12 +58,17 @@ export async function ensureSearchIndexes(options: EnsureSearchIndexesOptions = 
                 scheduleArticleSearchMaintenance(() => {
                     if (getDatabaseProvider() !== "postgresql") return;
                     void ensurePostgresTrigramIndexes(options.postgresUrl ?? process.env.DATABASE_URL)
-                        .catch((err) => console.warn("[search-indexes] index swap after projection repair failed; retried on next start.", err));
+                        .catch((err) => console.warn("[search-indexes] index swap after projection repair failed; retrying.", err instanceof Error ? err.message : err))
+                        .finally(() => schedulePostgresIndexRetry(options.postgresUrl ?? process.env.DATABASE_URL, options.retryBaseMs));
                 });
             }
         }
         if (getDatabaseProvider() === "postgresql") {
-            await ensurePostgresTrigramIndexes(options.postgresUrl ?? process.env.DATABASE_URL);
+            try {
+                await ensurePostgresTrigramIndexes(options.postgresUrl ?? process.env.DATABASE_URL);
+            } finally {
+                if (options.maintenance) schedulePostgresIndexRetry(options.postgresUrl ?? process.env.DATABASE_URL, options.retryBaseMs);
+            }
         } else {
             await ensureSqliteFts(options.backfill ?? "background");
         }
@@ -90,9 +98,31 @@ export async function ensureSearchIndexes(options: EnsureSearchIndexesOptions = 
 //   * PRISMA_PG_TRGM=0, a missing pg_trgm extension that this role cannot create, or no
 //     privilege: nothing is built and search keeps using unindexed ILIKE.
 
-export { postgresSearchIndexStatus } from "./article-search-storage";
+export { postgresSearchIndexStatus };
 export type { PostgresSearchIndexState, PostgresSearchIndexStatus } from "./article-search-storage";
 const setPgIndexStatus = setPostgresSearchIndexStatus;
+
+// Search reads the projection only while the index state is "ready" (isArticleSearchReady), and the
+// legacy Article indexes may already be gone (previous run). So a "building" (another instance
+// held the lock, projection not yet verified) or "error" (connection loss, statement_timeout…)
+// result must not stick until the next restart: retry with backoff until ready/unavailable.
+const PG_RETRY_KEY = "__feedferret_pg_index_retry__";
+const PG_RETRY_MAX_MS = 15 * 60_000;
+const retryTimers = globalThis as unknown as Record<string, ReturnType<typeof setTimeout> | undefined>;
+export function schedulePostgresIndexRetry(url: string | undefined, baseMs = 30_000, attempt = 0) {
+    if (retryTimers[PG_RETRY_KEY]) clearTimeout(retryTimers[PG_RETRY_KEY]);
+    retryTimers[PG_RETRY_KEY] = undefined;
+    const { state } = postgresSearchIndexStatus();
+    if (state === "ready" || state === "unavailable") return;
+    const timer = setTimeout(() => {
+        retryTimers[PG_RETRY_KEY] = undefined;
+        void ensurePostgresTrigramIndexes(url)
+            .catch((err) => console.warn("[search-indexes] index check failed; retrying with backoff.", err instanceof Error ? err.message : err))
+            .finally(() => schedulePostgresIndexRetry(url, baseMs, attempt + 1));
+    }, Math.min(PG_RETRY_MAX_MS, baseMs * 2 ** attempt));
+    timer.unref?.();
+    retryTimers[PG_RETRY_KEY] = timer;
+}
 
 // Distinct from the schema-migration lock in scripts/db-migrate.mjs.
 const PG_SEARCH_INDEX_LOCK_KEY = "4207513662990112";
@@ -120,19 +150,29 @@ async function ensurePostgresTrigramIndexes(url: string | undefined) {
                 return;
             }
         }
+        const validity = async (name: string): Promise<boolean | null> => {
+            const r = await client.query<{ valid: boolean }>(
+                "SELECT i.indisvalid AS valid FROM pg_index i WHERE i.indexrelid = to_regclass($1)", [`"${name}"`]
+            );
+            return r.rows.length ? r.rows[0].valid : null;
+        };
+        const allValid = async () => {
+            for (const column of ARTICLE_TEXT_COLUMNS) if (!(await validity(`ArticleSearch_${column}_trgm_idx`))) return false;
+            return true;
+        };
         const { rows } = await client.query("SELECT pg_try_advisory_lock($1::bigint) AS ok", [PG_SEARCH_INDEX_LOCK_KEY]);
         if (!rows[0]?.ok) {
+            // Another instance holds the build lock. Its work may already be done (or it only drops
+            // legacy indexes): if all five are valid and the projection is verified, search can switch.
+            if (isArticleSearchProjectionComplete() && (await allValid())) {
+                setPgIndexStatus({ state: "ready" });
+                return;
+            }
             setPgIndexStatus({ state: "building", detail: "another instance holds the search index lock" });
-            console.info("[search-indexes] Another instance is building the search indexes; skipping.");
+            console.info("[search-indexes] Another instance is building the search indexes; checking again later.");
             return;
         }
         try {
-            const validity = async (name: string): Promise<boolean | null> => {
-                const r = await client.query<{ valid: boolean }>(
-                    "SELECT i.indisvalid AS valid FROM pg_index i WHERE i.indexrelid = to_regclass($1)", [`"${name}"`]
-                );
-                return r.rows.length ? r.rows[0].valid : null;
-            };
             for (const column of ARTICLE_TEXT_COLUMNS) {
                 const name = `ArticleSearch_${column}_trgm_idx`;
                 const valid = await validity(name);

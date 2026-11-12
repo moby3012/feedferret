@@ -75,8 +75,11 @@ export function postgresSearchIndexStatus(): PostgresSearchIndexStatus {
 /**
  * May search read the projection? Only after this process verified it complete AND, on Postgres,
  * once its trigram indexes are valid (or pg_trgm is unavailable, so neither table has them).
- * Until then lib/search.ts runs the identical predicates on the Article columns, which keep
- * their legacy trigram indexes until the swap: never incomplete, never unindexed.
+ * Until then lib/search.ts runs the identical predicates on the Article columns: never
+ * incomplete. Indexed during the first deploy (the legacy Article indexes stay until the
+ * switch); after a restart, once they are gone, Article columns run unindexed only for the
+ * seconds until the startup check confirms the projection and indexes, or, if that check hits a
+ * transient error, until its backoff retry (lib/search-indexes.ts) succeeds.
  */
 export function isArticleSearchReady(): boolean {
     if (!isArticleSearchProjectionComplete()) return false;
