@@ -22,6 +22,8 @@ const state = vi.hoisted(() => ({
   page: null as unknown as (url: string) => Promise<string>,
   pageFetches: [] as string[],
   aiCalls: 0,
+  renderConfigured: false,
+  renderCalls: 0,
 }));
 vi.mock("@/lib/ai-extraction", () => ({
   extractArticleWithAi: async () => {
@@ -50,9 +52,12 @@ vi.mock("@/lib/ssrf", async (importOriginal) => {
     },
   };
 });
-vi.mock("@/lib/render-sidecar", () => ({ renderViaSidecar: async () => null }));
+vi.mock("@/lib/render-sidecar", () => ({
+  getRenderSidecarConfig: async () => state.renderConfigured ? { url: "https://renderer.example", token: null } : null,
+  renderViaSidecar: async () => { state.renderCalls++; return null; },
+}));
 
-import { syncFeed, upsertArticleBatch } from "../../lib/rss-sync";
+import { syncFeed, upsertArticleBatch, MAX_RENDER_ESCALATIONS_PER_SYNC } from "../../lib/rss-sync";
 import { refetchArticleFullText } from "../../lib/full-text-fetch";
 import { FULL_TEXT_STATE_SELECT, recordFullTextMiss } from "../../lib/full-text-store";
 import { HttpStatusError } from "../../lib/ssrf";
@@ -118,6 +123,8 @@ beforeEach(async () => {
   resetTransportMemory();
   state.pageFetches = [];
   state.aiCalls = 0;
+  state.renderConfigured = false;
+  state.renderCalls = 0;
   state.page = async (url) => fullPage(url.slice(-1));
   state.fetchFeed.mockReset();
   state.fetchFeed.mockImplementation(async () => ({ title: "News", articles: items() }));
@@ -564,8 +571,12 @@ describe("full text: review round 2", () => {
 
 
 describe("full-text quality guards", () => {
-  it("rejects duplicate pages, restores the first item, preserves timestamps and does not retry", async () => {
+  const guardItems = () => items().map((item, id) => ({ ...item,
+    content: `<p>${Array.from({ length: 35 }, (_, n) => `${id}word${n}`).join(" ")}</p>`,
+  }));
+  it("rejects duplicates with capped retries, restoring unverifiable siblings without timestamp changes", async () => {
     const feed = await autoFeed();
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems() });
     state.page = async () => fullPage("same");
     await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "off" } });
     await syncFeed(userId, feed.id);
@@ -574,8 +585,10 @@ describe("full-text quality guards", () => {
     await syncFeed(userId, feed.id);
     const after = await rows(feed.id);
     expect(after.map((row) => row.fullTextReason)).toEqual(Array(3).fill("duplicate_across_items"));
-    expect(after.map((row) => row.content)).toEqual(items().map((item) => item.content));
+    expect(after.map((row) => row.content)).toEqual(guardItems().map((item) => item.content));
     expect(after.map((row) => row.updatedAt)).toEqual(before.map((row) => row.updatedAt));
+    // Transient duplicate candidates are retried up to the existing cap.
+    for (let i = 0; i < 3; i++) await syncFeed(userId, feed.id);
     state.pageFetches = [];
     await syncFeed(userId, feed.id);
     expect(state.pageFetches).toEqual([]);
@@ -583,23 +596,23 @@ describe("full-text quality guards", () => {
 
   it("rejects a duplicate found in a later sync of the same feed", async () => {
     const feed = await autoFeed();
-    state.fetchFeed.mockResolvedValue({ title: "News", articles: items().slice(0, 1) });
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems().slice(0, 1) });
     state.page = async () => fullPage("same");
     await syncFeed(userId, feed.id);
     expect((await rows(feed.id))[0].fullTextStatus).toBe("ok");
-    state.fetchFeed.mockResolvedValue({ title: "News", articles: items().slice(0, 2) });
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems().slice(0, 2) });
     await syncFeed(userId, feed.id);
     expect((await rows(feed.id)).map((row) => row.fullTextReason)).toEqual(Array(2).fill("duplicate_across_items"));
   });
 
   it("does not roll back a sibling whose accepted text changed during the fetch", async () => {
     const feed = await autoFeed();
-    state.fetchFeed.mockResolvedValue({ title: "News", articles: items().slice(0, 1) });
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems().slice(0, 1) });
     state.page = async () => fullPage("same");
     await syncFeed(userId, feed.id);
     const first = (await rows(feed.id))[0];
     const replacement = "An independent report about marine habitats and migrating seabirds. ".repeat(40);
-    state.fetchFeed.mockResolvedValue({ title: "News", articles: items().slice(0, 2) });
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems().slice(0, 2) });
     state.page = async () => {
       await state.db.article.update({ where: { id: first.id }, data: { content: replacement, updatedAt: first.updatedAt } });
       return fullPage("same");
@@ -621,7 +634,7 @@ describe("full-text quality guards", () => {
     expect(row.content).toBe(content);
   });
 
-  it("records JS shells as terminal rejections, including when render budget is exhausted", async () => {
+  it("records JS shells as terminal rejections when no renderer is configured", async () => {
     const feed = await autoFeed();
     state.page = async () => '<html><body><div id="app"></div><script src="/app.js"></script></body></html>';
     await syncFeed(userId, feed.id);
@@ -635,8 +648,57 @@ describe("full-text quality guards", () => {
     const feed = await autoFeed();
     await state.db.feed.update({ where: { id: feed.id }, data: { fullTextMode: "selector", fullTextSelector: ".chosen" } });
     state.page = async () => `<main>Unrelated navigation</main><article class="chosen">${P("same", 0).repeat(12)}<div>Checking your browser</div></article>`;
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: guardItems() });
     await syncFeed(userId, feed.id);
     expect((await rows(feed.id)).map((row) => row.fullTextReason)).toEqual(Array(3).fill("duplicate_across_items"));
+  });
+
+  it("defers JS shells after actually exhausting the shared render budget", async () => {
+    const feed = await autoFeed();
+    state.renderConfigured = true;
+    state.page = async () => '<div id="app"></div><script src="/app.js"></script>';
+    const batch = Array.from({ length: MAX_RENDER_ESCALATIONS_PER_SYNC + 1 }, (_, n) => ({
+      ...items()[0], externalId: `shell-${n}`, link: `https://shell.example/${n}`,
+    }));
+    state.fetchFeed.mockResolvedValue({ title: "Shells", articles: batch });
+    await syncFeed(userId, feed.id);
+    const first = await rows(feed.id);
+    expect(state.renderCalls).toBe(MAX_RENDER_ESCALATIONS_PER_SYNC);
+    expect(first.filter(row => row.fullTextReason === "js_shell")).toHaveLength(MAX_RENDER_ESCALATIONS_PER_SYNC);
+    expect(first.filter(row => row.fullTextStatus === "deferred" && row.fullTextReason === "budget")).toHaveLength(1);
+    state.renderCalls = 0;
+    await syncFeed(userId, feed.id);
+    expect(state.renderCalls).toBe(1);
+    expect((await rows(feed.id)).every(row => row.fullTextStatus === "rejected")).toBe(true);
+  });
+
+  it("preserves a verified sibling and ignores candidates rejected by the gate", async () => {
+    const feed = await autoFeed();
+    const first = { ...items()[0], content: P("same", 0) + P("same", 1) + P("same", 2) };
+    state.page = async () => fullPage("same");
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: [first] });
+    await syncFeed(userId, feed.id);
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: [first, { ...guardItems()[1] }] });
+    await syncFeed(userId, feed.id);
+    const current = await rows(feed.id);
+    expect(current[0].fullTextStatus).toBe("ok");
+    expect(current[1].fullTextStatus).toBe("failed");
+    expect(current[1].fullTextReason).toBe("duplicate_across_items");
+    // A long unrelated baseline fails the lead gate, without changing sibling state.
+    state.fetchFeed.mockResolvedValue({ title: "News", articles: [first, { ...items()[2], content: "Marine reserves protect seabirds and wetlands during migration. ".repeat(12) }] });
+    await syncFeed(userId, feed.id);
+    expect((await rows(feed.id))[0]).toEqual(current[0]);
+    expect((await rows(feed.id))[2].fullTextReason).toBe("lead_mismatch");
+  });
+
+  it("does not query duplicate history when nothing is eligible or acceptable", async () => {
+    const feed = await autoFeed();
+    state.page = async () => '<p>tiny</p>';
+    const spy = vi.spyOn(state.db.article, "findMany");
+    await syncFeed(userId, feed.id);
+    await syncFeed(userId, feed.id);
+    expect(spy.mock.calls.some(([args]) => args?.take === 64)).toBe(false);
+    spy.mockRestore();
   });
 
   it("fetches configured selectors through the shared app engine used by the benchmark", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RecentFullTextIndex, RECENT_FULL_TEXT_LIMIT } from "@/lib/full-text-duplicates";
+import { RecentFullTextIndex, RECENT_FULL_TEXT_LIMIT, baselinesDiffer } from "@/lib/full-text-duplicates";
 import { assessExtraction, decideFullText } from "@/lib/extraction-quality";
 import { runInHtmlWorker } from "@/lib/html-worker";
 
@@ -42,7 +42,7 @@ it.each([
 });
 
 it("trims multilingual chrome in the selector worker and keeps prose mentioning a browser check", async () => {
-    const page = `<article><div>Share via: <a href="/share">Send</a></div><p>${prose}</p><div>Teilen via: <a href="/send">Senden</a></div><div>Kommentare Sitzung wird überprüft…</div><div>Checking your browser</div></article>`;
+    const page = `<article><div>Share via: <a href="/share">Send</a></div><p>${prose}</p><div>Teilen via: <a href="/send">Senden</a></div><div>Sitzung wird überprüft…</div><div>Checking your browser</div></article>`;
     const result = await runInHtmlWorker({ task: "css", html: page, url: "https://example.test/story", selector: "article", mode: "sync" });
     expect(result.html).toContain(prose);
     expect(result.html).not.toMatch(/Share via|Teilen via|Sitzung|Checking your browser/);
@@ -53,9 +53,43 @@ it("trims multilingual chrome in the selector worker and keeps prose mentioning 
 });
 
 
-it("does not mistake shared topical vocabulary for the lead of a substantial feed item", () => {
-    const words = Array.from({ length: 90 }, (_, i) => `observation${i}`);
-    const feed = words.join(" ");
-    const wrong = [...words].reverse().join(" ").repeat(4);
-    expect(decideFullText(assessExtraction(wrong), feed, "auto", wrong)).toEqual({ accept: false, reason: "lead_mismatch" });
+it("accepts a paraphrased teaser and bypasses lead checking for manual fetches", () => {
+    const feed = "Astronomers study distant stars using observatory telescope mirrors. A mountain expedition gathered precise winter measurements. ".repeat(4);
+    const page = "The winter survey gathered precise measurements. Researchers climbed the mountain to investigate distant stars and test telescope equipment. ".repeat(12);
+    expect(decideFullText(assessExtraction(page), feed, "auto", page).accept).toBe(true);
+    const unrelated = "Marine wildlife migrates along coastal habitats every spring. ".repeat(30);
+    expect(decideFullText(assessExtraction(unrelated), feed, "manual", unrelated).accept).toBe(true);
+});
+
+it("requires distinct substantive feed baselines, preserving shared footers and templates", () => {
+    const baseline = "This release improves keyboard navigation and updates the preferences panel with several accessibility features. ".repeat(3);
+    expect(baselinesDiffer(baseline, baseline.replace("release", "update"))).toBe(false);
+    expect(baselinesDiffer("", baseline)).toBe(false);
+    expect(baselinesDiffer("Brief teaser", baseline)).toBe(false);
+    expect(baselinesDiffer("Repeated words only. ".repeat(50), baseline)).toBe(false);
+    const footer = prose.repeat(5);
+    const index = new RecentFullTextIndex();
+    index.observe("a", "/a", `Short article one. ${footer}`);
+    expect(index.observe("b", "/b", `Short article two. ${footer}`)).toContain("a");
+    // A page match alone never triggers the guard for templated feed posts.
+    expect(baselinesDiffer(baseline, baseline)).toBe(false);
+});
+
+it.each([
+    "Les États doivent partager les ressources pour protéger les communautés.",
+    "Il faut départager les candidats avant le scrutin.",
+    "Debemos compartir los resultados con toda la comunidad.",
+    "Teilen ist für die Zusammenarbeit und den Austausch wichtig.",
+    "Wir teilen die Ergebnisse mit allen Beteiligten.",
+    "By Jane Doe",
+])("preserves plain edge prose and bylines: %s", async (sentence) => {
+    const html = `<article><p>${prose}</p><div>${sentence}</div></article>`;
+    const result = await runInHtmlWorker({ task: "css", html, url: "https://example.test/story", mode: "sync", selector: "article" });
+    expect(result.html).toContain(sentence);
+});
+
+it("preserves a legitimate short article with an ancillary JavaScript prompt", async () => {
+    const { isJavaScriptShell } = await import("@/lib/extraction-shell-core");
+    const html = `<article><p>${prose.slice(0, 230)}</p><noscript>enable JavaScript for comments</noscript></article>`;
+    expect(isJavaScriptShell(html, "https://example.test/story")).toBe(false);
 });

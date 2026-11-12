@@ -14,7 +14,7 @@
 // wrapper around it.
 
 import { fetchTextWithSsrfProtection, isTrustedFeedFetchingAllowed } from "@/lib/ssrf";
-import { renderViaSidecar } from "@/lib/render-sidecar";
+import { renderViaSidecar, getRenderSidecarConfig } from "@/lib/render-sidecar";
 import { fetchViaHostedApiDetailed, getHostedFetchConfigForUser, HostedFetchRateLimitedError } from "@/lib/hosted-fetch";
 import { renderMarkdownToHtmlStrict } from "@/lib/markdown-render";
 import type { MeteredAiConfig } from "@/lib/ai-summary";
@@ -98,8 +98,8 @@ async function buildResultFromMarkdown(
 }
 
 export type FetchAndExtractReadableOptions = {
-  /** Optional page capture for offline bench diagnostics, called on successful direct fetches. */
-  onFetchedPage?: (html: string) => void;
+  /** Optional capture of the winning candidate’s source page, null for source-less tiers. */
+  onFetchedPage?: (html: string | null) => void;
   selector?: string | null;
   removeSelectors?: string | null;
   // When set, a hosted BYOK connector (M7-T3, Jina Reader / Firecrawl Cloud)
@@ -229,15 +229,16 @@ export async function fetchAndExtractReadable(
   let directError: unknown = null;
   let best: ExtractionResult | null = null;
   let firstResult: ExtractionResult | null = null;
+  let firstFetchedHtml: string | null = null;
   let bestFetchedHtml: string | null = null;
   let lastFetchedHtml: string | null = null;
 
   const consider = (result: ExtractionResult, fetchedHtml: string | null) => {
-    if (!firstResult) firstResult = result;
+    if (!firstResult) { firstResult = result; firstFetchedHtml = fetchedHtml; }
     if (!result.quality || !result.html) return;
     if (!best?.quality || isBetterCandidate(result.quality, best.quality)) {
       best = result;
-      if (fetchedHtml) bestFetchedHtml = fetchedHtml;
+      bestFetchedHtml = fetchedHtml;
     }
   };
   // A good page that is no longer than the feed item only warrants escalation
@@ -265,7 +266,6 @@ export async function fetchAndExtractReadable(
   for (const [index, transport] of transports.entries()) {
     try {
       const html = await fetchPage(url, transport);
-      options.onFetchedPage?.(html);
       anyFetchSucceeded = true;
       lastFetchedHtml = html;
       const extracted = await extractPage(html);
@@ -295,13 +295,15 @@ export async function fetchAndExtractReadable(
   if (!goodEnough() && options.aiExtraction && aiSource && takeBudget(options.escalationBudget, "ai", skipped)) {
     const aiResult = await extractArticleWithAi(aiSource, url, options.aiExtraction);
     const built = aiResult ? await buildResultFromMarkdown(aiResult.content, aiResult.title, "ai") : null;
-    if (built) consider(built, null);
+    if (built) consider(built, aiSource);
   }
 
   // Render sidecar (M7-T2, admin-configured): client-only pages, consent/bot
   // walls a real browser gets past, or a direct fetch that was blocked outright.
   // Every attempt counts against the per-sync budget (a no-op when no sidecar is configured).
-  if (!goodEnough() && takeBudget(options.escalationBudget, "render", skipped)) {
+  const shellOnly = (firstResult as ExtractionResult | null)?.quality?.reason === "js_shell";
+  const shellHasRenderer = !shellOnly || (await getRenderSidecarConfig()) !== null;
+  if (!goodEnough() && shellHasRenderer && takeBudget(options.escalationBudget, "render", skipped)) {
     const rendered = await renderViaSidecar(url, { context: "Full-text" });
     if (rendered) consider(await extractPage(rendered), rendered);
   }
@@ -309,7 +311,7 @@ export async function fetchAndExtractReadable(
   // Last resort: the user's own hosted-API BYOK connector (M7-T3), for pages
   // that beat even a real rendered browser (active anti-bot challenges).
   let hostedRateLimited = false;
-  if (!goodEnough() && options.userId) {
+  if (!goodEnough() && options.userId && options.selector === undefined) {
     const hostedConfig = await getHostedFetchConfigForUser(options.userId);
     if (hostedConfig && takeBudget(options.escalationBudget, "hosted", skipped)) {
       const outcome = await fetchViaHostedApiDetailed(url, hostedConfig);
@@ -321,6 +323,7 @@ export async function fetchAndExtractReadable(
   }
 
   const finalBest = best as ExtractionResult | null;
+  options.onFetchedPage?.(finalBest ? bestFetchedHtml : firstFetchedHtml);
   if (finalBest) return budgetSkipped && !goodEnough() ? { ...finalBest, budgetSkipped: true } : finalBest;
   const empty = firstResult as ExtractionResult | null;
   if (empty) return budgetSkipped ? { ...empty, budgetSkipped: true } : empty; // the (empty) in-process result

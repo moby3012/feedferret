@@ -190,4 +190,30 @@ describe("fetchAndExtractReadable escalation", () => {
     const good = await fetchAndExtractReadable("https://budget-good.example/a", { escalationBudget: { ai: 0, render: 0, hosted: 0 } });
     expect(good.budgetSkipped).toBeUndefined();
   });
+  it("does not consult hosted BYOK when CSS selector extraction is requested", async () => {
+    const { getHostedFetchConfigForUser } = await import("../../lib/hosted-fetch");
+    vi.mocked(getHostedFetchConfigForUser).mockClear();
+    state.impit = ok('<article class="chosen">short</article>');
+    state.plain = state.impit;
+    await fetchAndExtractReadable("https://selector.example/story", { userId: "u", selector: ".chosen" });
+    expect(getHostedFetchConfigForUser).not.toHaveBeenCalled();
+  });
+
+  it("captures the winning source instead of the last transport response", async () => {
+    state.impit = ok(WALL);
+    const short = `<article>${P(0)}${P(1)}</article>`;
+    state.plain = ok(short);
+    // The plain transport is thin (rank above a wall) and wins despite fewer characters.
+    let captured: string | null = null;
+    const result = await fetchAndExtractReadable("https://winner.example/story", { onFetchedPage: html => { captured = html; } });
+    expect(result.quality?.verdict).toBe("thin");
+    expect(captured).toBe(short);
+
+    state.calls = [];
+    state.impit = ok(short);
+    state.plain = ok(WALL);
+    await fetchAndExtractReadable("https://winner2.example/story", { onFetchedPage: html => { captured = html; } });
+    expect(captured).toBe(short);
+  });
+
 });

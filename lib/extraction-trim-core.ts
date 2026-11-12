@@ -9,10 +9,10 @@ import { LEAK_TEST } from "@/lib/extraction-quality";
 // Edge boilerplate trim
 // ---------------------------------------------------------------------------
 
-const CTA_PATTERN =
-    /newsletter|subscribe|abonn|follow us|folgen sie|share (?:this|on|via)|teilen|related|weitere artikel|mehr zum thema|lesen sie auch|auch interessant|das könnte (?:dich|sie) (?:auch )?interessieren|you might also like|more from|read more|recommended|empfohlen|startseite|zur startseite|anzeige|advertisement|sponsored|comments?|kommentare|partager|compartir|condividi|join (?:the|our) community|sign up|melde dich/i;
-
-const CHECK_PATTERN = /^(?:(?:comments?|kommentare)\s*)?(?:sitzung wird überprüft|checking your browser|vérification du navigateur|verificando (?:su navegador|tu navegador))[.…! ]*$/i;
+// Only complete short UI labels, never substrings within prose.
+const CTA_PATTERN = /^(?:newsletter|subscribe|abonnieren sie unseren newsletter|follow us|folgen sie|related articles|weitere artikel|mehr zum thema|lesen sie auch|auch interessant|you might also like|read more|recommended|empfohlen|startseite|zur startseite|anzeige|advertisement|sponsored|comments?|kommentare|sign up)[:!… ]*$/i;
+const SHARE_PATTERN = /^(?:share(?: this| on| via)?|teilen(?: via)?|partager|compartir|condividi)\b/i;
+const CHECK_PATTERN = /^(?:sitzung wird überprüft|checking your browser|vérification du navigateur|verificando (?:su navegador|tu navegador))[.…! ]*$/i;
 
 function blockText(el: Element): string {
     return (el.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -34,14 +34,12 @@ function isEdgeBoilerplate(el: Element): boolean {
     if (text.length < 200 && CHECK_PATTERN.test(text)) return true;
     if (LEAK_TEST.test(text)) return text.length < 400;
     const density = blockLinkDensity(el);
-    if (density > 0.5 && text.length < 1200) return true; // link lists, breadcrumbs, tag clouds
-    if (text.length < 80 && !/[.!?。]/.test(text) && text.split(/\s+/).length <= 6) {
-        const neighbor = [el.previousElementSibling, el.nextElementSibling].some((sibling) =>
-            sibling && blockText(sibling).length < 200 && /share (?:via|on)|teilen|partager|compartir|condividi/i.test(blockText(sibling)),
-        );
-        if (neighbor && /^(?:by|von|par|por|di) /i.test(text)) return true;
-    }
-    if (text.length < 200 && CTA_PATTERN.test(text)) return true; // short CTA / "Anzeige" / "Startseite"
+    const linkList = el.matches("ul, ol, nav") ||
+        (el.querySelectorAll("a").length >= 2 && !/[.!?。]/.test(text));
+    if (density > 0.5 && text.length < 1200 && linkList) return true;
+    const shortLabel = text.length < 120 && text.split(/\s+/).length <= 8 && !/[.!?。]/.test(text);
+    if (shortLabel && SHARE_PATTERN.test(text) && (density > 0.2 || !!el.querySelector("svg, button, ul, [role='list']"))) return true;
+    if (text.length < 100 && CTA_PATTERN.test(text)) return true;
     return false;
 }
 

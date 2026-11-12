@@ -18,8 +18,8 @@ import { runAsBackgroundHtmlWork } from "./html-worker/pool";
 import { resolveFullTextMode } from "./full-text-mode";
 import { filterByFullTextConditions } from "./full-text-conditions";
 import { EscalationBudgetExhaustedError, fetchAndExtractReadable, type EscalationBudget } from "./readability-extract";
-import { RecentFullTextIndex, RECENT_FULL_TEXT_LIMIT } from "./full-text-duplicates";
-import { decideFullText } from "./extraction-quality";
+import { RecentFullTextIndex, RECENT_FULL_TEXT_LIMIT, baselinesDiffer } from "./full-text-duplicates";
+import { decideFullText, leadCoverage } from "./extraction-quality";
 import { classifyFetchFailure, hostBackoffRemainingMs } from "./host-backoff";
 import {
     FULL_TEXT_STATE_SELECT,
@@ -905,32 +905,48 @@ async function recordFullTextFetchError(article: FullTextArticleState, error: un
 }
 
 /** Scope the history query to this user's feed, with a fixed upper bound. */
-async function duplicateGuard(userId: string, feedId: string) {
-    const index = new RecentFullTextIndex();
-    const recent = await db.article.findMany({
-        where: { userId, feedId, fullTextStatus: "ok" },
-        orderBy: { fullTextFetchedAt: "desc" },
-        take: RECENT_FULL_TEXT_LIMIT,
-        select: FULL_TEXT_STATE_SELECT,
-    });
-    for (const row of [...recent].reverse()) index.observe(row.id, row.link, row.contentFormat === "markdown" ? markdownToPlainText(row.content) : row.content);
+function duplicateGuard(userId: string, feedId: string) {
+    let index: RecentFullTextIndex | null = null;
+    const observed = new Map<string, string>();
     return async (article: FullTextArticleState, html: string) => {
-        const matches = index.observe(article.id, article.link, html);
-        if (matches.length === 0) return false;
-        // Re-read accepted siblings: includes one stored earlier in this batch.
-        const siblings = await db.article.findMany({
-            where: { userId, feedId, id: { in: matches }, fullTextStatus: "ok" },
-            select: FULL_TEXT_STATE_SELECT,
-        });
-        for (const sibling of siblings) {
-            // A concurrent extraction may have replaced the indexed version.
-            const body = sibling.contentFormat === "markdown" ? markdownToPlainText(sibling.content) : sibling.content;
-            if (index.observe(sibling.id, sibling.link, body).includes(article.id)) {
-                await recordFullTextMiss(sibling, "rejected", "duplicate_across_items");
+        // No history query or tokenisation until an acceptable candidate exists.
+        if (!index) {
+            index = new RecentFullTextIndex();
+            const recent = await db.article.findMany({
+                where: { userId, feedId },
+                orderBy: { publishedAt: "desc" },
+                take: RECENT_FULL_TEXT_LIMIT,
+                select: { id: true, link: true, content: true, contentFormat: true, fullTextStatus: true },
+            });
+            for (const row of [...recent].reverse()) if (row.fullTextStatus === "ok") {
+                index.observe(row.id, row.link, row.contentFormat === "markdown" ? markdownToPlainText(row.content) : row.content);
             }
         }
-        await recordFullTextMiss(article, "rejected", "duplicate_across_items");
-        return true;
+        const matches = index.observe(article.id, article.link, html);
+        observed.delete(article.id);
+        observed.set(article.id, html);
+        if (observed.size > RECENT_FULL_TEXT_LIMIT) observed.delete(observed.keys().next().value!);
+        if (!matches.length) return false;
+        const siblings = await db.article.findMany({
+            where: { userId, feedId, id: { in: matches } },
+            select: FULL_TEXT_STATE_SELECT,
+        });
+        let duplicate = false;
+        for (const sibling of siblings) {
+            const body = sibling.fullTextStatus === "ok"
+                ? sibling.contentFormat === "markdown" ? markdownToPlainText(sibling.content) : sibling.content
+                : observed.get(sibling.id);
+            if (!body) continue;
+            if (!index.observe(sibling.id, sibling.link, body).includes(article.id) ||
+                !baselinesDiffer(feedBaseline(article), feedBaseline(sibling))) continue;
+            duplicate = true;
+            const coverage = leadCoverage(feedBaseline(sibling), body);
+            // A verified sibling may be the genuine article; never discard it
+            // because another URL temporarily served its body.
+            if (sibling.fullTextStatus === "ok" && (coverage === null || coverage < 0.3)) await recordFullTextMiss(sibling, "rejected", "duplicate_across_items");
+        }
+        if (duplicate) await recordFullTextMiss(article, "failed", "duplicate_across_items");
+        return duplicate;
     };
 }
 
@@ -954,8 +970,8 @@ async function autoFetchFullTextViaEngine(
     mode: "auto" | "ai" | "selector" = "auto",
 ) {
     const articles = await loadFullTextCandidates(userId, articleIds);
-    const isDuplicate = await duplicateGuard(userId, feed.id);
     if (articles.length === 0) return;
+    const isDuplicate = duplicateGuard(userId, feed.id);
 
     // The hosted-API BYOK connector (M7-T3) sends article content to a third
     // party, so unlike the manual "Fetch full text" button it must never run
@@ -1033,9 +1049,8 @@ async function autoFetchFullTextViaEngine(
                 await recordParseAborted(article, result.parseAborted);
                 continue;
             }
-            if (result.quality?.verdict === "good" && result.html && await isDuplicate(article, result.html)) continue;
             const decision = decideFullText(result.quality, baselineHtml, "auto", result.html);
-            if ((!decision.accept || !result.html) && result.budgetSkipped && result.quality?.reason !== "js_shell") {
+            if ((!decision.accept || !result.html) && result.budgetSkipped) {
                 // Escalation was cut short by the per-sync budget: retry next sync
                 // instead of recording a final "rejected".
                 await recordFullTextMiss(article, "deferred", "budget");
@@ -1045,6 +1060,8 @@ async function autoFetchFullTextViaEngine(
                 await recordFullTextMiss(article, "rejected", decision.accept ? "empty" : decision.reason);
                 continue;
             }
+
+            if (await isDuplicate(article, result.html)) continue;
 
             const useMarkdown = feed.defaultContentFormat === "markdown" && !!result.markdown;
             await storeFullText(article, {

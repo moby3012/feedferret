@@ -263,8 +263,8 @@ async function runWorker(entry: Entry, opt: Options) {
   const { discoverFeeds } = await import('../../lib/feed-discovery');
   const { fetchAndSuggestFeedCandidatesDetailed } = await import('../../lib/page-feed-suggest');
   const { fetchAndExtractReadable } = await import('../../lib/readability-extract');
-  const { RecentFullTextIndex } = await import('../../lib/full-text-duplicates');
-  const { decideFullText } = await import('../../lib/extraction-quality');
+  const { RecentFullTextIndex, baselinesDiffer } = await import('../../lib/full-text-duplicates');
+  const { decideFullText, leadCoverage } = await import('../../lib/extraction-quality');
   const { matchRadarRules } = await import('../../lib/rsshub-radar-rules');
   const { getRsshubConfig } = await import('../../lib/rsshub');
   const { getRenderSidecarConfig } = await import('../../lib/render-sidecar');
@@ -532,6 +532,7 @@ async function runWorker(entry: Entry, opt: Options) {
         .slice(0, opt.articles);
       const fulltext: Record<string, unknown>[] = [];
       const duplicateIndex = new RecentFullTextIndex();
+      const sampledCandidates = new Map<string, { baseline: string; html: string }>();
       const escalationBudget = { ai: 0, hosted: 0, render: opt.render ? 3 : 0 };
       for (const a of picks) {
         const item: Record<string, unknown> = { link: maskUrl(a.link), host: hostOf(a.link) };
@@ -542,20 +543,28 @@ async function runWorker(entry: Entry, opt: Options) {
             let pageHtml: string | undefined;
             const baseline = a.content || a.summary || '';
             const ext = await polite(() => fetchAndExtractReadable(a.link, {
-              onFetchedPage: (html) => { pageHtml = html; },
+              onFetchedPage: (html) => { pageHtml = html ?? undefined; },
               baselineHtml: baseline, gate: 'auto', selector: entry.fullTextSelector,
               removeSelectors: entry.fullTextRemoveSelectors,
               escalationBudget,
             }));
             let decision = decideFullText(ext.quality, baseline, 'auto', ext.html);
-            if (ext.html && ext.quality?.verdict === 'good') {
-              const duplicates = duplicateIndex.observe(a.link, a.link, ext.html);
+            if (ext.html && decision.accept) {
+              const duplicates = duplicateIndex.observe(a.link, a.link, ext.html).filter(link => {
+                const previous = sampledCandidates.get(link);
+                return previous && baselinesDiffer(baseline, previous.baseline);
+              });
               if (duplicates.length) {
                 decision = { accept: false, reason: 'duplicate_across_items' };
-                for (const previous of fulltext) if (duplicates.some(link => maskUrl(link) === previous.link)) {
-                  previous.verdict = 'fail'; previous.reason = 'duplicate_across_items';
+                for (const link of duplicates) {
+                  const previous = sampledCandidates.get(link)!;
+                  const coverage = leadCoverage(previous.baseline, previous.html);
+                  if (coverage === null || coverage < 0.3) {
+                    for (const row of fulltext) if (row.link === maskUrl(link)) { row.verdict = 'fail'; row.reason = 'duplicate_across_items'; }
+                  }
                 }
               }
+              sampledCandidates.set(a.link, { baseline, html: ext.html });
             }
             const diagnostics = scoreExtraction(baseline, ext.html, pageHtml || '');
             return { html: pageHtml, extHtml: ext.html, finalUrl: a.link,
