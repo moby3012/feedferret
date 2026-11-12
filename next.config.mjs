@@ -17,6 +17,7 @@ const nextConfig = {
     unoptimized: true,
   },
   serverExternalPackages: [
+    "undici",
     "jsdom",
     "isomorphic-dompurify",
     "defuddle",
@@ -56,6 +57,10 @@ const nextConfig = {
       // policy as Content-Security-Policy-Report-Only from proxy.ts — see lib/csp.ts for
       // why the enforced header has to stay here. Baked in at build time.
       { source: "/api/:path*", headers: [{ key: "Content-Security-Policy", value: apiCsp }] },
+      { source: "/api/media", headers: [
+        { key: "Content-Security-Policy", value: "default-src 'none'" },
+        { key: "Referrer-Policy", value: "no-referrer" },
+      ] },
       { source: "/offline.html", headers: [{ key: "Content-Security-Policy", value: offlineCsp }] },
     ];
   },

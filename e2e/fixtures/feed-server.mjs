@@ -280,6 +280,11 @@ function handleFullText(res, url) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url ?? "/", baseUrl);
+  if (url.pathname === "/e4.png") {
+    res.writeHead(200, { "content-type": "image/png", etag: '"e4-fixture"' });
+    res.end(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"));
+    return;
+  }
   if (url.pathname === "/healthz") {
     res.writeHead(200, { "content-type": "text/plain" }).end("ok");
     return;

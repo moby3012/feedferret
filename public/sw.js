@@ -163,6 +163,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Signed raster images share the bounded runtime cache, cleared on logout.
+  if (url.pathname === "/api/media" && request.destination === "image") {
+    event.respondWith(staleWhileRevalidate(event, RUNTIME_CACHE, RUNTIME_MAX_ENTRIES));
+    return;
+  }
+
   // Authenticated API responses never enter a Cache Storage cache.
   if (url.pathname.startsWith("/api/")) return;
 

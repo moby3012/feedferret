@@ -422,7 +422,11 @@ export function useUpdateGlobalSettings() {
                 queryClient.setQueryData(["reading-preferences"], context.prev)
             }
         },
-        onSuccess: () => {
+        onSuccess: (_result, data) => {
+            if (data.mediaProxyImages !== undefined) {
+                queryClient.invalidateQueries({ queryKey: ["list"] })
+                queryClient.invalidateQueries({ queryKey: ["article"] })
+            }
             queryClient.invalidateQueries({ queryKey: ["reading-preferences"] })
         },
     })

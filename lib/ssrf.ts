@@ -21,6 +21,8 @@ export type SafeFetchTextOptions = SsrfCheckOptions & {
   insecureTls?: boolean;
   maxBytes?: number;
   maxRedirects?: number;
+  /** Opt-in guarded redirects for credential-free streaming media. */
+  followRedirects?: boolean;
   timeoutMs?: number;
   // When true, use the browser-fingerprint fetch engine (impit) instead of
   // plain `fetch` — for "convert a web page" paths that hit soft bot
@@ -355,6 +357,22 @@ export class FetchRedirectError extends Error {
 
 /** API clients are one hop only. Feed/page callers use the guarded redirect loop. */
 export async function safeFetch(rawUrl: string, init: RequestInit = {}, options: SafeFetchTextOptions = {}): Promise<Response> {
+  if (options.followRedirects) {
+    let current = rawUrl;
+    for (let hop = 0; hop <= (options.maxRedirects ?? 5); hop++) {
+      const response = await fetchOneHop(current, { ...init, redirect: "manual" }, options);
+      if (response.status < 300 || response.status >= 400 || response.status === 304) return response;
+      const location = response.headers.get("location");
+      await response.body?.cancel();
+      if (!location) throw new FetchRedirectError(response.status);
+      current = (await assertSafeFetchUrl(new URL(location, current).href, options)).href;
+      // This mode is intentionally limited to anonymous GETs.
+      init = { method: "GET", signal: init.signal, headers: {
+        "User-Agent": "FeedFerret-Media/1.0", Accept: "image/*",
+      } };
+    }
+    throw new Error("Too many redirects");
+  }
   const response = await fetchOneHop(rawUrl, init, options);
   if (response.status >= 300 && response.status < 400 && response.status !== 304) {
     await response.body?.cancel().catch(() => undefined);

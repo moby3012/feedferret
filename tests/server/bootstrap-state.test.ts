@@ -1,3 +1,4 @@
+vi.mock("@/lib/media-proxy", () => ({ presentMedia: async (items: unknown[]) => items }));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => {

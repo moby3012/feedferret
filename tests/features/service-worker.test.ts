@@ -180,6 +180,20 @@ describe("service worker navigations", () => {
     expect(await (await sw.navigate("/login"))!.text()).toContain("OFFLINE");
   });
 
+  it("intercepts signed media images through the runtime cache", async () => {
+    const sw = boot(async () => new Response("pixels", { headers: { "content-type": "image/png" } }));
+    let response: Promise<Response> | undefined;
+    const waits: Promise<unknown>[] = [];
+    sw.dispatch("fetch", {
+      request: { method: "GET", mode: "cors", url: ORIGIN + "/api/media?u=image&s=signed", destination: "image" },
+      respondWith: (value: Promise<Response>) => { response = value; },
+      waitUntil: (value: Promise<unknown>) => waits.push(value),
+    });
+    expect(response).toBeDefined();
+    expect(await (await response!).text()).toBe("pixels");
+    await Promise.all(waits);
+  });
+
   it("never intercepts non-GET requests, cross-origin or /api data requests", () => {
     const sw = boot(async () => html("x"));
     let responded = false;

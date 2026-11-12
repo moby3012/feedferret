@@ -205,6 +205,7 @@ const GLOBAL_SETTINGS_TYPES = {
   accentColor: "string",
   secondaryColor: "string",
   hideDuplicates: "boolean",
+  mediaProxyImages: "boolean",
   markReadOnScroll: "boolean",
   markReadOnAdvance: "boolean",
   storyClustering: "boolean",
@@ -230,6 +231,7 @@ export async function updateGlobalSettings(data: {
   accentColor?: string;
   secondaryColor?: string;
   hideDuplicates?: boolean;
+  mediaProxyImages?: boolean;
   markReadOnScroll?: boolean;
   markReadOnAdvance?: boolean;
   storyClustering?: boolean;

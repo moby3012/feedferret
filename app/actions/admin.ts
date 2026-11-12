@@ -121,6 +121,11 @@ function sanitizeSettingsInput(data: Record<string, unknown>) {
     }
   }
 
+  if ("mediaProxyMode" in data) {
+    if (!["off", "opt-in", "on"].includes(String(data.mediaProxyMode))) throw new Error("Invalid media proxy mode");
+    next.mediaProxyMode = data.mediaProxyMode;
+  }
+
   // Misc
   if ("totpIssuer" in data) next.totpIssuer = String(data.totpIssuer || "").trim() || null;
   if (typeof data.backgroundSyncEnabled === "boolean") next.backgroundSyncEnabled = data.backgroundSyncEnabled;
