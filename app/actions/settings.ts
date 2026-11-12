@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { sendDigestEmail, getDigestArticles, markArticlesAsDigested } from "@/lib/digest-email";
-import { buildOtpAuthUri, generateTotpSecret, verifyTotpToken } from "@/lib/totp";
+import { buildOtpAuthUri, generateTotpSecret, matchingTotpStep } from "@/lib/totp";
 import { encryptIfValue, decryptIfValue } from "@/lib/crypto";
 import { consumeTotpToken, readTotpSecret } from "@/lib/totp-consume";
 import { readPlainColumnOrNull } from "@/lib/secret-box";
@@ -332,23 +332,40 @@ export async function confirmTwoFactorSetup(code: string) {
   const session = await requireUser();
   const user = await db.user.findUnique({
     where: { id: session.user.id },
-    select: { twoFactorSecret: true },
+    select: { twoFactorEnabled: true, twoFactorSecret: true, uiLanguage: true },
   });
 
+  // Only a PENDING setup can be confirmed. On an account that already has 2FA this endpoint would be
+  // an unthrottled oracle for the live secret (any number of code guesses, no replay protection).
+  if (user?.twoFactorEnabled) {
+    throw new Error("Two-factor authentication is already enabled");
+  }
   if (!user?.twoFactorSecret) {
     throw new Error("Start setup first");
   }
-  const secret = readTotpSecret(user.twoFactorSecret);
+  const storedSecret = user.twoFactorSecret;
+  const secret = readTotpSecret(storedSecret);
   if (!secret) throw new Error(TOTP_UNREADABLE);
 
-  if (!verifyTotpToken(secret, code)) {
+  // A 6-digit code is guessable online by whoever holds a session: throttle (fail-safe store).
+  if (!checkRateLimit(session.user.id, { prefix: "2fa-confirm", limit: 10, windowSecs: 900, critical: true }).success) {
+    const { getTranslations } = await import("next-intl/server");
+    const t = await getTranslations({ locale: user.uiLanguage ?? "en", namespace: "profile" });
+    throw new Error(t("twoFactorRateLimited"));
+  }
+
+  if (matchingTotpStep(secret, code) === null) {
     throw new Error("Invalid one-time code");
   }
 
-  await db.$transaction([db.user.update({
-    where: { id: session.user.id },
+  // Compare-and-set on the pending secret we verified against: a concurrent restart of the setup
+  // (new secret) or a concurrent confirmation makes this match nothing.
+  const enabled = await db.user.updateMany({
+    where: { id: session.user.id, twoFactorEnabled: false, twoFactorSecret: storedSecret },
     data: { twoFactorEnabled: true, sessionVersion: { increment: 1 }, apiTokenVersion: { increment: 1 } },
-  }), db.emailChangeRequest.deleteMany({ where: { userId: session.user.id } })]);
+  });
+  if (enabled.count !== 1) throw new Error("Two-factor setup changed; start again");
+  await db.emailChangeRequest.deleteMany({ where: { userId: session.user.id } });
 
   revalidatePath("/settings");
   return { enabled: true };

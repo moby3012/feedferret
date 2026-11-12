@@ -66,30 +66,6 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      if (!showOtpField) {
-        // Only check if the account exists and whether 2FA is enabled.
-        // Password is NOT verified here to prevent brute-force probing.
-        const preflight = await fetch("/api/auth/credentials-status", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        });
-
-        if (!preflight.ok) {
-          setError(t("errors.incorrectCredentials"));
-          return;
-        }
-
-        const preflightData = await preflight.json();
-        if (preflightData.requiresTwoFactor) {
-          setShowOtpField(true);
-          setErrorIsWarning(true);
-          setError(t("errors.twoFactorRequired"));
-          return;
-        }
-        // 2FA not enabled: fall through to signIn which verifies the password
-      }
-
       const result = await signIn("credentials", {
         email,
         password,
@@ -97,7 +73,12 @@ export default function LoginPage() {
         redirect: false,
       });
 
-      if (result?.error) {
+      if (result?.code === "otp_required") {
+        // The password was right and the account uses two-factor authentication: ask for the code.
+        setShowOtpField(true);
+        setErrorIsWarning(true);
+        setError(t("errors.twoFactorRequired"));
+      } else if (result?.error) {
         setErrorIsWarning(false);
         setError(showOtpField ? t("errors.passwordOrCodeIncorrect") : t("errors.incorrectCredentials"));
       } else {

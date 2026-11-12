@@ -28,16 +28,26 @@ describe("sync secret", () => {
 });
 describe("proxy chain", () => {
   const request = new Request("https://example.test", { headers: { "x-forwarded-for": "spoof, client, proxy" } });
-  it("defaults to right-most", () => {
+  const behindProxy = new Request("https://example.test", { headers: { "x-forwarded-for": "spoof, client, proxy", "x-feedferret-peer": "guards-token|172.18.0.4" } });
+  it("defaults to right-most (legacy mode, known private peer)", () => {
+    vi.stubEnv("FEEDFERRET_PEER_TOKEN", "guards-token");
     vi.stubEnv("TRUSTED_PROXY_COUNT", "");
-    expect(getClientIdentifier(request)).toBe("ip:proxy");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(getClientIdentifier(behindProxy)).toBe("ip:proxy");
   });
   it("selects configured hop", () => {
     vi.stubEnv("TRUSTED_PROXY_COUNT", "2");
     expect(getClientIdentifier(request)).toBe("ip:client");
   });
   it.each(["-1", "garbage", "1.5"])("invalid count %s fails to default", value => {
+    vi.stubEnv("FEEDFERRET_PEER_TOKEN", "guards-token");
     vi.stubEnv("TRUSTED_PROXY_COUNT", value);
-    expect(getClientIdentifier(request)).toBe("ip:proxy");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(getClientIdentifier(behindProxy)).toBe("ip:proxy");
+  });
+  it("an unset count without peer information does not believe the header (fails closed)", () => {
+    vi.stubEnv("TRUSTED_PROXY_COUNT", "");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(getClientIdentifier(request)).toBe("ip:unknown");
   });
 });

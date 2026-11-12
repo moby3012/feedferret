@@ -10,11 +10,19 @@
  *
  * Policy (`TRUSTED_PROXY_COUNT`, `TRUSTED_PROXIES`):
  *  - `0` = no proxy: the peer is the client, forwarded headers are ignored.
- *  - `n >= 1` (unset/empty/invalid mean 1 and log a warning): forwarded headers are used only when the
- *    direct peer is a trusted proxy, i.e. loopback / private / link-local / ULA / CGNAT, or listed in
- *    `TRUSTED_PROXIES` (comma separated IPs or CIDRs). A public peer is a direct client, so a spoofed
- *    `X-Forwarded-For` cannot choose its limiter key. The n-th entry from the right is the client.
- *  - Without peer information (dev, tests) the legacy header-only behaviour applies.
+ *  - `n >= 1` (set explicitly = "a proxy of mine sits in front"): forwarded headers are used only when
+ *    the direct peer is a trusted proxy. With `TRUSTED_PROXIES` set (comma separated IPs / CIDRs) that
+ *    list alone decides; without it loopback, RFC 1918 private, link-local and ULA peers are assumed to
+ *    be the proxy (the Docker network of Coolify/Traefik, Nginx, Caddy). CGNAT (100.64/10, Tailscale)
+ *    is NOT assumed: tailnet peers are far more often clients than proxies. A public or unlisted peer is
+ *    a direct client, so a spoofed `X-Forwarded-For` cannot choose its limiter key. The n-th entry from
+ *    the right is the client. Without peer information (no preload: `next dev`, `next start`) the
+ *    operator's explicit count is taken at its word.
+ *  - unset / empty / invalid (LEGACY, warned loudly): behaves like `1` for compatibility with installs
+ *    that never set it, but only while the peer is known. This still trusts any private peer, so a
+ *    directly exposed instance (LAN client, Docker userland proxy presenting as 172.17.0.1) lets
+ *    clients pick their key: set the variable. Without peer information it fails closed: every client
+ *    is keyed "unknown" and `X-Forwarded-For` is not believed.
  *
  * IPv6 clients are keyed by their /64 (every VPS gets one for free; per-address keys would let one
  * host mint unlimited limiter keys) and IPv4-mapped IPv6 addresses by their IPv4 address.
@@ -108,7 +116,7 @@ function inRange(ip: ParsedIp, version: 4 | 6, base: string, bits: number): bool
 
 const PRIVATE_RANGES: Array<[4 | 6, string, number]> = [
   [4, "127.0.0.0", 8], [4, "10.0.0.0", 8], [4, "172.16.0.0", 12], [4, "192.168.0.0", 16],
-  [4, "169.254.0.0", 16], [4, "100.64.0.0", 10],
+  [4, "169.254.0.0", 16],
   [6, "::1", 128], [6, "fc00::", 7], [6, "fe80::", 10],
 ];
 
@@ -126,12 +134,16 @@ function trustedProxyList(): Array<{ version: 4 | 6; base: string; bits: number 
   return out;
 }
 
-/** Whether a direct peer may be a reverse proxy whose forwarded headers are believable. */
+/**
+ * Whether a direct peer is a reverse proxy whose forwarded headers are believable: `TRUSTED_PROXIES`
+ * decides alone when set, otherwise loopback / private / link-local / ULA (never CGNAT).
+ */
 export function isTrustedProxyPeer(peer: string): boolean {
   const ip = parseIp(peer);
   if (!ip) return false;
-  return PRIVATE_RANGES.some(([version, base, bits]) => inRange(ip, version, base, bits))
-    || trustedProxyList().some(({ version, base, bits }) => inRange(ip, version, base, bits));
+  const listed = trustedProxyList();
+  if (listed.length > 0) return listed.some(({ version, base, bits }) => inRange(ip, version, base, bits));
+  return PRIVATE_RANGES.some(([version, base, bits]) => inRange(ip, version, base, bits));
 }
 
 /** Direct TCP peer stamped by the server preload, or null when unavailable / unauthentic. */
@@ -153,6 +165,11 @@ function proxyCount(): ProxyCount {
   return { count: 1, explicit: false };
 }
 
+/** Whether TRUSTED_PROXY_COUNT holds a valid value (0 included). */
+export function isProxyCountExplicit(): boolean {
+  return proxyCount().explicit;
+}
+
 const warned = new Set<string>();
 function warnOnce(key: string, message: string) {
   if (warned.has(key)) return;
@@ -160,16 +177,18 @@ function warnOnce(key: string, message: string) {
   console.warn(message);
 }
 
-/**
- * Logs once when requests carry `X-Forwarded-For` while TRUSTED_PROXY_COUNT is unset/invalid. The
- * count then defaults to 1, which is only right behind exactly one reverse proxy.
- */
+/** The startup / first-request text for an unset or invalid TRUSTED_PROXY_COUNT (also used by instrumentation). */
+export function proxyCountUnsetWarning(): string {
+  const raw = process.env.TRUSTED_PROXY_COUNT;
+  return `TRUSTED_PROXY_COUNT is ${raw === undefined || raw.trim() === "" ? "not set" : `invalid ("${raw}")`}: legacy mode. ` +
+    "Any private-network peer (LAN, Docker NAT such as 172.17.0.1) is believed when it sends X-Forwarded-For, so if FeedFerret is reachable without a reverse proxy in front, clients can choose their own rate-limit key. " +
+    "Set TRUSTED_PROXY_COUNT=1 behind a single reverse proxy (Coolify/Traefik, Nginx, Caddy; 2 behind Cloudflare → Traefik) or TRUSTED_PROXY_COUNT=0 when exposed directly; see docs/reverse-proxy.md. This legacy fallback will be removed.";
+}
+
+/** Logs once when requests carry `X-Forwarded-For` while TRUSTED_PROXY_COUNT is unset/invalid. */
 export function warnIfProxyCountUnset(): void {
   if (proxyCount().explicit) return;
-  const raw = process.env.TRUSTED_PROXY_COUNT;
-  warnOnce("count-unset",
-    `[rate-limit] Requests carry X-Forwarded-For but TRUSTED_PROXY_COUNT is ${raw === undefined || raw === "" ? "unset" : `invalid (${raw})`}; assuming 1 trusted proxy hop. ` +
-    "Set TRUSTED_PROXY_COUNT=1 behind a single reverse proxy (Coolify/Traefik, Nginx, Caddy) or 0 when FeedFerret is exposed directly, so per-IP limits and sign-in lockouts cannot be evaded with a spoofed header; see docs/reverse-proxy.md.");
+  warnOnce("count-unset", `[rate-limit] ${proxyCountUnsetWarning()}`);
 }
 
 /** Test hook: lets the one-time warnings fire again. */
@@ -179,21 +198,26 @@ export function resetProxyCountWarning(): void {
 
 /** Canonical client address (not collapsed to a /64): audit log value. */
 export function getClientIp(request: Request): string {
-  const { count } = proxyCount();
+  const { count, explicit } = proxyCount();
   const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded && !proxyCount().explicit) warnIfProxyCountUnset();
+  if (forwarded && !explicit) warnIfProxyCountUnset();
   const peer = getPeerAddress(request);
+  if (explicit && count === 0) {
+    if (peer) return peer;
+    warnOnce("no-peer", "[rate-limit] TRUSTED_PROXY_COUNT=0 needs the TCP peer address, which is only available through scripts/peer-address-preload.cjs (the Docker image loads it); falling back to a shared client key.");
+    return "unknown";
+  }
   if (peer) {
-    if (count === 0) return peer;
     if (!isTrustedProxyPeer(peer)) {
       if (forwarded) {
-        warnOnce("public-peer",
-          "[rate-limit] Ignoring X-Forwarded-For from a public direct peer. If FeedFerret runs behind a reverse proxy with a public address, list it in TRUSTED_PROXIES (comma separated IPs/CIDRs); with no proxy set TRUSTED_PROXY_COUNT=0.");
+        warnOnce("untrusted-peer",
+          "[rate-limit] Ignoring X-Forwarded-For from a direct peer that is not a trusted proxy. If FeedFerret runs behind a reverse proxy at that address, list it in TRUSTED_PROXIES (comma separated IPs/CIDRs; when set it replaces the private-network default); with no proxy set TRUSTED_PROXY_COUNT=0.");
       }
       return peer;
     }
-  } else if (count === 0) {
-    warnOnce("no-peer", "[rate-limit] TRUSTED_PROXY_COUNT=0 needs the TCP peer address, which is only available through scripts/peer-address-preload.cjs (the Docker image loads it); falling back to a shared client key.");
+  } else if (!explicit) {
+    // Fail closed: headers cannot be attributed to a proxy and the operator never said there is one.
+    warnOnce("no-peer-unset", "[rate-limit] No TCP peer information (scripts/peer-address-preload.cjs is not loaded) and TRUSTED_PROXY_COUNT is not set: forwarded headers are NOT believed and all clients share one rate-limit key. Set TRUSTED_PROXY_COUNT (1 behind one reverse proxy) or start the server with the preload.");
     return "unknown";
   }
   if (forwarded) {

@@ -115,9 +115,11 @@ describe("fail-safe eviction of critical limiters", () => {
 });
 
 describe("X-Forwarded-For without TRUSTED_PROXY_COUNT", () => {
-  const request = () => new Request("https://example.test", { headers: { "x-forwarded-for": "1.2.3.4" } });
-  it.each([undefined, "", "garbage"])("warns once when it is %s", (value) => {
+  const TOKEN = "iso-peer-token";
+  const request = (peer = "172.18.0.4") => new Request("https://example.test", { headers: { "x-forwarded-for": "1.2.3.4", "x-feedferret-peer": `${TOKEN}|${peer}` } });
+  it.each([undefined, "", "garbage"])("warns once (legacy mode) when it is %s", (value) => {
     resetProxyCountWarning();
+    vi.stubEnv("FEEDFERRET_PEER_TOKEN", TOKEN);
     if (value === undefined) vi.stubEnv("TRUSTED_PROXY_COUNT", undefined as never); else vi.stubEnv("TRUSTED_PROXY_COUNT", value);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(getClientIdentifier(request())).toBe("ip:1.2.3.4");
@@ -127,11 +129,55 @@ describe("X-Forwarded-For without TRUSTED_PROXY_COUNT", () => {
   });
   it("is silent when configured, and without the header", () => {
     resetProxyCountWarning();
+    vi.stubEnv("FEEDFERRET_PEER_TOKEN", TOKEN);
     vi.stubEnv("TRUSTED_PROXY_COUNT", "1");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     getClientIdentifier(request());
     vi.stubEnv("TRUSTED_PROXY_COUNT", "");
-    getClientIdentifier(new Request("https://example.test", { headers: { "x-real-ip": "5.6.7.8" } }));
+    getClientIdentifier(new Request("https://example.test", { headers: { "x-feedferret-peer": `${TOKEN}|172.18.0.4` } }));
     expect(warn).not.toHaveBeenCalled();
   });
+});
+
+describe("peekRateLimit honours the capacity of a fail-safe store", () => {
+  const cfg: RateLimitConfig = { prefix: "iso-peek-refuse", limit: 3, windowSecs: 60, critical: true };
+
+  it("an untracked key is limited once the refusal store is saturated with active lockouts, and free again after it expires", () => {
+    vi.useFakeTimers();
+    expect(peekRateLimit("stranger", cfg).success).toBe(true); // empty store: nothing to fear
+    for (let i = 0; i < MAX_STORE_ENTRIES; i++) lock(`locked-${i}`, cfg);
+    expect(rateLimitStoreSize(cfg.prefix)).toBe(MAX_STORE_ENTRIES);
+    // checkRateLimit refuses the new key, and so must a peek that precedes it
+    expect(checkRateLimit("stranger", cfg).success).toBe(false);
+    const peek = peekRateLimit("stranger", cfg);
+    expect(peek.success).toBe(false);
+    expect(peek.remaining).toBe(0);
+    expect(peek.resetAt).toBeGreaterThan(Date.now());
+    // a tracked, locked key stays limited; peeking never adds entries
+    expect(peekRateLimit("locked-1", cfg).success).toBe(false);
+    expect(rateLimitStoreSize(cfg.prefix)).toBe(MAX_STORE_ENTRIES);
+    vi.advanceTimersByTime(61_000);
+    expect(peekRateLimit("stranger", cfg).success).toBe(true);
+  }, 60_000);
+
+  it("a store with evictable entries (below the limit) does not limit strangers", () => {
+    const light: RateLimitConfig = { prefix: "iso-peek-light", limit: 3, windowSecs: 60, critical: true };
+    for (let i = 0; i < MAX_STORE_ENTRIES; i++) checkRateLimit(`light-${i}`, light);
+    expect(peekRateLimit("stranger", light).success).toBe(true);
+  }, 60_000);
+
+  it("evict-oldest and ordinary stores never limit an untracked key on capacity grounds", () => {
+    const evicting: RateLimitConfig = { prefix: "iso-peek-evict", limit: 3, windowSecs: 60, critical: true, overflow: "evict-oldest" };
+    for (let i = 0; i < MAX_STORE_ENTRIES; i++) lock(`e-${i}`, evicting);
+    expect(peekRateLimit("stranger", evicting).success).toBe(true);
+    const ordinary: RateLimitConfig = { prefix: "iso-peek-ordinary", limit: 3, windowSecs: 60 };
+    for (let i = 0; i < MAX_STORE_ENTRIES; i++) lock(`o-${i}`, ordinary);
+    expect(peekRateLimit("stranger", ordinary).success).toBe(true);
+  }, 60_000);
+
+  it("the webhook's real failure limiter behaves the same", () => {
+    const real = RATE_LIMITS.inboundEmailWebhookAuthFail;
+    for (let i = 0; i < MAX_STORE_ENTRIES; i++) lock(`w-${i}`, real);
+    expect(peekRateLimit("w-stranger", real).success).toBe(false);
+  }, 60_000);
 });
